@@ -1,0 +1,1346 @@
+{
+  "tweaks": [
+    {
+      "id": "telemetria",
+      "nome": "Desativar telemetria da Microsoft",
+      "desc": "Desliga os servicos de telemetria (DiagTrack e WerSvc) e reduz ao minimo os dados enviados a Microsoft (publicidade, digitacao por toque, historico de programas, prompts de feedback). Nao desativa o Windows Defender.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "servico",
+          "nome": "DiagTrack",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "servico",
+          "nome": "WerSvc",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
+          "nome": "AllowTelemetry",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection",
+          "nome": "AllowTelemetry",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo",
+          "nome": "Enabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Privacy",
+          "nome": "TailoredExperiencesWithDiagnosticDataEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Speech_OneCore\\Settings\\OnlineSpeechPrivacy",
+          "nome": "HasAccepted",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\InputPersonalization",
+          "nome": "RestrictImplicitInkCollection",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\InputPersonalization",
+          "nome": "RestrictImplicitTextCollection",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\InputPersonalization\\TrainedDataStore",
+          "nome": "HarvestContacts",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "Start_TrackProgs",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Siuf\\Rules",
+          "nome": "NumberOfSIUFInPeriod",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "comando",
+          "executar": "[Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', '1', 'Machine')",
+          "reverter": "[Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', $null, 'Machine')"
+        }
+      ]
+    },
+    {
+      "id": "historico-atividades",
+      "nome": "Desativar historico de atividades",
+      "desc": "Impede o Windows de publicar e enviar seu historico de atividades (timeline) para a nuvem. Mantem o historico da area de transferencia.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+          "nome": "EnableActivityFeed",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+          "nome": "PublishUserActivities",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\System",
+          "nome": "UploadUserActivities",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "apps-sugeridos",
+      "nome": "Bloquear instalacao automatica de apps sugeridos",
+      "desc": "Impede o Windows de instalar automaticamente apps promocionados da Microsoft Store (Candy Crush, TikTok e afins) e reduz sugestoes de conteudo.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+          "nome": "DisableWindowsConsumerFeatures",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+          "nome": "DisableThirdPartySuggestions",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\SOFTWARE\\Policies\\Microsoft\\Windows\\CloudContent",
+          "nome": "DisableTailoredExperiencesWithDiagnosticData",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "delivery-optimization",
+      "nome": "Desativar Delivery Optimization (P2P)",
+      "desc": "Impede o Windows de usar sua banda de internet para enviar atualizacoes a outros PCs na internet ou na rede local.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DeliveryOptimization",
+          "nome": "DODownloadMode",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "wpbt",
+      "nome": "Desativar WPBT (tabela binaria do fabricante)",
+      "desc": "WPBT permite que o fabricante do PC execute programas no boot (anti-roubo, bloatware, software sem consentimento). Riscos de seguranca conhecidos. Recomendado.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager",
+          "nome": "DisableWpbtExecution",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "device-metadata",
+      "nome": "Impedir instalacao de apps companion de dispositivos",
+      "desc": "Evita que o Windows instale software extra ao plugar dispositivos (ex.: propagandas ao conectar um monitor).",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Device Metadata",
+          "nome": "PreventDeviceMetadataFromNetwork",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "bing-no-menu-iniciar",
+      "nome": "Remover busca Bing do menu Iniciar",
+      "desc": "Buscas no menu Iniciar param de enviar dados ao Bing e de exibir resultados da web.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
+          "nome": "DisableSearchBoxSuggestions",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Search",
+          "nome": "BingSearchEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "localizacao",
+      "nome": "Desativar rastreamento de localizacao",
+      "desc": "Desativa o servico de localizacao e o consentimento de acesso. AVISO: apps que usam localizacao (clima, mapas, busca) param de funcionar.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "servico",
+          "nome": "lfsvc",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\CapabilityAccessManager\\ConsentStore\\location",
+          "nome": "Value",
+          "tipoValor": "String",
+          "dados": "Deny"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Sensor\\Overrides\\{BFA794E4-F964-4FDB-90F6-51056BFE4B44}",
+          "nome": "SensorPermissionState",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\Maps",
+          "nome": "AutoUpdateEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "servicos-para-manual",
+      "nome": "Passar servicos nao essenciais para manual",
+      "desc": "Coloca servicos pouco usados em inicializacao manual (MapsBroker, StorSvc) e desativa compartilhamento de rede e arquivos offline (SharedAccess, CscService). Reversivel.",
+      "categoria": "Desempenho",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "servico",
+          "nome": "MapsBroker",
+          "inicio": "Manual"
+        },
+        {
+          "tipo": "servico",
+          "nome": "StorSvc",
+          "inicio": "Manual"
+        },
+        {
+          "tipo": "servico",
+          "nome": "SharedAccess",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "servico",
+          "nome": "CscService",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "servico",
+          "nome": "Fax",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "servico",
+          "nome": "RemoteRegistry",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "servico",
+          "nome": "RetailDemo",
+          "inicio": "Disabled"
+        }
+      ]
+    },
+    {
+      "id": "sysmain",
+      "nome": "Desativar SysMain (Superfetch)",
+      "desc": "Servico de pre-carregamento de apps. Em SSD normalmente nao faz diferenca positiva; em HD antigo pode ajudar a manter. Desative se o disco ficar 100% ocupado.",
+      "categoria": "Desempenho",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "servico",
+          "nome": "SysMain",
+          "inicio": "Disabled"
+        }
+      ]
+    },
+    {
+      "id": "pesquisa-indexacao",
+      "nome": "Desativar indexacao de busca (WSearch)",
+      "desc": "AVISO: buscas de arquivos ficam muito mais lentas. Util principalmente em HD mecanico com disco sempre em 100%. Reversivel.",
+      "categoria": "Desempenho",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "servico",
+          "nome": "WSearch",
+          "inicio": "Disabled"
+        }
+      ]
+    },
+    {
+      "id": "aplicativos-em-segundo-plano",
+      "nome": "Desativar apps da Store em segundo plano",
+      "desc": "Impede apps da Microsoft Store de rodarem em segundo plano, economizando memoria e bateria.",
+      "categoria": "Desempenho",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications",
+          "nome": "GlobalUserDisabled",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "svchost-splitting",
+      "nome": "Desativar divisao do svchost.exe",
+      "desc": "Reduz o numero de processos svchost e o uso de memoria. Recomendado em PCs com 12 GB de RAM ou menos. Pode interferir em servicos Xbox. Precisa reiniciar.",
+      "verificar": "$v = (Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -ErrorAction SilentlyContinue).SvcHostSplitThresholdInKB; ($null -ne $v) -and ($v -ne 3670016)",
+      "categoria": "Desempenho",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "comando",
+          "executar": "$mem = (Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1KB; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -Value $mem -Type DWord",
+          "reverter": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -Value 3670016 -Type DWord -Force"
+        }
+      ]
+    },
+    {
+      "id": "efeitos-visuais",
+      "nome": "Efeitos visuais: desempenho maximo",
+      "desc": "Remove transparencias, animacoes e sombras do Windows em troca de fluidez. O visual fica mais simples/estilo classico.",
+      "categoria": "Desempenho",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Desktop",
+          "nome": "DragFullWindows",
+          "tipoValor": "String",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Desktop",
+          "nome": "MenuShowDelay",
+          "tipoValor": "String",
+          "dados": "200"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Desktop\\WindowMetrics",
+          "nome": "MinAnimate",
+          "tipoValor": "String",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "ListviewAlphaSelect",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "ListviewShadow",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "TaskbarAnimations",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\VisualEffects",
+          "nome": "VisualFXSetting",
+          "tipoValor": "DWord",
+          "dados": "3"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\DWM",
+          "nome": "EnableAeroPeek",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "comando",
+          "executar": "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name 'UserPreferencesMask' -Type Binary -Value ([byte[]](144,18,3,128,16,0,0,0))",
+          "reverter": "Remove-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name 'UserPreferencesMask' -ErrorAction SilentlyContinue"
+        }
+      ]
+    },
+    {
+      "id": "energia-alto-desempenho",
+      "nome": "Plano de energia: alto desempenho",
+      "desc": "Ativa o plano de energia de alto desempenho do Windows. Em notebooks reduz a bateria; recomendado para desktops.",
+      "categoria": "Desempenho",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "energia",
+          "guid": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
+        }
+      ]
+    },
+    {
+      "id": "widgets",
+      "nome": "Remover widgets da barra de tarefas",
+      "desc": "Remove os widgets (painel de noticias/clima) do canto da barra de tarefas e o pacote de background deles. Windows 11.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "appx",
+          "pacote": "MicrosoftWindows.Client.WebExperience"
+        },
+        {
+          "tipo": "appx",
+          "pacote": "Microsoft.WidgetsPlatformRuntime"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "TaskbarDa",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "limpar-barra-tarefas",
+      "nome": "Limpar barra de tarefas (chat, Copilot, Task View)",
+      "desc": "Esconde os icones de chat/Teams, Copilot e Task View da barra de tarefas. Reversivel. Windows 11.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "TaskbarMn",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "ShowTaskViewButton",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "TaskbarAl",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "menu-contexto-classico",
+      "nome": "Menu de contexto classico do Explorer",
+      "desc": "Tenta restaurar o menu de clique-direito classico (com Copiar/Colar direto) do Windows 11. Em builds muito novas da Microsoft pode nao ter efeito.",
+      "verificar": "Test-Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "comando",
+          "executar": "$k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'); $k.SetValue($null, '', [Microsoft.Win32.RegistryValueKind]::String); $k.Close()",
+          "reverter": "Remove-Item -Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue"
+        }
+      ]
+    },
+    {
+      "id": "f8-menu-inicial",
+      "nome": "Habilitar menu de boot F8 (modo de seguranca)",
+      "desc": "Reativa a tecla F8 no boot para entrar em modo de seguranca, como no Windows 7.",
+      "verificar": "(bcdedit /enum `{current`} 2>&1 | Out-String) -match 'bootmenupolicy\\s+Legacy'",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "comando",
+          "executar": "bcdedit /set `{current`} bootmenupolicy legacy",
+          "reverter": "bcdedit /set `{current`} bootmenupolicy standard"
+        }
+      ]
+    },
+    {
+      "id": "finalizar-tarefa-barra",
+      "nome": "Finalizar tarefa pelo clique-direito na barra",
+      "desc": "Adiciona a opcao 'Finalizar tarefa' ao clicar com o botao direito em um app na barra de tarefas. Windows 11.",
+      "categoria": "Explorador de arquivos",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced\\TaskbarDeveloperSettings",
+          "nome": "TaskbarEndTask",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "extensoes-de-arquivo",
+      "nome": "Mostrar extensoes de arquivos",
+      "desc": "Exibe as extensoes (.exe, .pdf, .jpg) no Explorador de Arquivos. Ajuda a identificar virus e arquivos suspeitos.",
+      "categoria": "Explorador de arquivos",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "HideFileExt",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "explorer-este-pc",
+      "nome": "Explorador abrir em 'Este Computador'",
+      "desc": "O Explorador abre direto em Este Computador em vez da Home.",
+      "categoria": "Explorador de arquivos",
+      "niveis": [
+        "seguro",
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "LaunchTo",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "pastas-automaticas",
+      "nome": "Desativar deteccao automatica de pastas",
+      "desc": "O Explorer deixa de adivinhar o tipo de pasta (musicas, fotos) por conteudo, acelerando a navegacao. AVISO: desativa o agrupamento por tipo. Precisa relogar no Windows.",
+      "verificar": "Test-Path 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell'",
+      "categoria": "Explorador de arquivos",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "comando",
+          "executar": "$bags = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags'; if (Test-Path $bags) { Remove-Item -Path $bags -Recurse -Force -ErrorAction SilentlyContinue }; $bagMRU = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\BagMRU'; if (Test-Path $bagMRU) { Remove-Item -Path $bagMRU -Recurse -Force -ErrorAction SilentlyContinue }; $all = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell'; New-Item -Path $all -Force | Out-Null; New-ItemProperty -Path $all -Name 'FolderType' -Value 'NotSpecified' -PropertyType String -Force | Out-Null",
+          "reverter": "$bags = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags'; if (Test-Path $bags) { Remove-Item -Path $bags -Recurse -Force -ErrorAction SilentlyContinue }; $bagMRU = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\BagMRU'; if (Test-Path $bagMRU) { Remove-Item -Path $bagMRU -Recurse -Force -ErrorAction SilentlyContinue }"
+        }
+      ]
+    },
+    {
+      "id": "caminhos-longos",
+      "nome": "Habilitar caminhos de arquivo longos",
+      "desc": "Permite caminhos com mais de 260 caracteres no Explorador e em apps que suportam.",
+      "categoria": "Sistema",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem",
+          "nome": "LongPathsEnabled",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "modo-escuro",
+      "nome": "Tema escuro do Windows",
+      "desc": "Ativa o tema escuro para o sistema e aplicativos.",
+      "categoria": "Preferencias",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+          "nome": "AppsUseLightTheme",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+          "nome": "SystemUsesLightTheme",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "numlock-inicializacao",
+      "nome": "Num Lock ligado na inicializacao",
+      "desc": "Deixa o Num Lock ativado desde a tela de login.",
+      "categoria": "Preferencias",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKU:\\.DEFAULT\\Control Panel\\Keyboard",
+          "nome": "InitialKeyboardIndicators",
+          "tipoValor": "String",
+          "dados": "2"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Keyboard",
+          "nome": "InitialKeyboardIndicators",
+          "tipoValor": "String",
+          "dados": "2"
+        }
+      ]
+    },
+    {
+      "id": "bsod-detalhado",
+      "nome": "Tela azul (BSoD) detalhada",
+      "desc": "Mostra informacoes tecnicas na tela azul em vez do rosto triste. Ajuda a diagnosticar travamentos.",
+      "categoria": "Preferencias",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CrashControl",
+          "nome": "DisplayParameters",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\CrashControl",
+          "nome": "DisableEmoticon",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "hibernacao",
+      "nome": "Desativar hibernacao (libera GBs no disco)",
+      "desc": "AVISO: tambem desativa a inicializacao rapida. Recomendado para desktops; em notebook a hibernacao pode ser util. O arquivo hiberfil.sys e apagado, liberando espaco.",
+      "categoria": "Sistema",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\System\\CurrentControlSet\\Control\\Session Manager\\Power",
+          "nome": "HibernateEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FlyoutMenuSettings",
+          "nome": "ShowHibernateOption",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "comando",
+          "executar": "powercfg.exe /hibernate off",
+          "reverter": "powercfg.exe /hibernate on"
+        }
+      ]
+    },
+    {
+      "id": "notificacoes",
+      "nome": "Desativar notificacoes do sistema",
+      "desc": "AVISO: desativa TODAS as notificacoes, incluindo calendario e toasts de apps. Cautela.",
+      "categoria": "Sistema",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Policies\\Microsoft\\Windows\\Explorer",
+          "nome": "DisableNotificationCenter",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications",
+          "nome": "ToastEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "hora-utc-dualboot",
+      "nome": "Relogio em UTC (dual boot com Linux)",
+      "desc": "Apenas para quem tem dual boot Windows + Linux: corrige a dessincronizacao de hora entre os sistemas.",
+      "categoria": "Sistema",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\TimeZoneInformation",
+          "nome": "RealTimeIsUniversal",
+          "tipoValor": "QWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "edge-debloat",
+      "nome": "Debloat do Microsoft Edge (sem remover)",
+      "desc": "Desliga telemetria, popups, promocoes, assistente de compras, rewards e o widget do Edge via politicas oficiais da Microsoft. O navegador continua instalado e funcional.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "PersonalizationReportingEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "ShowRecommendationsEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "HideFirstRunExperience",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "UserFeedbackAllowed",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "ConfigureDoNotTrack",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "EdgeShoppingAssistantEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "MicrosoftEdgeInsiderPromotionEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "ShowMicrosoftRewards",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "WebWidgetAllowed",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "DiagnosticData",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "AlternateErrorPagesEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge",
+          "nome": "DefaultBrowserSettingsCampaignEnabled",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\EdgeUpdate",
+          "nome": "CreateDesktopShortcutDefault",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "bateria-porcentagem",
+      "nome": "Porcentagem de bateria na bandeja",
+      "desc": "Mostra o numero da porcentagem ao lado do icone de bateria. Util em notebooks.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "seguro",
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "IsBatteryPercentageEnabled",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "barra-esquerda",
+      "nome": "Barra de tarefas alinhada a esquerda",
+      "desc": "Move os icones da barra de tarefas pra esquerda (estilo Windows 10) em vez do centro. Somente Windows 11.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "TaskbarAl",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "remover-home-galeria",
+      "nome": "Remover Inicio e Galeria do Explorador",
+      "desc": "Tira as pastas Inicio e Galeria do painel lateral do Explorador do Windows 11. O Este Computador continua no lugar. Requer relogon ou reinicio do explorer.",
+      "categoria": "Explorador de arquivos",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Classes\\CLSID\\{f874310e-b6b7-47dc-bc84-b9e6b38f5903}",
+          "nome": "System.IsPinnedToNameSpaceTree",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Classes\\CLSID\\{e88865ea-0e1c-4e20-9aa6-edcd0212c87c}",
+          "nome": "System.IsPinnedToNameSpaceTree",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "arquivos-ocultos",
+      "nome": "Mostrar arquivos ocultos",
+      "desc": "Exibe arquivos e pastas ocultas no Explorador. Arquivos de sistema continuam protegidos ate voce ligar isso nas opcoes.",
+      "categoria": "Explorador de arquivos",
+      "niveis": [
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "Hidden",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "rdp-sem-aviso",
+      "nome": "Sem aviso em arquivos RDP nao assinados",
+      "desc": "Remove os avisos chatos ao abrir arquivos .rdp nao assinados que as versoes novas do Windows passaram a mostrar. Nao mexe em credenciais nem seguranca da conexao.",
+      "categoria": "Sistema",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\\Client",
+          "nome": "RedirectionWarningDialogVersion",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\SOFTWARE\\Microsoft\\Terminal Server Client",
+          "nome": "RdpLaunchConsentAccepted",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "verboso-logon",
+      "nome": "Mensagens detalhadas no logon",
+      "desc": "Mostra os passos detalhados de inicializacao e desligamento no lugar da tela giratoria Bem-vindo. Bom pra diagnosticar lentidao de boot.",
+      "categoria": "Sistema",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System",
+          "nome": "VerboseStatus",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "tela-bloqueio-off",
+      "nome": "Pular a tela de bloqueio",
+      "desc": "Ao ligar ou acordar o pc vai direto pra tela de login, sem a tela de bloqueio com relogio e fundo. Politicas corporativas podem ignorar isso.",
+      "categoria": "Preferencias",
+      "niveis": [
+        "balanceado",
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Personalization",
+          "nome": "NoLockScreen",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "teclas-aderencia",
+      "nome": "Desativar teclas de aderencia (sticky keys)",
+      "desc": "Cancela o popup de teclas de aderencia que aparece quando shift e pressionado 5 vezes seguidas.",
+      "categoria": "Preferencias",
+      "niveis": [
+        "seguro",
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Accessibility\\StickyKeys",
+          "nome": "Flags",
+          "tipoValor": "DWord",
+          "dados": "506"
+        }
+      ]
+    },
+    {
+      "id": "mouse-precisao",
+      "nome": "Desativar aceleracao do mouse",
+      "desc": "Cursor um-para-um com o movimento da mao, sem a curva de aceleracao do Windows. Padrao entre quem trabalha com precisao; reverta se sentir estranho.",
+      "categoria": "Preferencias",
+      "niveis": [
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Mouse",
+          "nome": "MouseSpeed",
+          "tipoValor": "String",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Mouse",
+          "nome": "MouseThreshold1",
+          "tipoValor": "String",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Mouse",
+          "nome": "MouseThreshold2",
+          "tipoValor": "String",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "bloquear-coinstaladores",
+      "nome": "Bloquear instalacao automatica de software do fabricante",
+      "desc": "Ao plugar dispositivo (mouse, teclado, monitor), o Windows para de baixar e instalar sozinho os programas empacotados pelo fabricante (Razer, Logitech etc). O hardware funciona normalmente; driver especifico voce instala na hora que quiser.",
+      "categoria": "Sistema",
+      "niveis": [
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\DriverSearching",
+          "nome": "SearchOrderConfig",
+          "tipoValor": "DWord",
+          "dados": "0"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Device Installer",
+          "nome": "DisableCoInstallers",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "preferir-ipv4",
+      "nome": "Preferir IPv4 em vez de IPv6",
+      "desc": "Faz o Windows priorizar IPv4 nas conexoes, o que pode reduzir latencia em redes sem IPv6 bem configurado. Se a rede do trabalho usa IPv6, reverta (aba Desfazer).",
+      "categoria": "Sistema",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip6\\Parameters",
+          "nome": "DisabledComponents",
+          "tipoValor": "DWord",
+          "dados": "32"
+        }
+      ]
+    },
+    {
+      "id": "armazenamento-reservado-off",
+      "nome": "Desativar armazenamento reservado do Windows",
+      "desc": "O Windows guarda de 7 a 10 GB so para updates e temporarios; isso devolve o espaco pra voce. Demora alguns segundos (DISM) e convem religar antes de grandes atualizacoes de versao.",
+      "categoria": "Sistema",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "comando",
+          "executar": "DISM /Online /Set-ReservedStorageState /State:Disabled",
+          "reverter": "DISM /Online /Set-ReservedStorageState /State:Enabled"
+        }
+      ]
+    },
+    {
+      "id": "ia-copilot",
+      "nome": "Desativar Copilot e IA do Windows",
+      "desc": "Desliga o Copilot e as funcoes de IA do Windows 11: esconde a pagina de IA das Configuracoes, desativa IA do Notepad, desliga o Recall (DisableAIDataAnalysis) e para o servico de IA se existir. Em maquinas sem Copilot/Recall, as partes sem efeito sao puladas sem erro. Nao toca no Defender.",
+      "categoria": "Privacidade",
+      "niveis": [
+        "agressivo"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer",
+          "nome": "SettingsPageVisibility",
+          "tipoValor": "String",
+          "dados": "hide:aicomponents"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\WindowsNotepad",
+          "nome": "DisableAIFeatures",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI",
+          "nome": "DisableAIDataAnalysis",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "servico",
+          "nome": "WSAIFabricSvc",
+          "inicio": "Disabled"
+        },
+        {
+          "tipo": "appx",
+          "pacote": "Microsoft.Windows.Ai.Copilot.Provider"
+        }
+      ]
+    },
+    {
+      "id": "recomendacoes-iniciar",
+      "nome": "Esconder recomendacoes do menu Iniciar",
+      "desc": "Some a secao de recomendacoes do menu Iniciar (apps sugeridos e arquivos recentes). Efeito colateral conhecido: tambem desliga o Spotlight da tela de bloqueio. So Windows 11.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado"
+      ],
+      "so": "win11",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Start",
+          "nome": "HideRecommendedSection",
+          "tipoValor": "DWord",
+          "dados": "1"
+        },
+        {
+          "tipo": "registro",
+          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
+          "nome": "HideRecommendedSection",
+          "tipoValor": "DWord",
+          "dados": "1"
+        }
+      ]
+    },
+    {
+      "id": "ocultar-busca-barra",
+      "nome": "Esconder a busca da barra de tarefas",
+      "desc": "Remove o campo/icone de busca da barra de tarefas. A busca continua funcionando pelo menu Iniciar.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Search",
+          "nome": "SearchboxTaskbarMode",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    },
+    {
+      "id": "ocultar-visao-tarefas",
+      "nome": "Esconder o botao de visao de tarefas",
+      "desc": "Some o botao de visao de tarefas da barra. Os atalhos (Win+Tab e snaps) continuam funcionando.",
+      "categoria": "Barra de tarefas e menu Iniciar",
+      "niveis": [
+        "seguro",
+        "balanceado"
+      ],
+      "so": "ambos",
+      "acoes": [
+        {
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
+          "nome": "ShowTaskViewButton",
+          "tipoValor": "DWord",
+          "dados": "0"
+        }
+      ]
+    }
+  ]
+}
