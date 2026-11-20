@@ -1,0 +1,104 @@
+# ci do otimizadorpc: bateria completa em windows de verdade (powershell 5.1).
+# job testes     : bateria offline, monta o portatil, valida e roda cli simulado
+# job integracao : aplica preset seguro DE VERDADE num runner descartavel,
+#                  confere o journal crash-safe, desfaz e confere o registro
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  testes:
+    name: testes offline + portatil + cli simulado
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: versao do powershell
+        shell: powershell
+        run: '$PSVersionTable.PSVersion.ToString()'
+
+      - name: bateria offline (catalogos, xaml, controles, funcoes, ascii)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\testar.ps1
+        timeout-minutes: 10
+
+      - name: monta o portatil (dist)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\montar-portatil.ps1
+        timeout-minutes: 5
+
+      - name: valida o portatil gerado (existe + parseia)
+        shell: powershell
+        run: |
+          if (-not (Test-Path 'dist\otimizadorpc-portatil.ps1')) {
+            Write-Host 'FALHOU: portatil nao foi gerado'
+            exit 1
+          }
+          $errosParse = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'dist\otimizadorpc-portatil.ps1'), [ref]$null, [ref]$errosParse)
+          if ($errosParse -and $errosParse.Count -gt 0) {
+            $errosParse | ForEach-Object { Write-Host ('parse: ' + $_.Message) }
+            exit 1
+          }
+          Write-Host 'portatil ok: existe e parseia sem erros'
+        timeout-minutes: 5
+
+      - name: cli seguro simulado (app normal)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\otimizadorpc.ps1 -Cli seguro -Simular
+        timeout-minutes: 10
+
+      - name: cli agressivo simulado (cobre todos os tipos de acao do catalogo)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\otimizadorpc.ps1 -Cli agressivo -Simular
+        timeout-minutes: 10
+
+      - name: cli seguro simulado (portatil)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\dist\otimizadorpc-portatil.ps1 -Cli seguro -Simular
+        timeout-minutes: 10
+
+      - name: simulacao nao pode ter gravado journal
+        shell: powershell
+        run: |
+          $journals = @(Get-ChildItem "$env:ProgramData\otimizadorpc\desfazer" -Filter '*.json' -ErrorAction SilentlyContinue)
+          if ($journals.Count -gt 0) {
+            Write-Host ('FALHOU: modo simular gravou ' + $journals.Count + ' journal(s)')
+            exit 1
+          }
+          Write-Host 'ok: nenhuma simulacao gravou journal'
+
+      - name: guarda o portatil pronto como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: portatil-pronto
+          path: |
+            dist/otimizadorpc-portatil.ps1
+            dist/rodar-portatil.bat
+          if-no-files-found: ignore
+
+  integracao:
+    name: integracao real (aplica, journal, desfaz, confere)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: aplica preset seguro de verdade, desfaz e confere o registro
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\testes\integracao.ps1
+        timeout-minutes: 20
+
+      - name: guarda journal e log do runner como artefato
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journal-do-teste
+          path: |
+            C:/ProgramData/otimizadorpc/desfazer/*
+            C:/ProgramData/otimizadorpc/logs/*.log
+          if-no-files-found: ignore
