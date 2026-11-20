@@ -1,0 +1,2 @@
+# forca tambem encoding/linha: repo guarda text=auto, clone windows sempre sai CRLF (powershell 5.1)
+* text=auto eol=crlf
