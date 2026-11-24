@@ -6,7 +6,7 @@ $global:PastaDados    = Join-Path $global:PastaApp 'data'
 $global:PastaLog      = Join-Path $env:ProgramData 'otimizadorpc\logs'
 $global:PastaDesfazer = Join-Path $env:ProgramData 'otimizadorpc\desfazer'
 $global:ArquivoLog    = Join-Path $global:PastaLog ("otimizadorpc-" + (Get-Date -Format 'yyyy-MM-dd') + ".log")
-$global:VersaoOtimizador = '2.0.0-preview'
+$global:VersaoOtimizador = '2.0.0-rc.2'
 $global:ErrosSessao   = 0
 $global:UI            = @{}
 

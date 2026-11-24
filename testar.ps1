@@ -433,6 +433,52 @@ try {
     Passou 'comparacao de medicoes e validacao de compatibilidade'
 } catch { Falhou 'comparacao de medicoes' $_.Exception.Message }
 
+# ---- regressao da selecao de rastros (WPF real, sem apagar nada) ----
+Secao 'selecao de programas e rastros'
+$uiAnterior = $global:UI
+try {
+    Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+    & {
+        . (Join-Path $raiz 'src\modules\desinstalador.ps1')
+        function Status { param($Mensagem) }
+        function Ocupado { param($Estado) }
+        function Log { param($Mensagem) }
+        function Avisar { param($Titulo,$Mensagem) throw ('Aviso inesperado: ' + $Titulo) }
+        $script:confirmacaoTeste = ''
+        function Perguntar { param($Titulo,$Mensagem) $script:confirmacaoTeste = $Mensagem; return $false }
+        $script:progTeste = [pscustomobject]@{ nome='teste' }
+        $script:rastroTeste = [pscustomobject]@{ tipo='chave'; caminho='HKCU:\Software\Teste'; extra='teste' }
+        function Varrer-Rastros { param($Prog) return $script:rastroTeste }
+        $lb = New-Object System.Windows.Controls.ListBox
+        $lb.SelectionMode = 'Extended'
+        $global:UI = @{ ListaRastros = $lb; RotuloRastros = (New-Object System.Windows.Controls.TextBlock) }
+        Executar-Varredura $script:progTeste
+        $selecionados = @(Obter-Selecionados $lb $global:RastrosExibidos)
+        if ($global:RastrosExibidos.Count -ne 1 -or $selecionados.Count -ne 1 -or $selecionados[0].caminho -ne $script:rastroTeste.caminho) {
+            throw 'Um unico rastro selecionado nao foi reconhecido.'
+        }
+        Clique-ApagarRastros
+        if ($script:confirmacaoTeste -notmatch 'Apagar 1 rastro') { throw 'Confirmacao de um rastro nao exibida.' }
+        Passou 'rastro unico selecionado chega a confirmacao sem apagar nada'
+        $lb.UnselectAll()
+        if (@(Obter-Selecionados $lb $global:RastrosExibidos).Count -ne 0) { throw 'Selecao vazia incorreta.' }
+        $lb.Items.Clear()
+        $itens = @([pscustomobject]@{ caminho='primeiro' }, [pscustomobject]@{ caminho='segundo' })
+        foreach ($obj in $itens) {
+            $item = New-Object System.Windows.Controls.ListBoxItem
+            $item.Content = 'mesmo texto'
+            [void]$lb.Items.Add($item)
+        }
+        $lb.SelectedIndex = 1
+        $selecionados = @(Obter-Selecionados $lb $itens)
+        if ($selecionados.Count -ne 1 -or $selecionados[0].caminho -ne 'segundo') { throw 'Linhas iguais foram confundidas.' }
+        $lb.SelectAll()
+        if (@(Obter-Selecionados $lb $itens).Count -ne 2) { throw 'Selecao multipla incorreta.' }
+        Passou 'selecao vazia, unica, multipla e linhas de texto identico'
+    }
+} catch { Falhou 'selecao WPF' $_.Exception.Message }
+finally { $global:UI = $uiAnterior }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

@@ -58,15 +58,22 @@ function Atualizar-ListaProgramas {
         if (-not [string]::IsNullOrWhiteSpace($pr.versao)) { $versao = ' v' + $pr.versao }
         $linha = ('{0}  |  {1}{2}' -f $pr.nome, $pr.editor, $versao)
         if ($filtro -ne '' -and -not $linha.ToLower().Contains($filtro)) { continue }
-        [void]$lb.Items.Add($linha)
+        $item = New-Object System.Windows.Controls.ListBoxItem
+        $item.Content = $linha
+        [void]$lb.Items.Add($item)
         $global:ProgramasExibidos += $pr
     }
-    if ($lb.Items.Count -eq 0) { [void]$lb.Items.Add('(nenhum programa casa com esse filtro)') }
+    if ($lb.Items.Count -eq 0) {
+        $vazio = New-Object System.Windows.Controls.ListBoxItem
+        $vazio.Content = '(nenhum programa casa com esse filtro)'
+        $vazio.IsEnabled = $false
+        [void]$lb.Items.Add($vazio)
+    }
 }
 
 # devolve os objetos por tras das linhas selecionadas de uma listbox
 function Obter-Selecionados {
-    param($ListBox, $Exibidos)
+    param($ListBox, [object[]]$Exibidos)
     $res = @()
     foreach ($linha in $ListBox.SelectedItems) {
         $idx = $ListBox.Items.IndexOf($linha)
@@ -188,7 +195,7 @@ function Eh-AppArriscado {
 }
 
 function Clique-DesinstalarProg {
-    $selecionados = Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos
+    $selecionados = @(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Escolha na lista o(s) programa(s) que quer desinstalar.'
         return
@@ -457,7 +464,8 @@ function Executar-Varredura {
     param($Prog)
     Status ('varrendo rastros de ' + $Prog.nome + '...')
     Ocupado $true
-    $rastros = Varrer-Rastros $Prog
+    # PowerShell 5.1 desembrulha a saida de um unico item; preserve o array.
+    $rastros = @(Varrer-Rastros $Prog)
     Ocupado $false
     $global:ProgVarredura = $Prog
     $global:RastrosExibidos = $rastros
@@ -467,7 +475,9 @@ function Executar-Varredura {
         $mostro = $r.caminho -replace '^.*::', ''
         $extra = ''
         if (-not [string]::IsNullOrWhiteSpace($r.extra)) { $extra = '  (' + $r.extra + ')' }
-        [void]$lb.Items.Add(('[{0}]  {1}{2}' -f $r.tipo, $mostro, $extra))
+        $item = New-Object System.Windows.Controls.ListBoxItem
+        $item.Content = ('[{0}]  {1}{2}' -f $r.tipo, $mostro, $extra)
+        [void]$lb.Items.Add($item)
     }
     if ($rastros.Count -eq 0) {
         $global:UI.RotuloRastros.Text = ('varredura de "{0}": nenhum rastro encontrado (limpo!).' -f $Prog.nome)
@@ -482,7 +492,7 @@ function Executar-Varredura {
 }
 
 function Clique-VarrerRastros {
-    $selecionados = Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos
+    $selecionados = @(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     if ($selecionados.Count -eq 0) {
         Avisar 'Selecione um programa' 'Clique numa linha da lista de programas acima (so um por vez).'
         return
@@ -598,7 +608,7 @@ function Apagar-Rastro {
 
 function Clique-ApagarRastros {
     $lb = $global:UI.ListaRastros
-    $selecionados = Obter-Selecionados $lb $global:RastrosExibidos
+    $selecionados = @(Obter-Selecionados $lb $global:RastrosExibidos)
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque na lista de rastros o que quer apagar (ou use "marcar todos").'
         return
