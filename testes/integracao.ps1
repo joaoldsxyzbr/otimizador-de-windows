@@ -284,5 +284,28 @@ try {
 } catch { Log ('FALHOU: plano restrito: ' + $_.Exception.Message) -Erro; exit 1 }
 finally { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomePlano,$false) }
 
+# ---- 13. metadados do desinstalador mudam apos a listagem ----
+$nomeEntrada='Software\OtimizadorPC-CI-Entrada-' + [guid]::NewGuid().ToString('N')
+$ck='HKCU:\'+$nomeEntrada
+try {
+    $chave=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($nomeEntrada)
+    try { $chave.SetValue('DisplayName','Aplicativo descartavel'); $chave.SetValue('UninstallString','nao-executar.exe') } finally { $chave.Dispose() }
+    $pr=Converter-EntradaPrograma (Get-ItemProperty -LiteralPath $ck -ErrorAction Stop)
+    [void](Validar-ProtecaoPrograma $pr -Desinstalar)
+    Set-ItemProperty -LiteralPath $ck -Name NoRemove -Value 1 -ErrorAction Stop
+    foreach ($modo in @($true,$false)) {
+        $recusou=$false
+        try { $null=Validar-ProtecaoPrograma $pr -Desinstalar:$modo } catch { $recusou=$_.Exception.Message -match 'agora protegida' }
+        if (-not $recusou) { throw 'Entrada alterada para protegida nao bloqueada.' }
+    }
+    Remove-ItemProperty -LiteralPath $ck -Name NoRemove -ErrorAction Stop
+    Set-ItemProperty -LiteralPath $ck -Name UninstallString -Value 'outro.exe' -ErrorAction Stop
+    $recusou=$false
+    try { $null=Validar-ProtecaoPrograma $pr -Desinstalar } catch { $recusou=$_.Exception.Message -match 'mudou desde a listagem' }
+    if (-not $recusou) { throw 'Comando alterado nao bloqueado.' }
+    Log 'CI ok: metadados protegidos e comandos alterados bloqueados sem executar desinstalador'
+} catch { Log ('FALHOU: protecao desinstalador: ' + $_.Exception.Message) -Erro; exit 1 }
+finally { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeEntrada,$false) }
+
 Log 'CI INTEGRACAO: todos os testes passaram'
 exit 0

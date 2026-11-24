@@ -768,6 +768,34 @@ try {
             $convertido=Converter-EntradaPrograma ([pscustomobject]@{DisplayName='Teste';EstimatedSize='1024';InstallDate='20260102';SystemComponent=1;NoRemove=1})
             if ($convertido.tamanhoKB -ne 1024 -or $convertido.dataInstalacao.Day -ne 2 -or -not $convertido.componenteSistema -or -not $convertido.naoRemover) { throw 'Metadados incorretos.' }
             Passou 'classificacao, protecao direta, filtros, ordenacao e metadados'
+            Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+            $uiAntes=$global:UI
+            try {
+                $lb=New-Object System.Windows.Controls.ListBox
+                $lb.SelectionMode='Extended'
+                $global:UI=@{
+                    ListaProgramas=$lb
+                    BotaoDetalhesPrograma=(New-Object System.Windows.Controls.Button)
+                    BotaoDesinstalarProg=(New-Object System.Windows.Controls.Button)
+                    BotaoVarrerRastros=(New-Object System.Windows.Controls.Button)
+                    DetalhePrograma=(New-Object System.Windows.Controls.TextBlock)
+                }
+                foreach ($pr in @($lista[0],$lista[1])) {
+                    $linha=New-Object System.Windows.Controls.ListBoxItem
+                    $linha.Content=$pr.nome; $linha.Tag=$pr
+                    [void]$lb.Items.Add($linha)
+                }
+                $lb.SelectedIndex=0
+                Atualizar-DetalhePrograma
+                if (-not $global:UI.BotaoDesinstalarProg.IsEnabled -or -not $global:UI.BotaoDetalhesPrograma.IsEnabled) { throw 'Aplicativo comum indisponivel.' }
+                $lb.SelectedIndex=1
+                Atualizar-DetalhePrograma
+                if ($global:UI.BotaoDesinstalarProg.IsEnabled -or $global:UI.BotaoVarrerRastros.IsEnabled -or -not $global:UI.BotaoDetalhesPrograma.IsEnabled) { throw 'Componente protegido com acao habilitada.' }
+                $lb.SelectAll()
+                Atualizar-DetalhePrograma
+                if ($global:UI.BotaoDesinstalarProg.IsEnabled -or $global:UI.BotaoVarrerRastros.IsEnabled) { throw 'Selecao mista permitiu remover componente.' }
+                Passou 'WPF bloqueia componente protegido e selecao mista'
+            } finally { $global:UI=$uiAntes }
         } finally { $global:CatalogoApps=$catalogoAnterior }
     }
 } catch { Falhou 'classificacao do desinstalador' $_.Exception.Message }

@@ -16,7 +16,7 @@ function Classificar-Programa {
     $grupo='Desconhecido'; $risco='Revisar'; $finalidade='Finalidade nao identificada'; $motivo='Nao ha regra local suficiente para identificar este programa.'
     if ($Prog.componenteSistema -or $Prog.naoRemover -or $Prog.pai -or $Prog.tipoRelease -match '^(Security Update|Critical Update|Update|Hotfix|Service Pack)$' -or
         $n -match '^(KB[0-9]+\b|(?:Security |Critical )?Update for |Hotfix\b|Language (Pack|Interface)\b|Windows (Security|Defender|Update Health Tools|Setup|Servicing Stack)\b|Microsoft (Windows Defender|Defender Antivirus|Edge(?: WebView2 Runtime| Update)?(?:\s*\(.*\))?)$)' -or
-        ($ms -and $n -match '^Microsoft (Windows (?:10|11|Operating System|Update)|Edge WebView2 Runtime|Edge Update|Update Health Tools)\b')) {
+        ($ms -and $n -match '^(Microsoft (Windows (?:10|11|Operating System|Update)|Edge|Update Health Tools)\b|Windows (?:Security|Defender|Update Health Tools|Setup|Servicing Stack)\b)')) {
         $grupo='Sistema'; $risco='Bloqueado'; $finalidade='Componente, atualizacao ou entrada protegida'; $motivo='Indicador de sistema/nao remocao no registro ou nome de componente protegido conhecido.'
     } elseif ($n -match '\b(driver|drivers|driver package|chipset|graphics driver|audio driver|display driver|wireless driver)\b' -or $n -match '^(Realtek (?:High Definition Audio|Audio|Ethernet|PCIe)|NVIDIA Graphics Driver|AMD (?:Chipset|Software: Adrenalin Edition))\b') {
         $grupo='Driver'; $risco='Cautela'; $finalidade='Hardware, video, audio ou rede'; $motivo='Nome sugere driver ou pacote de hardware; remover pode prejudicar dispositivos.'
@@ -767,6 +767,8 @@ function Clique-ApagarRastros {
     if ($info.risco -ne 'Normal') { $msg += (' - CAUTELA: ' + $info.motivo) }
     $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
+    try { [void](Validar-ProtecaoPrograma $global:ProgVarredura) }
+    catch { Avisar 'Limpeza bloqueada' $_.Exception.Message; return }
 
     Garantir-PastaPrivada $global:PastaQuarantena
     $pastaSessao = Join-Path $global:PastaQuarantena ((Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,12))
