@@ -144,5 +144,46 @@ try {
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeChave, $false)
 }
 
+# ---- 8. remover e restaurar chave de teste pelo fluxo real da aba Desinstalar ----
+. (Join-Path $raiz 'src\modules\desinstalador.ps1')
+$nomeQuar = 'Software\OtimizadorPC-CI-Quar-' + [guid]::NewGuid().ToString('N')
+$quarTeste = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-quar-ci-' + [guid]::NewGuid().ToString('N'))
+$quarAnterior = $global:PastaQuarantena
+try {
+    $global:PastaQuarantena = $quarTeste
+    $chave = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($nomeQuar)
+    try { $chave.SetValue('teste','preservar') } finally { $chave.Dispose() }
+    $caminhoQuar = 'Microsoft.PowerShell.Core\Registry::HKEY_CURRENT_USER\' + $nomeQuar
+    $lb = New-Object System.Windows.Controls.ListBox
+    $linha = New-Object System.Windows.Controls.ListBoxItem
+    $linha.Tag = [pscustomobject]@{ tipo='chave'; caminho=$caminhoQuar }
+    $marca = New-Object System.Windows.Controls.CheckBox
+    $marca.IsChecked = $true
+    $linha.Content = $marca
+    [void]$lb.Items.Add($linha)
+    $global:UI = @{ ListaRastros=$lb; RotuloRastros=(New-Object System.Windows.Controls.TextBlock) }
+    $global:ProgVarredura = [pscustomobject]@{ nome='teste descartavel' }
+    & {
+        function Perguntar { param($Titulo,$Mensagem) return ($Titulo -eq 'Apagar rastros') }
+        function Avisar { param($Titulo,$Mensagem) throw ('Aviso inesperado: ' + $Titulo) }
+        Clique-ApagarRastros
+    }
+    if (Test-Path -LiteralPath $caminhoQuar) { throw 'Chave descartavel nao foi removida.' }
+    $journalQuar = Salvar-Sessao
+    $jsonQuar = Ler-JSON $journalQuar
+    if (@($jsonQuar.itens).Count -ne 1 -or $jsonQuar.itens[0].tipo -ne 'quarantena-registro' -or -not (Test-Path -LiteralPath $jsonQuar.itens[0].arquivoReg)) { throw 'Backup ou journal de quarentena invalido.' }
+    if (-not (Reverter-Sessao $journalQuar)) { throw 'Nao reverteu a quarentena.' }
+    if ((Get-ItemProperty -LiteralPath $caminhoQuar -Name teste -ErrorAction Stop).teste -ne 'preservar') { throw 'Dado restaurado incorreto.' }
+    Log 'CI ok: caixa marcada, exportacao, remocao real, journal e restauracao de chave'
+} catch {
+    Log ('FALHOU: quarentena real: ' + $_.Exception.Message) -Erro
+    exit 1
+} finally {
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeQuar, $false)
+    if (Test-Path -LiteralPath $quarTeste) { Remove-Item -LiteralPath $quarTeste -Recurse -Force }
+    $global:PastaQuarantena = $quarAnterior
+    $global:UI = @{}
+}
+
 Log 'CI INTEGRACAO: todos os testes passaram'
 exit 0

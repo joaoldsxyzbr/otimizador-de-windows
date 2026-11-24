@@ -433,7 +433,7 @@ try {
     Passou 'comparacao de medicoes e validacao de compatibilidade'
 } catch { Falhou 'comparacao de medicoes' $_.Exception.Message }
 
-# ---- regressao da selecao de rastros (WPF real, sem apagar nada) ----
+# ---- regressao das caixas de selecao (WPF real, sem apagar nada) ----
 Secao 'selecao de programas e rastros'
 $uiAnterior = $global:UI
 try {
@@ -453,28 +453,38 @@ try {
         $lb.SelectionMode = 'Extended'
         $global:UI = @{ ListaRastros = $lb; RotuloRastros = (New-Object System.Windows.Controls.TextBlock) }
         Executar-Varredura $script:progTeste
-        $selecionados = @(Obter-Selecionados $lb $global:RastrosExibidos)
-        if ($global:RastrosExibidos.Count -ne 1 -or $selecionados.Count -ne 1 -or $selecionados[0].caminho -ne $script:rastroTeste.caminho) {
-            throw 'Um unico rastro selecionado nao foi reconhecido.'
-        }
+        $lb.SelectedIndex = 0
+        if (@(Obter-RastrosMarcados $lb).Count -ne 0) { throw 'Realce sem caixa marcada nao deve apagar.' }
+        $lb.Items[0].Content.IsChecked = $true
+        $lb.UnselectAll()
+        $selecionados = @(Obter-RastrosMarcados $lb)
+        if ($selecionados.Count -ne 1 -or $selecionados[0].caminho -ne $script:rastroTeste.caminho) { throw 'Rastro unico nao reconhecido.' }
         Clique-ApagarRastros
         if ($script:confirmacaoTeste -notmatch 'Apagar 1 rastro') { throw 'Confirmacao de um rastro nao exibida.' }
-        Passou 'rastro unico selecionado chega a confirmacao sem apagar nada'
-        $lb.UnselectAll()
-        if (@(Obter-Selecionados $lb $global:RastrosExibidos).Count -ne 0) { throw 'Selecao vazia incorreta.' }
+        Passou 'caixa unica marcada chega a confirmacao sem apagar nada'
+        Marcar-Rastros $false
+        if (@(Obter-RastrosMarcados $lb).Count -ne 0) { throw 'Desmarcacao incorreta.' }
         $lb.Items.Clear()
         $itens = @([pscustomobject]@{ caminho='primeiro' }, [pscustomobject]@{ caminho='segundo' })
         foreach ($obj in $itens) {
             $item = New-Object System.Windows.Controls.ListBoxItem
             $item.Content = 'mesmo texto'
+            $item.Tag = $obj
             [void]$lb.Items.Add($item)
         }
         $lb.SelectedIndex = 1
         $selecionados = @(Obter-Selecionados $lb $itens)
         if ($selecionados.Count -ne 1 -or $selecionados[0].caminho -ne 'segundo') { throw 'Linhas iguais foram confundidas.' }
-        $lb.SelectAll()
-        if (@(Obter-Selecionados $lb $itens).Count -ne 2) { throw 'Selecao multipla incorreta.' }
-        Passou 'selecao vazia, unica, multipla e linhas de texto identico'
+        $lb.Items.Clear()
+        foreach ($obj in $itens) {
+            $item = New-Object System.Windows.Controls.ListBoxItem
+            $item.Tag = $obj
+            $item.Content = New-Object System.Windows.Controls.CheckBox
+            [void]$lb.Items.Add($item)
+        }
+        Marcar-Rastros $true
+        if (@(Obter-RastrosMarcados $lb).Count -ne 2) { throw 'Marcacao multipla incorreta.' }
+        Passou 'marcacao independente do foco e objetos vinculados a cada linha'
     }
 } catch { Falhou 'selecao WPF' $_.Exception.Message }
 finally { $global:UI = $uiAnterior }

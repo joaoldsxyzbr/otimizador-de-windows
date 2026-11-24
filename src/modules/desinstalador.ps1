@@ -60,6 +60,7 @@ function Atualizar-ListaProgramas {
         if ($filtro -ne '' -and -not $linha.ToLower().Contains($filtro)) { continue }
         $item = New-Object System.Windows.Controls.ListBoxItem
         $item.Content = $linha
+        $item.Tag = $pr
         [void]$lb.Items.Add($item)
         $global:ProgramasExibidos += $pr
     }
@@ -74,12 +75,9 @@ function Atualizar-ListaProgramas {
 # devolve os objetos por tras das linhas selecionadas de uma listbox
 function Obter-Selecionados {
     param($ListBox, [object[]]$Exibidos)
-    $res = @()
     foreach ($linha in $ListBox.SelectedItems) {
-        $idx = $ListBox.Items.IndexOf($linha)
-        if ($idx -ge 0 -and $idx -lt $Exibidos.Count) { $res += $Exibidos[$idx] }
+        if ($linha -is [System.Windows.Controls.ListBoxItem] -and $null -ne $linha.Tag) { $linha.Tag }
     }
-    return @($res)
 }
 
 # ---- desinstalacao ----
@@ -303,7 +301,7 @@ function Varrer-Rastros {
     # 1. entrada de desinstalacao que sobrou no registro
     try {
         if (-not [string]::IsNullOrWhiteSpace($Prog.chavePs) -and (Test-Path $Prog.chavePs)) {
-            [void]$achados.Add([pscustomobject]@{ tipo = 'chave'; caminho = $Prog.chavePs; extra = 'entrada de desinstalacao que sobrou' })
+            [void]$achados.Add([pscustomobject]@{ tipo = 'chave'; caminho = $Prog.chavePs; extra = 'entrada de desinstalacao - confirme que o app foi desinstalado' })
         }
     } catch { }
 
@@ -476,7 +474,11 @@ function Executar-Varredura {
         $extra = ''
         if (-not [string]::IsNullOrWhiteSpace($r.extra)) { $extra = '  (' + $r.extra + ')' }
         $item = New-Object System.Windows.Controls.ListBoxItem
-        $item.Content = ('[{0}]  {1}{2}' -f $r.tipo, $mostro, $extra)
+        $marca = New-Object System.Windows.Controls.CheckBox
+        $marca.Content = ('[{0}]  {1}{2}' -f $r.tipo, $mostro, $extra)
+        $marca.IsChecked = $false
+        $item.Content = $marca
+        $item.Tag = $r
         [void]$lb.Items.Add($item)
     }
     if ($rastros.Count -eq 0) {
@@ -484,8 +486,7 @@ function Executar-Varredura {
         Log ('varredura de "' + $Prog.nome + '": nenhum rastro encontrado.')
         Status 'nenhum rastro encontrado.'
     } else {
-        $global:UI.RotuloRastros.Text = ('rastros de "{0}": {1} achado(s). marquei tudo; desmarque o que quiser manter e clique em apagar.' -f $Prog.nome, $rastros.Count)
-        $lb.SelectAll()
+        $global:UI.RotuloRastros.Text = ('rastros de "{0}": {1} candidato(s). marque as caixas do que deseja remover.' -f $Prog.nome, $rastros.Count)
         Log ('varredura de "' + $Prog.nome + '": ' + $rastros.Count + ' rastro(s) encontrado(s).')
         Status ('{0} rastro(s) encontrado(s).' -f $rastros.Count)
     }
@@ -584,8 +585,10 @@ function Apagar-Rastro {
     }
 
     if ($Rastro.tipo -eq 'chave') {
-        $nativa = ($Rastro.caminho -split '::')[-1]
-        if (-not (Test-Path $Rastro.caminho)) { Log ('ja sumiu: ' + $nativa); return }
+        if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
+        $chaveReg = Get-Item -LiteralPath $Rastro.caminho -ErrorAction Stop
+        try { $nativa = [string]$chaveReg.Name } finally { $chaveReg.Close() }
+        if ($nativa -notmatch '^HKEY_(LOCAL_MACHINE|CURRENT_USER)\\.+') { throw 'Chave de registro fora dos escopos suportados.' }
         $folha = ($nativa -replace '\\', '_')
         $folha = ($folha -replace '[^a-zA-Z0-9_.{}-]', '')
         if ($folha.Length -gt 70) { $folha = $folha.Substring($folha.Length - 70) }
@@ -596,7 +599,7 @@ function Apagar-Rastro {
         Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
         Log ('chave apagada (backup .reg na quarantena): ' + $nativa)
     } else {
-        if (-not (Test-Path $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
+        if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
         $folha = Split-Path -Leaf $Rastro.caminho
         $destino = Join-Path $PastaSessao ('{0:00}_{1}' -f $Num, $folha)
         if (Test-Path -LiteralPath $destino) { throw 'Destino da quarentena ja existe.' }
@@ -606,11 +609,30 @@ function Apagar-Rastro {
     }
 }
 
+# A caixa marcada e a unica fonte de verdade; o realce azul nao seleciona rastros.
+function Obter-RastrosMarcados {
+    param($ListBox)
+    foreach ($linha in $ListBox.Items) {
+        if ($linha -is [System.Windows.Controls.ListBoxItem] -and $null -ne $linha.Tag -and
+            $linha.Content -is [System.Windows.Controls.CheckBox] -and $linha.Content.IsChecked -eq $true) {
+            $linha.Tag
+        }
+    }
+}
+
+function Marcar-Rastros {
+    param([bool]$Marcar)
+    foreach ($linha in $global:UI.ListaRastros.Items) {
+        if ($linha.Content -is [System.Windows.Controls.CheckBox]) { $linha.Content.IsChecked = $Marcar }
+    }
+}
+
 function Clique-ApagarRastros {
     $lb = $global:UI.ListaRastros
-    $selecionados = @(Obter-Selecionados $lb $global:RastrosExibidos)
+    $selecionados = @(Obter-RastrosMarcados $lb)
+    Log ('limpeza de rastros: {0} marcado(s) de {1} exibido(s).' -f $selecionados.Count, $lb.Items.Count)
     if ($selecionados.Count -eq 0) {
-        Avisar 'Nada selecionado' 'Marque na lista de rastros o que quer apagar (ou use "marcar todos").'
+        Avisar 'Nada selecionado' 'Marque a caixa ao lado de cada rastro ou use "Marcar todos". Apenas o realce azul nao marca a caixa.'
         return
     }
     $resumo = ''
@@ -624,7 +646,7 @@ function Clique-ApagarRastros {
     if ($null -ne $global:ProgVarredura) { $nomeProg = [string]$global:ProgVarredura.nome }
     $msg = ('Apagar {0} rastro(s)' -f $selecionados.Count)
     if ($nomeProg -ne '') { $msg = $msg + (' de "{0}"' -f $nomeProg) }
-    $msg = $msg + ("`n`n" + $resumo + "`n`nArquivos e chaves selecionados recebem journal antes da alteracao; servicos, tarefas e regras locais de permissao podem ser desativados. A recuperacao pode exigir revisao manual. Continuar?")
+    $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
 
     if (-not (Test-Path $global:PastaQuarantena)) { New-Item -Path $global:PastaQuarantena -ItemType Directory -Force | Out-Null }
