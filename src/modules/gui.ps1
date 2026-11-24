@@ -120,12 +120,11 @@ function Obter-GuiaUwp {
 }
 
 function Montar-PaginaDebloat {
+    param([object[]]$Pacotes)
     $win11=Eh-Win11
     $painel=$global:UI.ListaUwp
     $painel.Children.Clear()
     $grupos=@{}
-    try { $pacotes=@(Get-AppxPackage -ErrorAction Stop); $consultou=$true }
-    catch { $pacotes=@(); $consultou=$false; Log 'Consulta AppX falhou; remocao indisponivel.' }
     $entradas=@($global:CatalogoUwp.pacotes | Where-Object { ($_.so -ne 'win11' -or $win11) -and ($_.so -ne 'win10' -or -not $win11) })
     foreach ($p in @($pacotes | Sort-Object Name -Unique)) {
         if ($p.Name -notin @($entradas | ForEach-Object {$_.pacote})) {
@@ -139,9 +138,9 @@ function Montar-PaginaDebloat {
             $grupos[$titulo]=Nova-Categoria $titulo
             [void]$painel.Children.Add($grupos[$titulo])
         }
-        $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($info.instalado) {'instalado'} else {'nao instalado'}
+        $estado=if ($info.instalado) {'instalado'} else {'nao instalado'}
         $cb=Nova-Checkbox -Texto ($p.nome + ' [' + $estado + ']') -Tag $p -Dica $info.texto
-        $cb.IsEnabled=(-not $global:ModoProtegido -and $consultou -and $info.permitido)
+        $cb.IsEnabled=(-not $global:ModoProtegido -and $info.permitido)
         if (-not $cb.IsEnabled) {$cb.Foreground=Cor-Tema '#6b7280'}
         [void]$grupos[$titulo].Content.Children.Add($cb)
     }
@@ -285,11 +284,109 @@ function Verificar-EstadoAjustes {
     Status 'estado verificado.'
 }
 
+# Each window owns its snapshot. Only the Dispatcher touches WPF controls.
+function Inicializar-ConsultaUwp {
+    if ($null -eq $global:ConsultasUwpAtivas) { $global:ConsultasUwpAtivas=@{} }
+    $global:ConsultaUwp=@{ ui=$global:UI; janela=$global:Janela; fase='inicial'; pacotes=@(); data=$null; trabalho=$null; fechada=$false; motivo='' }
+    $global:UI.BotaoRemoverUwp.IsEnabled=$false
+    $global:UI.BotaoCancelarUwp.IsEnabled=$false
+}
+
+function Mostrar-ConsultaUwp {
+    param($Estado,[string]$Fase,[string]$Mensagem)
+    $Estado.fase=$Fase
+    if ($Estado.fechada) { return }
+    $ui=$Estado.ui
+    $ui.InfoConsultaUwp.Text=$Mensagem
+    $ui.BotaoAtualizarUwp.IsEnabled=($null -eq $Estado.trabalho)
+    $ui.BotaoCancelarUwp.IsEnabled=($Fase -eq 'carregando')
+    $ui.BotaoRemoverUwp.IsEnabled=(-not $global:ModoProtegido -and $Fase -eq 'atualizado' -and -not $global:OperacaoUIAtiva)
+    if ($Fase -ne 'atualizado') { $ui.ListaUwp.Children.Clear() }
+}
+
+function Cancelar-ConsultaUwp {
+    param([string]$Motivo='Consulta cancelada.',[switch]$Fechar)
+    $s=$global:ConsultaUwp
+    if (-not $s) { return }
+    if ($Fechar) { $s.fechada=$true }
+    $s.data=$null; $s.pacotes=@()
+    $j=$s.trabalho
+    if ($j) {
+        $s.motivo=$Motivo
+        Mostrar-ConsultaUwp $s 'cancelando' ($Motivo+' Aguardando encerramento da consulta.')
+        if (-not $j.cancelado) {
+            $j.cancelado=$true
+            if (-not $j.async.IsCompleted) {
+                try { $j.parada=$j.ps.BeginStop($null,$null) } catch { }
+            }
+        }
+    } else { Mostrar-ConsultaUwp $s 'indisponivel' $Motivo }
+}
+
+function Concluir-ConsultaUwp {
+    param($Timer)
+    $s=$global:ConsultasUwpAtivas[$Timer]
+    if (-not $s) { $Timer.Stop(); return }
+    $j=$s.trabalho
+    if (-not $j.async.IsCompleted) {
+        if (-not $j.cancelado -and $j.relogio.Elapsed.TotalSeconds -ge $j.limite) {
+            if ([object]::ReferenceEquals($s,$global:ConsultaUwp)) { Cancelar-ConsultaUwp 'Tempo limite da consulta atingido.' }
+        }
+        return
+    }
+    if ($j.parada -and -not $j.parada.IsCompleted) { return }
+    $Timer.Stop()
+    $global:ConsultasUwpAtivas.Remove($Timer)
+    $dados=@(); $falha=$false
+    try {
+        if ($j.parada) { try { $j.ps.EndStop($j.parada) } catch { } }
+        $dados=@($j.ps.EndInvoke($j.async))
+        if ($j.ps.Streams.Error.Count -gt 0) { $falha=$true }
+    } catch { $falha=$true }
+    finally { $j.ps.Dispose(); $s.trabalho=$null }
+    if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultaUwp)) { return }
+    if ($j.cancelado) { Mostrar-ConsultaUwp $s 'indisponivel' ($s.motivo+' Use Atualizar para tentar novamente.'); return }
+    if ($falha) { Mostrar-ConsultaUwp $s 'indisponivel' 'Consulta AppX falhou. Nenhuma ausencia confirmada. Tente novamente.'; return }
+    if ($global:OperacaoUIAtiva) { Mostrar-ConsultaUwp $s 'indisponivel' 'Inventario invalidado durante uma operacao. Atualize a lista.'; return }
+    try {
+        Montar-PaginaDebloat -Pacotes $dados
+        $s.pacotes=$dados; $s.data=Get-Date
+        Mostrar-ConsultaUwp $s 'atualizado' ('Apps verificados as '+$s.data.ToString('HH:mm:ss')+'. Nenhuma remocao preselecionada.')
+    } catch {
+        $s.data=$null; $s.pacotes=@()
+        Mostrar-ConsultaUwp $s 'indisponivel' 'Nao foi possivel exibir o inventario. Tente novamente.'
+    }
+}
+
 function Verificar-EstadoUwp {
-    Status 'verificando apps pre-instalados...'
-    Ocupado $true
-    try { Montar-PaginaDebloat } finally { Ocupado $false }
-    Status 'apps verificados; nenhuma remocao preselecionada.'
+    param([switch]$Forcar,[scriptblock]$Codigo={ $ErrorActionPreference='Stop'; Get-AppxPackage -ErrorAction Stop },[int]$LimiteSegundos=30)
+    $s=$global:ConsultaUwp
+    if (-not $s -or $s.fechada -or $global:OperacaoUIAtiva -or $s.trabalho) { return }
+    if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 120) { return }
+    $s.data=$null; $s.pacotes=@()
+    $ps=$null; $timer=$null
+    try {
+        $ps=[PowerShell]::Create()
+        [void]$ps.AddScript($Codigo.ToString())
+        $timer=New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval=[TimeSpan]::FromMilliseconds(100)
+        $timer.Add_Tick({ param($sender,$eventArgs) Concluir-ConsultaUwp $sender })
+        $j=@{ ps=$ps; async=$ps.BeginInvoke(); parada=$null; cancelado=$false; relogio=[Diagnostics.Stopwatch]::StartNew(); limite=$LimiteSegundos }
+        $s.trabalho=$j
+        $global:ConsultasUwpAtivas[$timer]=$s
+        Mostrar-ConsultaUwp $s 'carregando' 'Verificando apps pre-instalados... Voce pode navegar para outras abas.'
+        $timer.Start()
+    } catch {
+        if ($s.trabalho) {
+            Cancelar-ConsultaUwp 'Falha ao iniciar consulta.'
+            # Keep the completion poll alive until the worker stops.
+            $timer.Start()
+        } else {
+            if ($timer) { $timer.Stop() }
+            if ($ps) { $ps.Dispose() }
+            Mostrar-ConsultaUwp $s 'indisponivel' 'Nao foi possivel iniciar a consulta. Tente novamente.'
+        }
+    }
 }
 
 # ---- navegacao ----
@@ -421,6 +518,7 @@ function Clique-AplicarAjustes {
 }
 
 function Clique-RemoverUwp {
+    if (-not $global:ConsultaUwp -or $global:ConsultaUwp.fase -ne 'atualizado') { Avisar 'Inventario indisponivel' 'Atualize a lista antes de remover aplicativos.'; return }
     $selecionados = @(Get-Checkboxes $global:UI.ListaUwp | Where-Object { $_.IsChecked -and $_.IsEnabled })
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os aplicativos que quer remover.'
@@ -450,11 +548,10 @@ function Clique-RemoverUwp {
     } finally { Fechar-ProgressoLote $progresso }
     $arq = Salvar-Sessao
     Ocupado $false
-    if ($progresso.cancelado) { Log 'debloat interrompido; journal preservado.'; Status 'debloat interrompido.'; Verificar-EstadoUwp; return }
+    if ($progresso.cancelado) { Log 'debloat interrompido; journal preservado.'; Status 'debloat interrompido.'; return }
     Log ('debloat concluido' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { ' (nada foi removido)' }))
     if ($global:ErrosSessao -gt 0) { Status 'debloat com falhas; consulte o log.' }
     else { Status 'debloat concluido; relogar pode ser necessario.' }
-    Verificar-EstadoUwp
 }
 
 function Clique-InstalarApps {
@@ -1164,6 +1261,10 @@ function Executar-OperacaoUI {
     } finally {
         $janela.IsEnabled = $antes
         $global:OperacaoUIAtiva = $false
+        if ($global:ConsultaUwp) {
+            Cancelar-ConsultaUwp 'Inventario desatualizado apos operacao.'
+            if ($global:PaginaAtual -eq 'PaginaDebloat') { Verificar-EstadoUwp }
+        }
         if ($global:UI.ContainsKey('BarraProgresso')) { $global:UI.BarraProgresso.IsIndeterminate = $false }
     }
 }
@@ -1182,6 +1283,10 @@ function Ajustar-TamanhoJanela {
 
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
+    Inicializar-ConsultaUwp
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar })
+    $global:UI.BotaoAtualizarUwp.Add_Click({ Verificar-EstadoUwp -Forcar })
+    $global:UI.BotaoCancelarUwp.Add_Click({ Cancelar-ConsultaUwp })
     $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
     # navegacao da barra lateral
     $global:UI.BotaoNavInicio.Add_Click({ Trocar-Pagina 'PaginaInicio' })
@@ -1197,7 +1302,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma')
+        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {

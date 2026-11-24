@@ -116,7 +116,7 @@ $controles = @(
     'InfoHost', 'InfoSo', 'InfoCpu', 'InfoGpu', 'InfoRam', 'InfoDisco', 'InfoUptime', 'InfoRestore', 'InfoAmbiente', 'InfoDiagnostico',
     'BotaoCriarRestore', 'BotaoInventario', 'BotaoCarga', 'BotaoDiagnosticoAvancado', 'BotaoResumoBateria', 'BotaoResumoDriversPnP', 'BotaoGargalosLocais', 'BotaoMonitor', 'BotaoMedicoes', 'BotaoVerificarRelease',
     'ListaAjustes', 'ChkPontoRestore', 'ChkSimularAjustes', 'BotaoPresetSeguro', 'BotaoPresetBalanceado', 'BotaoPresetAgressivo', 'BotaoPerfilEssencial', 'BotaoPerfilGamer', 'BotaoPerfilNotebook', 'BotaoPerfilPrivacidade', 'BotaoPerfilCorporativo', 'BotaoPerfilRecomendado', 'BotaoAplicarAjustes', 'FiltroAjustes', 'BotaoExportarPlano', 'BotaoImportarPlano',
-    'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp',
+    'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp', 'BotaoAtualizarUwp', 'BotaoCancelarUwp', 'InfoConsultaUwp',
     'ListaProgramas', 'FiltroDesinstalar', 'CategoriaDesinstalar', 'OrdemDesinstalar', 'BotaoDetalhesPrograma', 'InfoProgramas', 'DetalhePrograma', 'BotaoAtualizarProgramas', 'ChkPontoRestoreDesinstalar', 'BotaoDesinstalarProg', 'BotaoVarrerRastros', 'RotuloRastros', 'BotaoMarcarRastros', 'BotaoDesmarcarRastros', 'InfoMarcadosRastros', 'BotaoApagarRastros', 'ListaRastros',
     'ListaApps', 'BotaoInstalarApps', 'BotaoAtualizarSelecionados', 'BotaoAtualizarTudo', 'BotaoMarcarPadroes', 'FiltroApps',
     'ListaRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'BotaoTema', 'PainelLegado',
