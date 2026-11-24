@@ -591,6 +591,27 @@ try {
     }
 } catch { Falhou 'debloat limitado ao usuario' $_.Exception.Message }
 
+# ---- parser restrito de REGEDIT5 ----
+Secao 'custom por valor'
+try {
+    $texto = @'
+Windows Registry Editor Version 5.00
+
+[HKEY_CURRENT_USER\Software\OtimizadorTeste]
+"nome"="texto"
+"numero"=dword:ffffffff
+@=-
+'@
+    $acoes = @(Ler-PlanoRegRestrito $texto)
+    if ($acoes.Count -ne 3 -or $acoes[1].dados -ne -1 -or -not $acoes[2].remover -or $acoes[2].nome -ne '') { throw 'Plano convertido incorretamente.' }
+    foreach ($ruim in @('[HKEY_LOCAL_MACHINE\Software\Teste]','[-HKEY_CURRENT_USER\Software\Teste]','[HKEY_CURRENT_USER\Software\Policies\Teste]','"x"=hex:01,02')) {
+        $recusou = $false
+        try { $null = Ler-PlanoRegRestrito ($texto + "`n" + $ruim) } catch { $recusou=$true }
+        if (-not $recusou) { throw ('Linha proibida aceita: ' + $ruim) }
+    }
+    Passou 'parser aceita valores simples e recusa arquivo inteiro invalido'
+} catch { Falhou 'custom por valor' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

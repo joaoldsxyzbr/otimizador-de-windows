@@ -559,13 +559,8 @@ function Apagar-Rastro {
     if ($Rastro.tipo -eq 'servico') {
         $detalhes = @(Get-CimInstance Win32_Service -ErrorAction Stop | Where-Object { $_.Name -eq $Rastro.caminho })
         if ($detalhes.Count -ne 1 -or -not (Executavel-RastroAusente $detalhes[0].PathName)) { throw 'Servico nao confirmado como candidato orfao.' }
-        $svc = Get-Service -Name $Rastro.caminho -ErrorAction Stop
-        $estadoAnt = [string]$svc.Status
-        $tipoAnt = [string]$svc.StartType
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'servico'; nome = $Rastro.caminho; tipoAnterior = $tipoAnt; estadoAnterior = $estadoAnt; contexto = 'varredura de rastros' })
-        if ($estadoAnt -eq 'Running') { Stop-Service -Name $Rastro.caminho -ErrorAction Stop }
-        Set-Service -Name $Rastro.caminho -StartupType Disabled -ErrorAction Stop
-        Log ('servico orfao parado e desativado (desfazer restaura): ' + $Rastro.caminho)
+        Alterar-ServicoComJournal $Rastro.caminho 'Disabled'
+        Log ('servico candidato desativado com snapshot: ' + $Rastro.caminho)
         return
     }
 

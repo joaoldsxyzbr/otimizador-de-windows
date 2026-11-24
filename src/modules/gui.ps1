@@ -388,8 +388,8 @@ function Clique-InstalarRecursos {
     }
     $arq = Salvar-Sessao
     Ocupado $false
-    Log ('recursos habilitados. reinicie o windows se algum pedir.' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { '' }))
-    Status 'recursos habilitados.'
+    Log ('recursos processados; confira erros e reinicio pendente.' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { '' }))
+    if ($global:ErrosSessao -gt 0) { Status 'recursos com falhas; consulte o log.' } else { Status 'recursos processados; confira reinicio pendente.' }
 }
 
 function Clique-Preset {

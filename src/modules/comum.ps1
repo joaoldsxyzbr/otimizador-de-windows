@@ -8,7 +8,7 @@ $global:PastaLog = Join-Path $global:RaizEstado 'logs'
 $global:PastaDesfazer = Join-Path $global:RaizEstado 'desfazer'
 $global:PastaQuarantena = Join-Path $global:RaizEstado 'quarentena'
 $global:ArquivoLog    = Join-Path $global:PastaLog ("otimizadorpc-" + (Get-Date -Format 'yyyy-MM-dd') + ".log")
-$global:VersaoOtimizador = '2.0.0-rc.4'
+$global:VersaoOtimizador = '2.0.0-rc.5'
 $global:ErrosSessao   = 0
 $global:UI            = @{}
 

@@ -192,6 +192,84 @@ function Descrever-Acao {
 
 # ---- executor de acoes ----
 
+# Servicos: nao presumir tipo anterior, nem mexer em estados transitorios.
+function Obter-EstadoServico {
+    param([string]$Nome)
+    if ($Nome -notmatch '^[A-Za-z0-9_.-]+$') { throw 'Nome de servico invalido.' }
+    $svc = Get-Service -Name $Nome -ErrorAction Stop
+    $tipo = $svc.StartType.ToString()
+    $estado = $svc.Status.ToString()
+    if ($tipo -notin @('Automatic','Manual','Disabled') -or $estado -notin @('Running','Stopped')) { throw 'Servico em estado nao suportado; tente mais tarde.' }
+    $delay = Ler-ValorRegistro ('HKLM:\SYSTEM\CurrentControlSet\Services\' + $Nome) 'DelayedAutoStart'
+    return [pscustomobject]@{ tipo=$tipo; estado=$estado; atraso=($tipo -eq 'Automatic' -and $delay.existia -and [int]$delay.valor -eq 1) }
+}
+
+function Definir-InicioServico {
+    param([string]$Nome,[string]$Tipo,[bool]$Atraso)
+    if ($Nome -notmatch '^[A-Za-z0-9_.-]+$' -or $Tipo -notin @('Automatic','Manual','Disabled')) { throw 'Configuracao de servico invalida.' }
+    $modo = switch ($Tipo) {
+        'Automatic' { if ($Atraso) { 'delayed-auto' } else { 'auto' } }
+        'Manual' { 'demand' }
+        'Disabled' { 'disabled' }
+    }
+    $exe = Join-Path $env:SystemRoot 'System32\sc.exe'
+    $proc = Start-Process -FilePath $exe -ArgumentList @('config',$Nome,'start=',$modo) -NoNewWindow -Wait -PassThru -ErrorAction Stop
+    try { if ($proc.ExitCode -ne 0) { throw ('sc.exe falhou: ' + $proc.ExitCode) } } finally { $proc.Dispose() }
+}
+
+function Alterar-ServicoComJournal {
+    param([string]$Nome,[string]$Inicio)
+    $ant = Obter-EstadoServico $Nome
+    if ($Inicio -notin @('Automatic','Manual','Disabled')) { throw 'Tipo de inicio invalido.' }
+    if ($ant.tipo -eq $Inicio -and ($Inicio -ne 'Disabled' -or $ant.estado -eq 'Stopped')) { return }
+    $depois = if ($Inicio -eq 'Disabled') { 'Stopped' } else { $ant.estado }
+    Registrar-Jornal ([pscustomobject]@{
+        tipo='servico'; nome=$Nome; tipoAnterior=$ant.tipo; estadoAnterior=$ant.estado; atrasoAnterior=$ant.atraso
+        tipoDepois=$Inicio; estadoDepois=$depois; atrasoDepois=$false
+    })
+    if ($Inicio -eq 'Disabled' -and $ant.estado -eq 'Running') {
+        Stop-Service -Name $Nome -ErrorAction Stop
+        (Get-Service -Name $Nome).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(20))
+    }
+    Definir-InicioServico $Nome $Inicio $false
+    $novo = Obter-EstadoServico $Nome
+    if ($novo.tipo -ne $Inicio -or $novo.estado -ne $depois -or $novo.atraso) { throw 'Estado do servico diferente do esperado.' }
+}
+
+# Importacao restrita: apenas valores simples em HKCU Software, sem apagar chaves.
+# Arquivos completos sao analisados antes de qualquer efeito.
+function Ler-PlanoRegRestrito {
+    param([string]$Texto)
+    $linhas = @($Texto -split '\r?\n')
+    if ($linhas.Count -gt 1000 -or $linhas[0].Trim([char]0xFEFF).Trim() -ne 'Windows Registry Editor Version 5.00') { throw 'Formato REGEDIT5 esperado, ate 1000 linhas.' }
+    $chave = ''
+    $acoes = @()
+    foreach ($linha in ($linhas | Select-Object -Skip 1)) {
+        $l = $linha.Trim()
+        if (-not $l -or $l.StartsWith(';')) { continue }
+        if ($l -match '^\[HKEY_CURRENT_USER\\Software\\([^\]]+)\]$') {
+            $sub = $Matches[1]
+            if ($sub -match '^(Microsoft|Classes|Policies|Clients|RegisteredApplications)(\\|$)' -or $sub.Contains('..')) { throw 'Chave reservada; importacao recusada.' }
+            $chave = 'HKCU:\Software\' + $sub
+            continue
+        }
+        if (-not $chave -or $l -notmatch '^(@|"[^"\\]*")\s*=\s*(.+)$') { throw 'Linha .reg nao suportada: somente valores simples em HKCU Software.' }
+        $nome = if ($Matches[1] -eq '@') { '' } else { $Matches[1].Trim('"') }
+        $dado = $Matches[2]
+        $acao = [ordered]@{ tipo='registro'; caminho=$chave; nome=$nome; tipoValor='String'; dados=''; remover=$false }
+        if ($dado -eq '-') { $acao.remover=$true }
+        elseif ($dado -match '^dword:([0-9a-fA-F]{8})$') {
+            $acao.tipoValor='DWord'
+            $acao.dados=[Convert]::ToInt32($Matches[1],16)
+        } elseif ($dado -match '^"((?:[^"\\]|\\["\\])*)"$') {
+            $acao.dados=$Matches[1].Replace('\\"','"').Replace('\\\\','\')
+        } else { throw 'Tipo .reg nao suportado. Use string, DWORD ou exclusao de valor.' }
+        $acoes += [pscustomobject]$acao
+    }
+    if ($acoes.Count -eq 0) { throw 'Nenhum valor suportado no arquivo.' }
+    return $acoes
+}
+
 function Executar-Acao {
     param($Acao, [string]$Contexto, [switch]$Simular)
 
@@ -249,63 +327,12 @@ function Executar-Acao {
                 Log ("registro: {0} -> {1} = {2}" -f $Acao.caminho, $Acao.nome, $Acao.dados)
             }
 
-            'reg-import' {
-                # tweak custom do usuario: importa um arquivo .reg inteiro.
-                # antes de importar, exporta backup .reg de cada chave que o
-                # arquivo toca; chaves que ainda nao existiam sao apagadas no
-                # desfazer (revive via backup nas outras).
-                if (-not (Test-Path $Acao.arquivo)) {
-                    Log ("arquivo .reg nao encontrado: {0}, pulando." -f $Acao.arquivo)
-                    return
-                }
-                $conteudo = Get-Content -Path $Acao.arquivo -Raw
-                $chaves = @([regex]::Matches($conteudo, '(?m)^\[\-?(HKEY_[^\]]+)\]') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-                if ($chaves.Count -eq 0) {
-                    Log ("o arquivo .reg {0} nao declara nenhuma chave [HKEY_...]; nada a fazer." -f (Split-Path -Leaf $Acao.arquivo))
-                    return
-                }
-                $backups = @()
-                $novas = @()
-                foreach ($chave in $chaves) {
-                    $global:BackupN++
-                    $folha = ($chave -replace '[\\/:*?"<>|]', '_')
-                    if ($folha.Length -gt 60) { $folha = $folha.Substring($folha.Length - 60) }
-                    $arqBackup = Join-Path $global:PastaDesfazer ('{0}_regimp_{1:00}_{2}.reg' -f $global:CarimboSessao, $global:BackupN, $folha)
-                    $caminhoReg = 'Registry::' + $chave
-                    if (Test-Path -LiteralPath $caminhoReg -ErrorAction Stop) {
-                        Executar-RegNativo -Operacao export -Alvo $chave -Arquivo $arqBackup
-                        if (-not (Test-Path -LiteralPath $arqBackup -PathType Leaf)) { throw 'Backup custom ausente; importacao cancelada.' }
-                        $backups += $arqBackup
-                    } else { $novas += $chave }
-                }
-                Registrar-Jornal ([pscustomobject]@{
-                    tipo        = 'reg-import'
-                    arquivo     = $Acao.arquivo
-                    backups     = @($backups)
-                    chavesNovas = @($novas)
-                    contexto    = $desc
-                })
-                Executar-RegNativo -Operacao import -Alvo $Acao.arquivo
-                Log ("registro: .reg importado ({0} chave(s), {1} com backup): {2}" -f $chaves.Count, @($backups).Count, $Acao.arquivo)
-            }
+            'reg-import' { throw 'Importacao integral de .reg desativada; carregue um plano restrito por valor.' }
 
             'servico' {
-                $svc = Get-Service -Name $Acao.nome -ErrorAction SilentlyContinue
-                if ($null -eq $svc) {
-                    Log ("servico '{0}' nao existe neste windows, pulando." -f $Acao.nome)
-                    return
-                }
-                Registrar-Jornal ([pscustomobject]@{
-                    tipo            = 'servico'
-                    nome            = $Acao.nome
-                    tipoAnterior    = $svc.StartType.ToString()
-                    estadoAnterior  = $svc.Status.ToString()
-                })
-                Set-Service -Name $Acao.nome -StartupType $Acao.inicio -ErrorAction Stop
-                if ($Acao.inicio -eq 'Disabled' -and $svc.Status -eq 'Running') {
-                    Stop-Service -Name $Acao.nome -ErrorAction Stop
-                }
-                Log ("servico: {0} -> {1}" -f $Acao.nome, $Acao.inicio)
+                if (-not (Get-Service -Name $Acao.nome -ErrorAction SilentlyContinue)) { Log ('servico ausente: ' + $Acao.nome); return }
+                Alterar-ServicoComJournal $Acao.nome $Acao.inicio
+                Log ('configuracao de servico verificada: ' + $Acao.nome)
             }
 
             'comando' {
@@ -418,32 +445,24 @@ function Desfazer-Item {
                 }
             }
 
-            'reg-import' {
-                foreach ($arq in @($Item.backups)) {
-                    if (-not [string]::IsNullOrWhiteSpace($arq) -and (Test-Path $arq)) {
-                        Executar-RegNativo -Operacao import -Alvo $arq
-                        Log ('registro restaurado do backup: ' + (Split-Path -Leaf $arq))
-                    } else { throw 'Backup custom ausente.' }
-                }
-                foreach ($chave in @($Item.chavesNovas)) {
-                    if (-not [string]::IsNullOrWhiteSpace($chave)) {
-                        if (Test-Path -LiteralPath ('Registry::' + $chave)) { Executar-RegNativo -Operacao delete -Alvo $chave }
-                        Log ('chave que nao existia antes foi removida: ' + $chave)
-                    }
-                }
-                Log ('tweak custom revertido: ' + $Item.arquivo)
-            }
+            'reg-import' { throw 'Importacao integral antiga: recupere manualmente para evitar sobrescrever valores posteriores.' }
 
             'servico' {
-                $tipoOk = $Item.tipoAnterior
-                if (@('Automatic', 'Manual', 'Disabled') -notcontains $tipoOk) { $tipoOk = 'Manual' }
-                Set-Service -Name $Item.nome -StartupType $tipoOk -ErrorAction Stop
-                if ($Item.estadoAnterior -eq 'Running') {
+                if (-not $Item.PSObject.Properties['tipoDepois']) { throw 'Journal antigo de servico sem snapshot posterior; revise manualmente.' }
+                $atual = Obter-EstadoServico $Item.nome
+                if ($atual.tipo -eq $Item.tipoAnterior -and $atual.estado -eq $Item.estadoAnterior -and $atual.atraso -eq $Item.atrasoAnterior) { return $true }
+                if ($atual.tipo -ne $Item.tipoDepois -or $atual.estado -ne $Item.estadoDepois -or $atual.atraso -ne $Item.atrasoDepois) { throw 'Servico alterado depois da sessao; preservado.' }
+                Definir-InicioServico $Item.nome $Item.tipoAnterior ([bool]$Item.atrasoAnterior)
+                if ($Item.estadoAnterior -eq 'Running' -and $atual.estado -ne 'Running') {
                     Start-Service -Name $Item.nome -ErrorAction Stop
-                } elseif ($Item.estadoAnterior -eq 'Stopped') {
+                    (Get-Service -Name $Item.nome).WaitForStatus('Running',[TimeSpan]::FromSeconds(20))
+                } elseif ($Item.estadoAnterior -eq 'Stopped' -and $atual.estado -ne 'Stopped') {
                     Stop-Service -Name $Item.nome -ErrorAction Stop
+                    (Get-Service -Name $Item.nome).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(20))
                 }
-                Log ("servico restaurado: {0} -> {1}" -f $Item.nome, $tipoOk)
+                $final = Obter-EstadoServico $Item.nome
+                if ($final.tipo -ne $Item.tipoAnterior -or $final.estado -ne $Item.estadoAnterior -or $final.atraso -ne $Item.atrasoAnterior) { throw 'Servico nao retornou ao estado original.' }
+                Log ('servico restaurado e verificado: ' + $Item.nome)
             }
 
             'comando' {
@@ -828,24 +847,12 @@ function Aplicar-Preset {
 # em preset nenhum (niveis vazio) e tem journal/desfazer como qualquer outro.
 function Carregar-TweaksCustom {
     $pasta = Join-Path $global:PastaApp 'custom'
-    $lista = @()
-    if (-not (Test-Path $pasta)) {
-        # cria a pasta vazia pra ficar visivel onde jogar os arquivos
-        try { New-Item -Path $pasta -ItemType Directory -Force | Out-Null } catch { }
-        return @()
+    if (-not (Test-Path -LiteralPath $pasta -PathType Container)) { return }
+    foreach ($arq in @(Get-ChildItem -LiteralPath $pasta -File -Filter '*.reg' -ErrorAction SilentlyContinue)) {
+        try {
+            if ($arq.Length -gt 128KB -or ($arq.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Arquivo grande ou redirecionado.' }
+            $acoes = @(Ler-PlanoRegRestrito ([IO.File]::ReadAllText($arq.FullName)))
+            [pscustomobject]@{ id=('custom-' + ($arq.BaseName.ToLower() -replace '[^a-z0-9-]','-')); nome=('Custom: ' + $arq.BaseName); desc='Plano local restrito: valores simples HKCU Software com journal individual. Revise antes de aplicar.'; categoria='Customizadas'; niveis=@(); so='ambos'; apenasManual=$true; acoes=$acoes }
+        } catch { Log ('Custom ignorado: ' + $arq.Name + ' - ' + $_.Exception.Message) }
     }
-    $arqs = @(Get-ChildItem -Path $pasta -Filter '*.reg' -ErrorAction SilentlyContinue)
-    foreach ($a in $arqs) {
-        $id = 'custom-' + ($a.BaseName.ToLower() -replace '[^a-z0-9-]', '-')
-        $lista += [pscustomobject]@{
-            id       = $id
-            nome     = ('Custom: ' + $a.BaseName)
-            desc     = 'arquivo .reg seu em custom\. ao aplicar, o app exporta backup de cada chave tocada; o desfazer restaura os backups (chaves que nao existiam voltam a ser apagadas). este ajuste e manual: preset nenhum aplica sozinho.'
-            categoria= 'Customizadas'
-            niveis   = @()
-            so       = 'ambos'
-            acoes    = @([pscustomobject]@{ tipo = 'reg-import'; arquivo = $a.FullName })
-        }
-    }
-    return $lista
 }
