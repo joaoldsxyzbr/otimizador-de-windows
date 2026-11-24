@@ -892,7 +892,9 @@ function Clique-Medicoes {
             if (-not $abrir.ShowDialog()) { return }
             $antes = Ler-JSON $abrir.FileName
         }
-        $medicoes = @(Executar-ConsultaLocal -Titulo 'Medindo o sistema' -Codigo ${function:Medir-EstadoSistema})
+        $n=3
+        if ($antes -and $antes.amostras) { $n=[int]$antes.amostras }
+        $medicoes = @(Executar-ConsultaLocal -Titulo 'Medindo o sistema' -Codigo ${function:Medir-EstadoSistema} -Parametros @{Amostras=$n; Cenario=[string]$antes.cenario})
         if ($medicoes.Count -ne 1 -or $null -eq $medicoes[0]) { Status 'medicao cancelada.'; return }
         $atual = $medicoes[0]
         if ($escolha) {
@@ -905,7 +907,7 @@ function Clique-Medicoes {
             }
         } else {
             $linhas = @(Comparar-Medicoes -Antes $antes -Depois $atual | Format-Table -AutoSize | Out-String -Width 120)
-            Avisar 'Comparativo observacional' (($linhas -join '') + [Environment]::NewLine + 'Tres amostras de CPU, RAM e processos. A carga de trabalho pode variar; diferencas nao provam ganho de desempenho ou FPS.')
+            Avisar 'Comparativo observacional' (($linhas -join '') + [Environment]::NewLine + 'Amostras de CPU, RAM e processos. A carga de trabalho pode variar; diferencas nao provam ganho de desempenho ou FPS.')
         }
     } catch {
         Log ('falha na medicao: ' + $_.Exception.Message) -Erro
@@ -917,17 +919,37 @@ function Clique-VerificarRelease {
     try {
         $dados = @(Executar-ConsultaLocal -Titulo 'Consultando versao oficial' -Codigo ${function:Consultar-ReleaseOficial})
         if ($dados.Count -ne 1 -or $null -eq $dados[0]) { return }
-        $info = $dados[0]
-        $url = 'https://github.com/joaoldsxyzbr/otimizador-de-windows/releases'
-        $msg = 'Versao atual: ' + $global:VersaoOtimizador + [Environment]::NewLine
-        if ($info.publicada) {
-            $msg += 'Ultima release estavel: ' + $info.tag
-            if (-not $info.scriptOnline) { $msg += ' (sem script online)' }
-        } else { $msg += 'Ainda nao existe release estavel publicada.' }
-        if (Perguntar 'Versao oficial' ($msg + [Environment]::NewLine + 'Abrir a pagina oficial de releases? Nenhum codigo sera executado.')) {
-            Start-Process $url -ErrorAction Stop
+        $info=$dados[0]
+        $tag = if ($info.estavel) { $info.estavel } else { $info.previa }
+        $msg = "Versao atual: $global:VersaoOtimizador`nEstavel: $($info.estavel)`nPrevia: $($info.previa)"
+        if (-not $tag) { Avisar 'Versao oficial' ($msg + "`nNenhuma release compativel."); return }
+        if (-not (Perguntar 'Versao oficial' ($msg + "`n`nBaixar $tag com verificacao SHA256? Nada sera executado."))) { return }
+        $res = @(Executar-ConsultaLocal -Titulo 'Baixando e conferindo SHA256' -Codigo ${function:Baixar-ReleaseVerificada} -Parametros @{Tag=$tag})
+        if ($res.Count -ne 1) { return }
+        $salvar = New-Object Microsoft.Win32.SaveFileDialog
+        $salvar.Filter='Script PowerShell (*.ps1)|*.ps1'
+        $salvar.FileName=('otimizadorpc-' + $tag + '.ps1')
+        if ($salvar.ShowDialog()) {
+            [IO.File]::WriteAllBytes($salvar.FileName,[byte[]]$res[0].bytes)
+            if ((Get-FileHash -LiteralPath $salvar.FileName -Algorithm SHA256).Hash -ne $res[0].hash) { throw 'Arquivo salvo com hash divergente.' }
+            Avisar 'Download verificado' 'Script salvo; nenhuma atualizacao foi executada. SHA256 verifica integridade, nao substitui assinatura digital. Revise o codigo antes de executar.'
         }
-    } catch { Avisar 'Falha na consulta' $_.Exception.Message }
+    } catch { Avisar 'Falha na consulta/download' $_.Exception.Message }
+}
+
+function Clique-MonitorSistema {
+    try {
+        $med = @(Executar-ConsultaLocal -Titulo 'Monitor de recursos - 10 amostras' -Codigo ${function:Medir-EstadoSistema} -Parametros @{Amostras=10; Cenario='monitor'})
+        if ($med.Count -ne 1) { return }
+        $dados=$med[0]
+        $linhas = ($dados.serie | Format-Table -AutoSize | Out-String -Width 100)
+        $msg = $linhas + "`nCPU media: $($dados.cpuMedia)% | RAM usada: $($dados.ramUsadaGB) GB | Disco livre: $($dados.discoLivreGB) GB"
+        if (Perguntar 'Monitor - salvar relatorio?' ($msg + "`nExportar amostras em JSON?")) {
+            $salvar=New-Object Microsoft.Win32.SaveFileDialog
+            $salvar.Filter='Relatorio JSON (*.json)|*.json'; $salvar.FileName='otimizadorpc-monitor.json'
+            if ($salvar.ShowDialog()) { Gravar-JSONAtomico -Arquivo $salvar.FileName -Objeto $dados }
+        }
+    } catch { Avisar 'Monitor indisponivel' $_.Exception.Message }
 }
 
 # Um unico controlador de cliques mutaveis evita reentrada pelo Dispatcher.
@@ -1051,6 +1073,7 @@ function Ligar-Tudo {
     # pagina inicio
     $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
     $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
+    $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
         Executar-OperacaoUI { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false }; Preencher-PaginaInicio }

@@ -32,6 +32,7 @@ function Obter-DiagnosticoLocal {
     param($OS, $Disco)
     $avisos = @()
     if ($OS.TotalVisibleMemorySize -gt 0) {
+        if ($OS.TotalVisibleMemorySize -lt 8MB) { $avisos += 'Menos de 8 GB de RAM visivel: priorize revisar inicializacao e processos; evite ajustes agressivos.' }
         $livre = 100.0 * $OS.FreePhysicalMemory / $OS.TotalVisibleMemorySize
         if ($livre -lt 10) { $avisos += 'Pouca RAM disponivel nesta amostra. Revise processos antes de aplicar ajustes.' }
     }
@@ -50,6 +51,10 @@ function Obter-DiagnosticoLocal {
     if (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) {
         $avisos += 'Possivel ambiente gerenciado. Consulte o administrador antes de alterar politicas.'
     }
+    try {
+        if (@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) { $avisos += 'Bateria detectada: prefira o perfil Notebook e preserve economia de energia.' }
+        else { $avisos += 'Use o perfil Essencial como ponto de partida; nao ha ganho de FPS garantido.' }
+    } catch { $avisos += 'Tipo de alimentacao nao confirmado.' }
     if ($avisos.Count -eq 0) { $avisos += 'Nenhum alerta nas verificacoes disponiveis.' }
     return ($avisos -join [Environment]::NewLine)
 }
@@ -209,17 +214,20 @@ function Analisar-Armazenamento {
 
 # Amostra observacional. Nao executa benchmark nem promete ganhos de desempenho.
 function Medir-EstadoSistema {
+    param([ValidateRange(3,30)][int]$Amostras=3,[string]$Cenario='')
     $cpu = @()
     $ram = @()
     $processos = @()
-    for ($i = 0; $i -lt 3; $i++) {
+    $serie = @()
+    for ($i = 0; $i -lt $Amostras; $i++) {
         $p = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
         $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
         if ($null -eq $p -or $os.TotalVisibleMemorySize -le 0) { throw 'Contadores do sistema indisponiveis.' }
         $cpu += [double]$p.PercentProcessorTime
         $ram += [double]($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / 1MB
         $processos += @(Get-Process -ErrorAction Stop).Count
-        if ($i -lt 2) { Start-Sleep -Seconds 1 }
+        $serie += [pscustomobject]@{ segundo=$i; cpuPct=$cpu[-1]; ramGB=[math]::Round($ram[-1],2); processos=$processos[-1] }
+        if ($i -lt ($Amostras-1)) { Start-Sleep -Seconds 1 }
     }
     $disco = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'" -ErrorAction Stop
     if ($null -eq $disco) { throw 'Disco do sistema indisponivel.' }
@@ -235,14 +243,16 @@ function Medir-EstadoSistema {
         ramUsadaGB = [math]::Round(($ram | Measure-Object -Average).Average, 2)
         processosMedia = [math]::Round(($processos | Measure-Object -Average).Average, 2)
         discoLivreGB = [math]::Round($disco.FreeSpace / 1GB, 2)
-        amostras = 3
+        amostras = $Amostras
+        cenario = $Cenario
+        serie = $serie
     }
 }
 
 function Comparar-Medicoes {
     param($Antes, $Depois)
     foreach ($item in @($Antes,$Depois)) {
-        if ($item.formato -ne 'otimizadorpc-medicao-v1' -or $item.amostras -ne 3) { throw 'Formato de medicao invalido.' }
+        if ($item.formato -ne 'otimizadorpc-medicao-v1' -or $item.amostras -lt 3 -or $item.amostras -gt 30) { throw 'Formato de medicao invalido.' }
         foreach ($campo in @('cpuMedia','ramUsadaGB','processosMedia','discoLivreGB','ramTotalGB','discoTotalGB')) {
             $v = $item.$campo
             if ($null -eq $v -or ($v -isnot [ValueType]) -or $v -is [bool]) { throw ('Campo numerico invalido: ' + $campo) }
@@ -251,9 +261,10 @@ function Comparar-Medicoes {
         }
         if ($item.cpuMedia -gt 100 -or $item.ramUsadaGB -gt $item.ramTotalGB -or $item.discoLivreGB -gt $item.discoTotalGB) { throw 'Medicao fora dos limites.' }
     }
-    foreach ($campo in @('maquina','build','unidade','ramTotalGB','discoTotalGB')) {
+    foreach ($campo in @('maquina','build','unidade','ramTotalGB','discoTotalGB','amostras')) {
         if ($null -eq $Antes.$campo -or $Antes.$campo -ne $Depois.$campo) { throw 'Medicoes de computadores ou configuracoes diferentes.' }
     }
+    if ([string]$Antes.cenario -cne [string]$Depois.cenario) { throw 'Cenarios de medicao diferentes.' }
     $linhas = @()
     foreach ($metrica in @(
         @{ campo='cpuMedia'; nome='CPU media (%)' },
@@ -275,19 +286,37 @@ function Consultar-ReleaseOficial {
     try {
         [Net.ServicePointManager]::SecurityProtocol = $tls -bor [Net.SecurityProtocolType]::Tls12
         $headers = @{ 'User-Agent' = 'OtimizadorPC'; Accept = 'application/vnd.github+json' }
-        try {
-            $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/joaoldsxyzbr/otimizador-de-windows/releases/latest' -Headers $headers -TimeoutSec 20 -ErrorAction Stop
-        } catch {
-            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
-                return [pscustomobject]@{ publicada=$false; tag=''; scriptOnline=$false }
-            }
-            throw
-        }
-        if ($release.draft -or $release.prerelease -or [string]$release.tag_name -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Release estavel invalida.' }
-        return [pscustomobject]@{
-            publicada=$true
-            tag=[string]$release.tag_name
-            scriptOnline=(@($release.assets | Where-Object { $_.name -eq 'otimizadorpc.ps1' }).Count -eq 1)
-        }
+        $releases = @(Invoke-RestMethod -Uri 'https://api.github.com/repos/joaoldsxyzbr/otimizador-de-windows/releases?per_page=20' -Headers $headers -TimeoutSec 20 -ErrorAction Stop)
+        $validas = @($releases | Where-Object {
+            -not $_.draft -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[0-9]+)?$' -and
+            @($_.assets | Where-Object { $_.name -eq 'otimizadorpc.ps1' }).Count -eq 1 -and
+            @($_.assets | Where-Object { $_.name -eq 'otimizadorpc.ps1.sha256' }).Count -eq 1
+        })
+        $estavel = @($validas | Where-Object { -not $_.prerelease } | Select-Object -First 1)
+        $previa = @($validas | Where-Object { $_.prerelease } | Select-Object -First 1)
+        return [pscustomobject]@{ estavel=$(if ($estavel.Count) { [string]$estavel[0].tag_name } else { '' }); previa=$(if ($previa.Count) { [string]$previa[0].tag_name } else { '' }) }
+    } finally { [Net.ServicePointManager]::SecurityProtocol = $tls }
+}
+
+# Download explicito, somente do repositorio oficial, sem executar o conteudo.
+function Baixar-ReleaseVerificada {
+    param([ValidatePattern('^v[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[0-9]+)?$')][string]$Tag)
+    $tls = [Net.ServicePointManager]::SecurityProtocol
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = $tls -bor [Net.SecurityProtocolType]::Tls12
+        $base = 'https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/' + $Tag + '/otimizadorpc.ps1'
+        $manifesto = Invoke-WebRequest -Uri ($base + '.sha256') -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+        if ([string]$manifesto.Content -notmatch '^([a-fA-F0-9]{64})\s+otimizadorpc\.ps1\s*$') { throw 'Manifesto SHA256 invalido.' }
+        $esperado = $Matches[1]
+        $arquivo = Invoke-WebRequest -Uri $base -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
+        $stream = $arquivo.RawContentStream
+        if (-not $stream -or $stream.Length -lt 1 -or $stream.Length -gt 2MB) { throw 'Tamanho inesperado do script.' }
+        $stream.Position=0
+        $mem = New-Object IO.MemoryStream
+        try { $stream.CopyTo($mem); $bytes=$mem.ToArray() } finally { $mem.Dispose() }
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try { $hash=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','') } finally { $sha.Dispose() }
+        if ($hash -ne $esperado) { throw 'SHA256 divergente; arquivo recusado.' }
+        return [pscustomobject]@{ tag=$Tag; hash=$hash; bytes=$bytes }
     } finally { [Net.ServicePointManager]::SecurityProtocol = $tls }
 }

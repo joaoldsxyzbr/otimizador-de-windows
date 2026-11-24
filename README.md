@@ -33,7 +33,7 @@ O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimiz
 
 O launcher `iniciar.ps1` permanece como alternativa baseada na montagem do codigo-fonte: confere os hashes dos blobs Git dos arquivos obtidos por commit antes de montar em pasta temporaria protegida (execucao elevada). Se a API responder 403/429 durante a validacao de um SHA fixado, um checkout Git correspondente pode fornecer a arvore esperada; os arquivos remotos continuam sujeitos aos mesmos hashes. Essa alternativa nao e execucao exclusivamente em memoria.
 
-O botao Consultar versao oficial verifica os metadados da ultima release estavel e oferece abrir a pagina do GitHub, sem instalar ou executar atualizacoes. Procedimento de entrega: [PUBLICACAO.md](PUBLICACAO.md).
+O botao Consultar e baixar versao oficial mostra releases estavel/candidata e permite baixar explicitamente um script com SHA256 conferido, sem executar automaticamente. O monitor coleta 10 amostras de CPU/RAM/processos e exporta JSON; diagnostico considera memoria e bateria. Procedimento de entrega: [PUBLICACAO.md](PUBLICACAO.md).
 
 ## como usar
 

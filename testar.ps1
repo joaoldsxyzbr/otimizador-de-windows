@@ -658,6 +658,19 @@ try {
     Passou 'assinatura detecta mudanca de definicao de tarefa'
 } catch { Falhou 'assinatura de tarefas' $_.Exception.Message }
 
+# ---- comparacao exige quantidade e cenario compativeis ----
+Secao 'comparacao de amostras'
+try {
+    $a = [pscustomobject]@{ formato='otimizadorpc-medicao-v1'; amostras=10; cenario='teste'; maquina='ci'; build=1; unidade='C:'; ramTotalGB=16; discoTotalGB=100; cpuMedia=20; ramUsadaGB=8; processosMedia=100; discoLivreGB=30 }
+    $b=$a.PSObject.Copy()
+    if (@(Comparar-Medicoes $a $b).Count -ne 4) { throw 'Comparacao de dez amostras invalida.' }
+    $b.cenario='outro'
+    $rejeitou=$false
+    try { $null=Comparar-Medicoes $a $b } catch { $rejeitou=$true }
+    if (-not $rejeitou) { throw 'Cenarios diferentes aceitos.' }
+    Passou 'comparacao valida amostras e cenario'
+} catch { Falhou 'comparacao de amostras' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
