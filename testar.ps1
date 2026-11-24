@@ -1057,6 +1057,28 @@ try {
     }
 } catch { Falhou 'interface pessoal' $_.Exception.Message }
 
+# ---- triagem local pura, sem consultas ou alteracoes reais ----
+Secao 'saude do PC'
+try {
+    $os=[pscustomobject]@{TotalVisibleMemorySize=16MB;FreePhysicalMemory=512KB}
+    $disk=[pscustomobject]@{Size=200GB;FreeSpace=2GB}
+    $itens=@(Avaliar-SaudeLocal $os $disk 30 $true $true)
+    if ($itens.Count -ne 5) {throw 'Indicadores incompletos.'}
+    foreach ($id in @('ram','disco','reinicio')) {
+        if (($itens | Where-Object {$_.id -eq $id}).estado -ne 'atencao') {throw ('Alerta ausente: '+$id)}
+    }
+    if (($itens | Where-Object {$_.id -eq 'inicio'}).estado -ne 'informacao') {throw 'Quantidade de inicializacao confundida com impacto.'}
+    $itens=@(Avaliar-SaudeLocal $null $null $null $null $null)
+    if (@($itens | Where-Object {$_.estado -ne 'indisponivel'}).Count) {throw 'Dado ausente tratado como estado conhecido.'}
+    $os.FreePhysicalMemory=8MB; $disk.FreeSpace=100GB
+    $itens=@(Avaliar-SaudeLocal $os $disk 0 $false $false)
+    if (@($itens | Where-Object {$_.estado -ne 'informacao'}).Count) {throw 'Alerta falso em amostra normal.'}
+    $os.FreePhysicalMemory=$null; $disk.FreeSpace=$null
+    $itens=@(Avaliar-SaudeLocal $os $disk 0 $false $false)
+    if (@($itens | Where-Object {$_.estado -eq 'indisponivel'}).Count -ne 2) {throw 'Metadados parciais confundidos com zero.'}
+    Passou 'triagem local diferencia alerta, informacao e dado indisponivel'
+} catch { Falhou 'saude do PC' $_.Exception.Message }
+
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
 try {

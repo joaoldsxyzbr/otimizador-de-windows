@@ -308,7 +308,7 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Ambiente"/><TextBlock x:Name="InfoAmbiente" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
                                 </StackPanel>
                             </GroupBox>
-                            <GroupBox Header="Diagnostico local" Foreground="#93c5fd" BorderBrush="#374151" Margin="0,10,0,4">
+                            <GroupBox Header="Saude do PC - analise e proximos passos" Foreground="#93c5fd" BorderBrush="#374151" Margin="0,10,0,4">
                                 <StackPanel Margin="6,8">
                                     <TextBlock x:Name="InfoDiagnostico" Foreground="#d1d5db" TextWrapping="Wrap" Text="Coletando informacoes..."/>
                                     <Button x:Name="BotaoInventario" Content="Inventario e ferramentas do Windows" HorizontalAlignment="Left" Margin="0,10,0,0"/>
