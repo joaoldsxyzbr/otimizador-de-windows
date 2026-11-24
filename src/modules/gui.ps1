@@ -809,6 +809,51 @@ function Clique-AnalisarArmazenamento {
 }
 
 # Inspecao do journal selecionado; nao executa comandos nem apaga backups.
+function Formatar-ValorRecuperacao {
+    param([bool]$Existe,[string]$Tipo,$Valor)
+    if (-not $Existe) { return '(ausente)' }
+    $texto=ConvertTo-Json -InputObject $Valor -Depth 4 -Compress
+    if ($texto.Length -gt 350) { $texto=$texto.Substring(0,350)+' ...' }
+    return ($Tipo+': '+$texto)
+}
+
+function Obter-DetalheRecuperacao {
+    param($Item)
+    $linhas=@()
+    switch ($Item.tipo) {
+        'registro' {
+            if ($Item.valorAnteriorEstruturado) { $linhas+=('Anterior: '+(Formatar-ValorRecuperacao ([bool]$Item.existia) $Item.tipoAnterior $Item.valorAnteriorEstruturado.valor)) }
+            else { $linhas+='Anterior: formato legado; revise journal.' }
+            if ($Item.PSObject.Properties['existiaDepois']) {
+                $linhas+=('Alvo registrado: '+(Formatar-ValorRecuperacao ([bool]$Item.existiaDepois) $Item.tipoDepois $Item.valorDepoisEstruturado.valor))
+            }
+            try {
+                $atual=Ler-ValorRegistro $Item.caminho $Item.nome
+                $linhas+=('Atual: '+(Formatar-ValorRecuperacao ([bool]$atual.existia) $atual.tipo $atual.valor))
+                if ($Item.PSObject.Properties['existiaDepois'] -and $Item.valorAnteriorEstruturado) {
+                    if (Registro-Corresponde $atual ([bool]$Item.existia) $Item.tipoAnterior $Item.valorAnteriorEstruturado.valor) { $linhas+='Estado anterior ja presente.' }
+                    elseif (Registro-Corresponde $atual ([bool]$Item.existiaDepois) $Item.tipoDepois $Item.valorDepoisEstruturado.valor) { $linhas+='Candidato a reversao automatica.' }
+                    else { $linhas+='Possivel conflito; nao sobrescrever.' }
+                }
+            } catch { $linhas+='Estado atual indisponivel.' }
+        }
+        'servico' {
+            $linhas+=('Anterior: '+$Item.tipoAnterior+' / '+$Item.estadoAnterior+' / atraso='+$Item.atrasoAnterior)
+            $linhas+=('Alvo registrado: '+$Item.tipoDepois+' / '+$Item.estadoDepois)
+            try { $s=Obter-EstadoServico $Item.nome; $linhas+=('Atual: '+$s.tipo+' / '+$s.estado+' / atraso='+$s.atraso) } catch { $linhas+='Estado atual indisponivel.' }
+        }
+        'quarantena-arquivo' { $linhas+=('Origem existe: '+(Test-Path -LiteralPath $Item.origem)); $linhas+=('Backup existe: '+(Test-Path -LiteralPath $Item.destino)); $linhas+='Reversao condicionada a origem livre e backup disponivel.' }
+        'quarantena-registro' { $linhas+=('Chave existe: '+(Test-Path -LiteralPath ('Registry::'+$Item.chave))); $linhas+='Importacao condicionada a chave nao recriada.' }
+        'recurso' { $linhas+=('Anterior: '+$Item.estadoAnterior+'; alvo: '+$Item.estadoDepois); $linhas+=('Dependencias alteradas: '+@($Item.alteracoes).Count); $linhas+='Pode exigir reinicio ou revisao manual.' }
+        'appx' { $linhas+='Reinstalacao condicionada a disponibilidade do pacote; dados nao garantidos.' }
+        'desinstalado-app' { $linhas+='Reinstalacao manual; o journal nao e backup do aplicativo.' }
+        'comando' { $linhas+='Recuperacao manual de comando legado.' }
+        'reg-import' { $linhas+='Recuperacao manual de importacao integral legada.' }
+        default { $linhas+='Consulte o snapshot e os backups; recuperacao depende do estado atual.' }
+    }
+    return $linhas
+}
+
 function Clique-DetalhesSessao {
     try {
         $lb = $global:UI.ListaDesfazer
@@ -824,6 +869,7 @@ function Clique-DetalhesSessao {
             $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '
             if ($item.confirmadoManualEm) { $estado = 'confirmado manualmente' }
             $linhas += ('[{0}] {1}: {2}' -f $estado, $item.tipo, $alvo)
+            foreach ($detalhe in @(Obter-DetalheRecuperacao $item)) { $linhas += ('    '+$detalhe) }
             foreach ($backup in @($item.destino, $item.arquivoReg, $item.backupReg) + @($item.backups)) {
                 if (-not $backup) { continue }
                 $disp = 'ausente'
@@ -1152,7 +1198,7 @@ function Ligar-Tudo {
 
     # monta conteudo dinamico
     Montar-PaginaAjustes
-    Montar-PaginaDebloat
+    # Debloat consulta pacotes somente ao abrir a aba.
     Montar-PaginaInstalar
     Montar-PaginaRecursos
     Montar-PaineisLegados

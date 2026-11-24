@@ -824,6 +824,25 @@ try {
     Passou 'guias completos, presets conservadores e AppX protegido'
 } catch { Falhou 'otimizacao orientada' $_.Exception.Message }
 
+# ---- plano de temporarios somente leitura ----
+Secao 'limpeza orientada'
+try {
+    . (Join-Path $raiz 'src\modules\consertos.ps1')
+    $pasta=Join-Path $env:LOCALAPPDATA ('OtimizadorPC-CI-Temp-'+[guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $pasta | Out-Null
+        $antigo=Join-Path $pasta 'antigo [teste].tmp'; $novo=Join-Path $pasta 'novo.tmp'
+        [IO.File]::WriteAllText($antigo,'teste'); [IO.File]::WriteAllText($novo,'novo')
+        [IO.File]::SetLastWriteTimeUtc($antigo,[datetime]::UtcNow.AddDays(-10))
+        $sub=Join-Path $pasta 'sub'; New-Item -ItemType Directory -Path $sub | Out-Null
+        $outro=Join-Path $sub 'antigo.tmp'; [IO.File]::WriteAllText($outro,'teste')
+        [IO.File]::SetLastWriteTimeUtc($outro,[datetime]::UtcNow.AddDays(-10))
+        $plano=Obter-PlanoTemporarios @($pasta)
+        if ($plano.itens.Count -ne 1 -or $plano.itens[0].caminho -ne $antigo -or $plano.bytes -ne 5 -or -not (Test-Path -LiteralPath $antigo)) { throw 'Plano incorreto ou alterou arquivos.' }
+        Passou 'plano de limpeza ignora recentes e subpastas sem alterar dados'
+    } finally { if (Test-Path -LiteralPath $pasta) { Remove-Item -LiteralPath $pasta -Recurse -Force } }
+} catch { Falhou 'limpeza orientada' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

@@ -149,22 +149,73 @@ Executar-Nativo Dism.exe @('/Online','/Cleanup-Image','/StartComponentCleanup') 
 
 # ---- rapidas (rodam direto, sem console) ----
 
+# Limpeza rapida limitada a arquivos antigos na raiz do Temp local.
+# Nunca percorre diretorios, segue links ou limpa documentos do usuario.
+function Testar-RaizTemporarios {
+    param([string]$Pasta)
+    try {
+        if ($Pasta -notmatch '^[A-Za-z]:\\') { return $false }
+        $atual=[IO.Path]::GetFullPath($Pasta)
+        while ($atual) {
+            $item=Get-Item -LiteralPath $atual -Force -ErrorAction Stop
+            if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $false }
+            $pai=Split-Path -Parent $atual
+            if (-not $pai -or $pai -eq $atual) { break }
+            $atual=$pai
+        }
+        return $true
+    } catch { return $false }
+}
+
+function Obter-PlanoTemporarios {
+    param([string[]]$Pastas,[datetime]$Agora=[datetime]::UtcNow,[int]$Limite=5000)
+    $itens=@(); $avisos=@(); $bytes=0L; $limitado=$false
+    foreach ($pasta in @($Pastas | Sort-Object -Unique)) {
+        if (-not (Testar-RaizTemporarios $pasta)) { $avisos += ('Pasta indisponivel ou redirecionada: '+$pasta); continue }
+        try {
+            $restantes=$Limite-$itens.Count
+            if ($restantes -le 0) { $limitado=$true; break }
+            $candidatos=@(Get-ChildItem -LiteralPath $pasta -File -Force -ErrorAction Stop |
+                Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -and $_.LastWriteTimeUtc -lt $Agora.AddDays(-7) } |
+                Select-Object -First ($restantes+1))
+            if ($candidatos.Count -gt $restantes) { $limitado=$true }
+            foreach ($f in @($candidatos | Select-Object -First $restantes)) {
+                $itens += [pscustomobject]@{ caminho=$f.FullName; pasta=$pasta; bytes=[long]$f.Length; modificado=$f.LastWriteTimeUtc; criado=$f.CreationTimeUtc }
+                $bytes += $f.Length
+            }
+        } catch { $avisos += ('Falha ao consultar: '+$pasta) }
+    }
+    return [pscustomobject]@{ itens=$itens; bytes=$bytes; avisos=$avisos; limitado=$limitado }
+}
+
 function Limpar-Temporarios {
+    $pastas=@((Join-Path $env:LOCALAPPDATA 'Temp'),(Join-Path $env:SystemRoot 'Temp'))
+    $plano=Obter-PlanoTemporarios $pastas
+    if ($plano.itens.Count -eq 0) { Avisar 'Limpeza de temporarios' ('Nenhum arquivo elegivel nas pastas consultadas. '+($plano.avisos -join ' | ')); return }
+    $msg=('Encontrados {0} arquivo(s), {1:N2} MB estimados. Somente arquivos na raiz das pastas Temp, modificados ha mais de 7 dias. Nao inclui subpastas, documentos ou links.' -f $plano.itens.Count,($plano.bytes/1MB))
+    if ($plano.limitado) { $msg += ' Lista limitada; outros arquivos podem existir.' }
+    $msg += "`n" + ($plano.avisos -join "`n") + "`nAmostra:`n" + (($plano.itens | Select-Object -First 8 | ForEach-Object {$_.caminho}) -join "`n")
+    $msg += "`n`nExclusao definitiva, sem journal de recuperacao. Arquivos em uso ou alterados serao ignorados. Continuar?"
+    if (-not (Perguntar 'Revisar limpeza de temporarios' $msg)) { return }
     Status 'limpando arquivos temporarios...'
     Ocupado $true
-    $alvos = @("$env:TEMP\*", "$env:SystemRoot\Temp\*")
-    $apagados = 0
-    foreach ($a in $alvos) {
-        Get-ChildItem -Path $a -Force -ErrorAction SilentlyContinue |
-            ForEach-Object {
-                if ($_.PSIsContainer -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return }
-                try { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop; $apagados++ }
-                catch { Log ('temporario ignorado: ' + $_.FullName) }
-            }
-    }
-    Ocupado $false
-    Log ("temporarios limpos ({0} itens; alguns em uso sao ignorados). " -f $apagados)
-    Status 'pronto.'
+    $apagados=0; $ignorados=0; $bytes=0L
+    $progresso=Iniciar-ProgressoLote 'Limpeza de temporarios' $plano.itens.Count
+    try {
+        foreach ($f in $plano.itens) {
+            if (-not (Continuar-ProgressoLote $progresso $f.caminho)) { break }
+            try {
+                if (-not (Testar-RaizTemporarios $f.pasta) -or (Split-Path -Parent $f.caminho) -ne $f.pasta) { throw 'Pasta mudou.' }
+                $atual=Get-Item -LiteralPath $f.caminho -Force -ErrorAction Stop
+                if ($atual.PSIsContainer -or ($atual.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $atual.Length -ne $f.bytes -or $atual.LastWriteTimeUtc -ne $f.modificado -or $atual.CreationTimeUtc -ne $f.criado) { throw 'Arquivo mudou.' }
+                Remove-Item -LiteralPath $f.caminho -Force -ErrorAction Stop
+                $apagados++; $bytes+=$f.bytes
+            } catch { $ignorados++; Log ('temporario preservado: '+$f.caminho) }
+        }
+    } finally { Fechar-ProgressoLote $progresso; Ocupado $false }
+    $res=('Removidos {0} arquivo(s), {1:N2} MB de tamanho logico; {2} ignorado(s).' -f $apagados,($bytes/1MB),$ignorados)
+    if ($progresso.cancelado) { $res+=' Lote interrompido.' }
+    Log $res; Status $res
 }
 
 function Limpar-DNS {

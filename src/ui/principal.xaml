@@ -539,18 +539,18 @@
                             <TextBlock Style="{StaticResource TituloPagina}" Text="Manutencao"/>
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,2,0,12" Text="Rotinas de limpeza e diagnostico. As marcadas com (janela) rodam numa janela separada do powershell para voce acompanhar tudo em tempo real."/>
                             <UniformGrid Columns="2" Margin="0,4,0,0">
-                                <Button x:Name="BotaoLimparTemp" Content="Limpar arquivos temporarios" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoLimpezaDisco" Content="Limpeza de disco profunda (janela)" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoLimpezaDism" Content="Limpeza de componentes do Windows (janela)" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoVerificarIntegridade" Content="Verificar arquivos do sistema (janela)" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoVerificarDisco" Content="Verificar disco C: sem interromper (janela)" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoRecuperarIcones" Content="Reconstruir cache de icones" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoLimparDns" Content="Limpar cache do DNS" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoSincronizarHora" Content="Sincronizar hora com a internet" Margin="4" Padding="10,14"/>
-                                <Button x:Name="BotaoAnalisarArmazenamento" Content="Analisar arquivos grandes" Margin="4" Padding="10,14"/>
+                                <Button x:Name="BotaoLimparTemp" Content="Analisar e limpar temporarios" Margin="4" Padding="10,14" ToolTip="Mostra estimativa e pede confirmacao. Arquivos antigos na raiz Temp; exclusao definitiva."/>
+                                <Button x:Name="BotaoLimpezaDisco" Content="Limpeza de disco profunda (janela)" Margin="4" Padding="10,14" ToolTip="Abre limpeza nativa do Windows. Revise as categorias; exclusao pode ser definitiva."/>
+                                <Button x:Name="BotaoLimpezaDism" Content="Limpeza de componentes do Windows (janela)" Margin="4" Padding="10,14" ToolTip="Remove componentes substituidos do Windows. Pode demorar; nao use como rotina de ganho de FPS."/>
+                                <Button x:Name="BotaoVerificarIntegridade" Content="Verificar arquivos do sistema (janela)" Margin="4" Padding="10,14" ToolTip="DISM e SFC tentam reparar arquivos do sistema; use quando houver corrupcao ou falhas."/>
+                                <Button x:Name="BotaoVerificarDisco" Content="Verificar disco C: sem interromper (janela)" Margin="4" Padding="10,14" ToolTip="Consulta o volume do sistema; pode consumir recursos."/>
+                                <Button x:Name="BotaoRecuperarIcones" Content="Reconstruir cache de icones" Margin="4" Padding="10,14" ToolTip="Use quando icones estiverem incorretos; reinicia o Explorer."/>
+                                <Button x:Name="BotaoLimparDns" Content="Limpar cache do DNS" Margin="4" Padding="10,14" ToolTip="Use em problemas de resolucao de nomes; nao acelera a internet permanentemente."/>
+                                <Button x:Name="BotaoSincronizarHora" Content="Sincronizar hora com a internet" Margin="4" Padding="10,14" ToolTip="Use se a hora estiver incorreta. Depende do servico de hora."/>
+                                <Button x:Name="BotaoAnalisarArmazenamento" Content="Analisar arquivos grandes" Margin="4" Padding="10,14" ToolTip="Analise somente leitura. Arquivos grandes nao sao necessariamente descartaveis."/>
                                 <Button x:Name="BotaoBackupDrivers" Content="Exportar backup de drivers" Margin="4" Padding="10,14" ToolTip="Exporta drivers de terceiros para uma pasta escolhida, sem instalar nem remover drivers."/>
                             </UniformGrid>
-                            <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="Dica: limpeza de disco profunda e a limpeza DISM soltam bastante espaco em pcs que nunca passaram por manutencao, mas sao lentas; deixe rodar com paciencia."/>
+                            <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="Use reparos conforme o sintoma. Analise antes de limpar: nem todo arquivo grande e dispensavel. Limpezas definitivas nao sao revertidas pelo journal."/>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

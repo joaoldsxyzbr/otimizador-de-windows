@@ -112,3 +112,5 @@ A lista de entradas nomeadas do registro inclui itens antes ocultados. Categoria
 ### Otimizacao orientada (RC.6)
 
 Ajustes exibem estado, cautela e guia de finalidade, impacto, compatibilidade, escopo e recuperacao. O perfil recomendado explica sua escolha e desmarca itens ja aplicados. Ajustes sensiveis ficam fora dos presets; widgets e IA nao removem pacotes AppX. O Debloat mostra tambem pacotes instalados nao catalogados, sem permitir sua remocao. Frameworks, recursos e componentes protegidos sao bloqueados no motor. Os metadados nao comprovam dependencias reais e nenhum ganho de FPS e garantido.
+
+Manutencao: limpeza rapida mostra estimativa, amostra de arquivos e confirmacao antes de excluir; limita a arquivos antigos na raiz Temp, sem links ou subpastas e revalida metadados antes da exclusao. Exclusao definitiva. Detalhes do journal mostram valores anteriores, alvo registrado e estado atual quando consultavel, sem executar reversao.
