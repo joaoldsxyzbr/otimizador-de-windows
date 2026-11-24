@@ -1268,6 +1268,10 @@ function Executar-OperacaoUI {
     } finally {
         $janela.IsEnabled = $antes
         $global:OperacaoUIAtiva = $false
+        if ($global:ConsultaInicio) {
+            Cancelar-ConsultaInicio 'Analise desatualizada apos operacao.'
+            if ($global:PaginaAtual -eq 'PaginaInicio') { Preencher-PaginaInicio -Forcar }
+        }
         if ($global:ConsultaUwp) {
             Cancelar-ConsultaUwp 'Inventario desatualizado apos operacao.'
             if ($global:PaginaAtual -eq 'PaginaDebloat') { Verificar-EstadoUwp }
@@ -1288,10 +1292,103 @@ function Ajustar-TamanhoJanela {
     $j.Height = [math]::Min(780,$area.Height)
 }
 
+# Read-only home inventory: one worker per window, independent of navigation.
+function Inicializar-ConsultaInicio {
+    if ($null -eq $global:ConsultasInicioAtivas) {$global:ConsultasInicioAtivas=@{}}
+    $global:ConsultaInicio=@{ui=$global:UI;fase='inicial';data=$null;trabalho=$null;fechada=$false;motivo=''}
+    $global:UI.BotaoCancelarInicio.IsEnabled=$false
+}
+
+function Mostrar-EstadoInicio {
+    param($s,[string]$Fase,[string]$Mensagem)
+    $s.fase=$Fase
+    if ($s.fechada) {return}
+    $s.ui.BotaoAtualizarInicio.IsEnabled=($null -eq $s.trabalho)
+    $s.ui.BotaoCancelarInicio.IsEnabled=($Fase -eq 'carregando')
+    if ($Fase -ne 'atualizado') {
+        foreach ($campo in @('InfoCpu','InfoGpu','InfoRam','InfoDisco','InfoUptime','InfoRestore')) {
+            $s.ui[$campo].Text=if ($Fase -eq 'carregando') {'Consultando...'} else {'Indisponivel'}
+        }
+        $s.ui.InfoDiagnostico.Text=$Mensagem
+    }
+}
+
+function Cancelar-ConsultaInicio {
+    param([string]$Motivo='Consulta cancelada.',[switch]$Fechar)
+    $s=$global:ConsultaInicio
+    if (-not $s) {return}
+    if ($Fechar) {$s.fechada=$true}
+    $s.data=$null; $s.motivo=$Motivo
+    $j=$s.trabalho
+    if ($j) {
+        Mostrar-EstadoInicio $s 'cancelando' ($Motivo+' Aguardando encerramento.')
+        if (-not $j.cancelado) {
+            $j.cancelado=$true
+            if (-not $j.async.IsCompleted) {try {$j.parada=$j.ps.BeginStop($null,$null)} catch {}}
+        }
+    } else {Mostrar-EstadoInicio $s 'indisponivel' $Motivo}
+}
+
+function Concluir-ConsultaInicio {
+    param($Timer)
+    $s=$global:ConsultasInicioAtivas[$Timer]
+    if (-not $s) {$Timer.Stop();return}
+    $j=$s.trabalho
+    if (-not $j.async.IsCompleted) {
+        if (-not $j.cancelado -and $j.relogio.Elapsed.TotalSeconds -ge $j.limite -and [object]::ReferenceEquals($s,$global:ConsultaInicio)) {Cancelar-ConsultaInicio 'Tempo limite da analise atingido.'}
+        return
+    }
+    if ($j.parada -and -not $j.parada.IsCompleted) {return}
+    $Timer.Stop()
+    $global:ConsultasInicioAtivas.Remove($Timer)
+    $dados=@();$falha=$false
+    try {
+        if ($j.parada) {try {$j.ps.EndStop($j.parada)} catch {}}
+        $dados=@($j.ps.EndInvoke($j.async))
+        if ($j.ps.Streams.Error.Count -gt 0 -or $dados.Count -ne 1 -or -not $dados[0].data) {$falha=$true}
+    } catch {$falha=$true}
+    finally {$j.ps.Dispose();$s.trabalho=$null}
+    if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultaInicio)) {return}
+    if ($j.cancelado) {Mostrar-EstadoInicio $s 'indisponivel' ($s.motivo+' Use Atualizar analise.');return}
+    if ($falha -or $global:OperacaoUIAtiva) {Mostrar-EstadoInicio $s 'indisponivel' 'Analise indisponivel ou desatualizada. Use Atualizar analise.';return}
+    try {
+        Mostrar-SnapshotInicio $dados[0] $s.ui
+        $s.data=Get-Date
+        Mostrar-EstadoInicio $s 'atualizado' ''
+    } catch {Mostrar-EstadoInicio $s 'indisponivel' 'Nao foi possivel apresentar a analise. Tente novamente.'}
+}
+
+function Solicitar-SnapshotInicio {
+    param([switch]$Forcar,[scriptblock]$Codigo=$null,[int]$LimiteSegundos=60)
+    $s=$global:ConsultaInicio
+    if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
+    if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
+    $s.data=$null
+    $ps=$null;$timer=$null
+    try {
+        if (-not $Codigo) {$Codigo=(Get-Command Obter-SnapshotInicio -CommandType Function).ScriptBlock}
+        $ps=[PowerShell]::Create()
+        [void]$ps.AddScript($Codigo.ToString())
+        $timer=New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval=[TimeSpan]::FromMilliseconds(100)
+        $timer.Add_Tick({param($sender,$eventArgs) Concluir-ConsultaInicio $sender})
+        $s.trabalho=@{ps=$ps;async=$ps.BeginInvoke();parada=$null;cancelado=$false;relogio=[Diagnostics.Stopwatch]::StartNew();limite=$LimiteSegundos}
+        $global:ConsultasInicioAtivas[$timer]=$s
+        Mostrar-EstadoInicio $s 'carregando' 'Analisando o PC em segundo plano. Voce pode trocar de aba.'
+        $timer.Start()
+    } catch {
+        if ($s.trabalho) {Cancelar-ConsultaInicio 'Falha ao iniciar analise.';$timer.Start()}
+        else {if ($timer) {$timer.Stop()};if ($ps) {$ps.Dispose()};Mostrar-EstadoInicio $s 'indisponivel' 'Nao foi possivel iniciar a analise.'}
+    }
+}
+
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
     Inicializar-ConsultaUwp
-    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar })
+    Inicializar-ConsultaInicio
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar })
+    $global:UI.BotaoAtualizarInicio.Add_Click({ Solicitar-SnapshotInicio -Forcar })
+    $global:UI.BotaoCancelarInicio.Add_Click({ Cancelar-ConsultaInicio })
     $global:UI.BotaoAtualizarUwp.Add_Click({ Verificar-EstadoUwp -Forcar })
     $global:UI.BotaoCancelarUwp.Add_Click({ Cancelar-ConsultaUwp })
     $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
@@ -1309,7 +1406,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp')
+        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
@@ -1439,7 +1536,7 @@ function Ligar-Tudo {
     $global:UI.BotaoCarga.Add_Click({ Clique-CargaPadronizada })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
-        Executar-OperacaoUI { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false }; Preencher-PaginaInicio }
+        Executar-OperacaoUI { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false } }
     })
 
     # monta conteudo dinamico

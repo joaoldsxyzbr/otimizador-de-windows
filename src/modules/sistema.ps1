@@ -282,78 +282,54 @@ function Avaliar-SaudeLocal {
     }
 }
 
-function Obter-DiagnosticoLocal {
-    param($OS,$Disco)
-    $inicio=$null; $reinicio=$null; $bateria=$null
-    try { $inicio=@(Get-CimInstance Win32_StartupCommand -ErrorAction Stop).Count } catch { }
+# Snapshot collection is self-contained for a separate PS 5.1 runspace.
+function Obter-SnapshotInicio {
+    $os=$null; $cpu=$null; $gpu=@(); $disco=$null
+    $inicio=$null; $reinicio=$null; $bateria=$null; $pontos=$null
+    try {$os=Get-CimInstance Win32_OperatingSystem -OperationTimeoutSec 8 -ErrorAction Stop} catch {}
+    try {$cpu=Get-CimInstance Win32_Processor -OperationTimeoutSec 8 -ErrorAction Stop | Select-Object -First 1} catch {}
+    try {$gpu=@(Get-CimInstance Win32_VideoController -OperationTimeoutSec 8 -ErrorAction Stop | Where-Object {$_.Name})} catch {}
+    try {$disco=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'" -OperationTimeoutSec 8 -ErrorAction Stop} catch {}
+    try {$inicio=@(Get-CimInstance Win32_StartupCommand -OperationTimeoutSec 8 -ErrorAction Stop).Count} catch {}
     try {
         $cbs=Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending' -ErrorAction Stop
         $wu=Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired' -ErrorAction Stop
         $reinicio=($cbs -or $wu)
-    } catch { }
-    try { $bateria=(@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) } catch { }
-    $linhas=@(('Ultima analise local: '+(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')+' | Somente leitura, sem nota de saude.'))
-    foreach ($item in @(Avaliar-SaudeLocal $OS $Disco $inicio $reinicio $bateria)) {
+    } catch {}
+    try {$bateria=(@(Get-CimInstance Win32_Battery -OperationTimeoutSec 8 -ErrorAction Stop).Count -gt 0)} catch {}
+    try {$pontos=@(Get-ComputerRestorePoint -ErrorAction Stop).Count} catch {}
+    [pscustomobject]@{os=$os;cpu=$cpu;gpu=$gpu;disco=$disco;inicio=$inicio;reinicio=$reinicio;bateria=$bateria;pontos=$pontos;data=(Get-Date)}
+}
+
+function Obter-DiagnosticoLocal {
+    param($OS,$Disco,$Inicializacao,$Reinicio,$Bateria,[datetime]$Data=(Get-Date))
+    $linhas=@(('Ultima analise local: '+$Data.ToString('dd/MM/yyyy HH:mm:ss')+' | Somente leitura, sem nota de saude.'))
+    foreach ($item in @(Avaliar-SaudeLocal $OS $Disco $Inicializacao $Reinicio $Bateria)) {
         $linhas+=('[{0}] {1} {2}' -f $item.estado.ToUpperInvariant(),$item.evidencia,$item.orientacao)
     }
-    if ($global:ModoProtegido) { $linhas+='Alteracoes indisponiveis no modo atual; consulte as permissoes e o administrador.' }
+    if ($global:ModoProtegido) {$linhas+='Alteracoes indisponiveis no modo atual; consulte as permissoes e o administrador.'}
     return ($linhas -join [Environment]::NewLine)
 }
 
+# Render only on the WPF Dispatcher; no system inventory calls here.
+function Mostrar-SnapshotInicio {
+    param($Dados,$UI)
+    $os=$Dados.os; $cpu=$Dados.cpu; $gpu=@($Dados.gpu | Where-Object {$_}); $disco=$Dados.disco
+    $UI.InfoHost.Text=$env:COMPUTERNAME
+    $UI.InfoSo.Text=Nome-Windows
+    $UI.InfoCpu.Text=if ($cpu -and $cpu.Name) {('{0} ({1} nucleos / {2} threads)' -f $cpu.Name.Trim(),$cpu.NumberOfCores,$cpu.NumberOfLogicalProcessors)} else {'Indisponivel'}
+    $UI.InfoGpu.Text=if ($gpu.Count) {($gpu | ForEach-Object {$_.Name}) -join ', '} else {'Indisponivel'}
+    $UI.InfoRam.Text=if ($os -and $os.TotalVisibleMemorySize -gt 0 -and $null -ne $os.FreePhysicalMemory -and $os.FreePhysicalMemory -ge 0 -and $os.FreePhysicalMemory -le $os.TotalVisibleMemorySize) {('{0:N1} GB (livre: {1:N1} GB)' -f ($os.TotalVisibleMemorySize/1MB),($os.FreePhysicalMemory/1MB))} else {'Indisponivel'}
+    $UI.InfoDisco.Text=if ($disco -and $disco.Size -gt 0 -and $null -ne $disco.FreeSpace -and $disco.FreeSpace -ge 0 -and $disco.FreeSpace -le $disco.Size) {('{0}: {1:N1} GB livres de {2:N1} GB' -f $env:SystemDrive,($disco.FreeSpace/1GB),($disco.Size/1GB))} else {'Indisponivel'}
+    $UI.InfoUptime.Text=if ($os -and $os.LastBootUpTime) {$up=$Dados.data-$os.LastBootUpTime; ('{0}d {1}h {2}min' -f $up.Days,$up.Hours,$up.Minutes)} else {'Indisponivel'}
+    $UI.InfoRestore.Text=if ($null -eq $Dados.pontos) {'estado da restauracao indisponivel'} elseif ($Dados.pontos -gt 0) {('{0} ponto(s) listado(s); protecao atual nao confirmada' -f $Dados.pontos)} else {'sem pontos de restauracao ainda'}
+    $UI.InfoAmbiente.Text=if (@($global:AmbienteTrabalho | Where-Object {$_}).Count) {$global:ModoOtimizador+': '+($global:AmbienteTrabalho -join ' | ')} else {$global:ModoOtimizador+' - nenhum sinal consultado; nao comprova ausencia de gerenciamento.'}
+    $UI.InfoDiagnostico.Text=Obter-DiagnosticoLocal $os $disco $Dados.inicio $Dados.reinicio $Dados.bateria $Dados.data
+}
+
 function Preencher-PaginaInicio {
-    try {
-        $os=$null; $cpu=$null; $gpu=@(); $disco=$null
-        try { $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { }
-        try { $cpu=Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1 } catch { }
-        try { $gpu=@(Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $null -ne $_.Name }) } catch { }
-        try { $disco=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'" -ErrorAction Stop } catch { }
-
-        $ramTotal=[math]::Round([double]$os.TotalVisibleMemorySize / 1MB,1)
-        $ramLivre=[math]::Round([double]$os.FreePhysicalMemory / 1MB,1)
-        $discoTotal=[math]::Round([double]$disco.Size / 1GB,0)
-        $discoLivre=[math]::Round([double]$disco.FreeSpace / 1GB,1)
-
-        $upTexto='Indisponivel'
-        if ($os -and $os.LastBootUpTime) {
-            $uptime=(Get-Date)-$os.LastBootUpTime
-            $upTexto=('{0}d {1}h {2}min' -f $uptime.Days,$uptime.Hours,$uptime.Minutes)
-        }
-
-        if ($global:UI.ContainsKey('InfoDiagnostico')) {
-            $global:UI.InfoDiagnostico.Text = Obter-DiagnosticoLocal -OS $os -Disco $disco
-        }
-
-        $gpuTexto = if ($gpu.Count) { ($gpu | ForEach-Object { $_.Name }) -join ', ' } else { 'Indisponivel' }
-
-        if ($global:UI.ContainsKey('InfoHost')) { $global:UI.InfoHost.Text = $env:COMPUTERNAME }
-        if ($global:UI.ContainsKey('InfoSo')) { $global:UI.InfoSo.Text = (Nome-Windows) }
-        if ($global:UI.ContainsKey('InfoCpu')) { $global:UI.InfoCpu.Text = if ($cpu -and $cpu.Name) { ('{0} ({1} nucleos / {2} threads)' -f $cpu.Name.Trim(),$cpu.NumberOfCores,$cpu.NumberOfLogicalProcessors) } else { 'Indisponivel' } }
-        if ($global:UI.ContainsKey('InfoGpu')) { $global:UI.InfoGpu.Text = $gpuTexto }
-        if ($global:UI.ContainsKey('InfoRam')) { $global:UI.InfoRam.Text = if ($os -and $os.TotalVisibleMemorySize -gt 0 -and $null -ne $os.FreePhysicalMemory -and $os.FreePhysicalMemory -ge 0 -and $os.FreePhysicalMemory -le $os.TotalVisibleMemorySize) { ('{0} GB (livre: {1} GB)' -f $ramTotal,$ramLivre) } else { 'Indisponivel' } }
-        if ($global:UI.ContainsKey('InfoDisco')) { $global:UI.InfoDisco.Text = if ($disco -and $disco.Size -gt 0 -and $null -ne $disco.FreeSpace -and $disco.FreeSpace -ge 0 -and $disco.FreeSpace -le $disco.Size) { ('{0}: {1} GB livres de {2} GB' -f $env:SystemDrive,$discoLivre,$discoTotal) } else { 'Indisponivel' } }
-        if ($global:UI.ContainsKey('InfoUptime')) { $global:UI.InfoUptime.Text = $upTexto }
-        if ($global:UI.ContainsKey('InfoRestore')) {
-            try {
-                $pontos = @(Get-ComputerRestorePoint -ErrorAction Stop)
-                if ($pontos.Count -gt 0) {
-                    $global:UI.InfoRestore.Text = ('{0} ponto(s) listado(s); protecao atual nao confirmada' -f $pontos.Count)
-                } else {
-                    $global:UI.InfoRestore.Text = 'sem pontos de restauracao ainda'
-                }
-            } catch {
-                $global:UI.InfoRestore.Text = 'estado da restauracao indisponivel'
-            }
-        }
-        if ($global:UI.ContainsKey('InfoAmbiente')) {
-            if ($null -ne $global:AmbienteTrabalho -and $global:AmbienteTrabalho.Count -gt 0) {
-                $global:UI.InfoAmbiente.Text = ($global:ModoOtimizador + ': ' + ($global:AmbienteTrabalho -join ' | '))
-            } else {
-                $global:UI.InfoAmbiente.Text = ($global:ModoOtimizador + ' - nenhum sinal consultado; nao comprova ausencia de gerenciamento.')
-            }
-        }
-    } catch {
-        Log ('falha ao coletar informacoes do sistema: ' + $_.Exception.Message) -Erro
-    }
+    param([switch]$Forcar)
+    Solicitar-SnapshotInicio -Forcar:$Forcar
 }
 
 # Inventario local, sem comandos de inicializacao, usuarios ou credenciais.

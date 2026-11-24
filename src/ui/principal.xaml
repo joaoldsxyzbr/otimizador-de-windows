@@ -311,6 +311,10 @@
                             <GroupBox Header="Saude do PC - analise e proximos passos" Foreground="#93c5fd" BorderBrush="#374151" Margin="0,10,0,4">
                                 <StackPanel Margin="6,8">
                                     <TextBlock x:Name="InfoDiagnostico" Foreground="#d1d5db" TextWrapping="Wrap" Text="Coletando informacoes..."/>
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button x:Name="BotaoAtualizarInicio" Content="Atualizar analise" Margin="0,0,8,4"/>
+                                        <Button x:Name="BotaoCancelarInicio" Content="Cancelar analise" IsEnabled="False" Margin="0,0,8,4"/>
+                                    </WrapPanel>
                                     <Button x:Name="BotaoInventario" Content="Inventario e ferramentas do Windows" HorizontalAlignment="Left" Margin="0,10,0,0"/>
                                     <Button x:Name="BotaoCarga" Content="Teste de carga padronizado (CPU e memoria)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoDiagnosticoAvancado" Content="Diagnostico de discos, dispositivos e eventos" HorizontalAlignment="Left" Margin="0,6,0,0"/>

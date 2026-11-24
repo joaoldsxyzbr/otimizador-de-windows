@@ -1044,6 +1044,23 @@ try {
             if (@(Get-Checkboxes $global:UI.ListaApps | Where-Object {$_.IsChecked}).Count) {throw 'Apps preselecionados.'}
             if (@(Get-Checkboxes $global:UI.ListaApps).Count -ne @($global:CatalogoApps.aplicativos).Count) {throw 'Catalogo incompleto.'}
             Passou 'interface pessoal ligada, sem apps preselecionados'
+            # Home inventory uses the real non-modal worker with synthetic data.
+            Solicitar-SnapshotInicio -Codigo {Start-Sleep -Seconds 3; [pscustomobject]@{data=(Get-Date);os=$null;cpu=$null;gpu=@();disco=$null;inicio=0;reinicio=$false;bateria=$false;pontos=$null}}
+            $trabalhoInicio=$global:ConsultaInicio.trabalho
+            if (-not $trabalhoInicio -or $global:ConsultaInicio.fase -ne 'carregando') {throw 'Analise inicial nao iniciou.'}
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            Trocar-Pagina 'PaginaInstalar'
+            Trocar-Pagina 'PaginaInicio'
+            Solicitar-SnapshotInicio -Forcar
+            if ($sw.Elapsed.TotalSeconds -ge 2 -or $global:PaginaAtual -ne 'PaginaInicio' -or -not [object]::ReferenceEquals($trabalhoInicio,$global:ConsultaInicio.trabalho)) {throw 'Analise bloqueou navegacao ou duplicou worker.'}
+            $sw.Restart()
+            while ($global:ConsultaInicio.trabalho -and $sw.Elapsed.TotalSeconds -lt 15) {
+                Start-Sleep -Milliseconds 50
+                [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+            }
+            if ($global:ConsultaInicio.fase -ne 'atualizado' -or $global:UI.InfoRam.Text -ne 'Indisponivel' -or $global:UI.InfoDiagnostico.Text -notmatch 'Ultima analise') {throw 'Snapshot parcial nao apresentado.'}
+            Passou 'Inicio assincrono: navegacao, deduplicacao e dados parciais'
+
             # Real runspace with synthetic data. No system AppX query or mutation.
             $global:CatalogoUwp=[pscustomobject]@{pacotes=@([pscustomobject]@{nome='Teste';pacote='Example.Test';desc='Teste';remover=$true;so='ambos'})}
             function Esperar-ConsultaUwp {
