@@ -313,6 +313,7 @@
                                     <TextBlock x:Name="InfoDiagnostico" Foreground="#d1d5db" TextWrapping="Wrap" Text="Coletando informacoes..."/>
                                     <Button x:Name="BotaoInventario" Content="Inventario e ferramentas do Windows" HorizontalAlignment="Left" Margin="0,10,0,0"/>
                                     <Button x:Name="BotaoCarga" Content="Teste de carga padronizado (CPU e memoria)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                                    <Button x:Name="BotaoDiagnosticoAvancado" Content="Diagnostico de discos, dispositivos e eventos" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMonitor" Content="Monitor de recursos (10 amostras)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMedicoes" Content="Comparar antes e depois dos ajustes" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoVerificarRelease" Content="Consultar e baixar versao oficial" HorizontalAlignment="Left" Margin="0,6,0,0"/>
@@ -517,17 +518,18 @@
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
                         <StackPanel Margin="24,18,24,10">
                             <TextBlock Style="{StaticResource TituloPagina}" Text="Atualizacoes do Windows"/>
-                            <TextBlock Style="{StaticResource SubTitulo}" Margin="0,2,0,12" Text="Nao bloqueamos atualizacoes de seguranca: elas sao a parte que protege seu pc. Aqui voce controla so o incoveniente: drivers que quebram e versoes novas demais."/>
-                            <StackPanel Orientation="Horizontal">
-                                <CheckBox x:Name="ChkBloquearDrivers" Foreground="#e5e7eb" Margin="0,0,18,0" IsChecked="False" Content="Nao baixar drivers pelo Windows Update" ToolTip="Drivers de video etc. continuarao instalados apenas por voce. Util quando o wu insiste num driver ruim."/>
-                                <CheckBox x:Name="ChkAdiarRecursos" Foreground="#e5e7eb" IsChecked="False" Content="Adiar versoes novas do Windows em 180 dias" ToolTip="Deixa o windows atualizar apenas com correcoes de seguranca enquanto a versao nova 'assenta'. Drivers e correcoes seguem normal."/>
-                            </StackPanel>
+                            <TextBlock Style="{StaticResource SubTitulo}" Margin="0,2,0,12" Text="Consulte as politicas registradas e o historico local. Nao alteramos politicas de atualizacao; use as configuracoes oficiais do Windows."/>
+                            <WrapPanel>
+                                <CheckBox x:Name="ChkBloquearDrivers" IsEnabled="False" Foreground="#e5e7eb" Margin="0,0,18,0" IsChecked="False" Content="Nao baixar drivers pelo Windows Update" ToolTip="Drivers de video etc. continuarao instalados apenas por voce. Util quando o wu insiste num driver ruim."/>
+                                <CheckBox x:Name="ChkAdiarRecursos" IsEnabled="False" Foreground="#e5e7eb" IsChecked="False" Content="Adiar versoes novas do Windows em 180 dias" ToolTip="Deixa o windows atualizar apenas com correcoes de seguranca enquanto a versao nova 'assenta'. Drivers e correcoes seguem normal."/>
+                            </WrapPanel>
+                            <TextBlock x:Name="InfoPoliticasUpdate" Style="{StaticResource SubTitulo}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                             <WrapPanel Margin="0,14,0,0">
-                                <Button x:Name="BotaoAplicarAtualizacoes" Style="{StaticResource BotaoVerde}" Content="Aplicar" Margin="0,0,10,0" MinWidth="120"/>
+                                <Button x:Name="BotaoAplicarAtualizacoes" Style="{StaticResource BotaoAzul}" Content="Consultar historico" Margin="0,0,10,0" MinWidth="120"/>
                                 <Button x:Name="BotaoBuscarAtualizacoes" Content="Abrir Windows Update" Margin="0,0,10,0" MinWidth="150"/>
                                 <Button x:Name="BotaoResetUpdate2" Content="Resetar Windows Update" MinWidth="170" ToolTip="Se os updates travam ou dao erro, isso limpa o cache e reconstroi o servico." Margin="0,0,8,4"/>
                             </WrapPanel>
-                            <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="Essas duas opcoes podem ser revertidas voltando aqui e desmarcando, ou pela aba Desfazer."/>
+                            <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="As caixas apenas exibem valores registrados, nao a politica efetiva. Historico nao realiza busca online nem instala atualizacoes."/>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>

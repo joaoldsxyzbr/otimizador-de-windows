@@ -925,6 +925,16 @@ try {
     Passou 'ponto nao confirmado interrompe preset antes do journal'
 } catch { Falhou 'ponto de restauracao confirmado' $_.Exception.Message }
 
+# ---- politicas apenas leitura ----
+Secao 'politicas de atualizacao'
+try {
+    if ((Formatar-PoliticaAtualizacao 0) -notmatch 'Desativada' -or (Formatar-PoliticaAtualizacao 1) -notmatch 'Configurada' -or (Formatar-PoliticaAtualizacao $null) -notmatch 'Nao configurada') { throw 'Valores de politica confundidos.' }
+    $bloqueou=$false
+    try { Configurar-Atualizacoes $false $false } catch { $bloqueou=$_.Exception.Message -match 'Edicao de politicas indisponivel' }
+    if (-not $bloqueou) { throw 'Edicao de politica permitida.' }
+    Passou 'politicas somente leitura e diferenciam ausente/zero/um'
+} catch { Falhou 'politicas de atualizacao' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

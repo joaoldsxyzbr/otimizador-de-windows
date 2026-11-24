@@ -166,8 +166,14 @@ function Montar-PaginaRecursos {
         [pscustomobject]@{ nome = 'Windows Media Player (legado)'; feat = 'WindowsMediaPlayer'; desc = 'WMP classico para midias antigas.' }
         [pscustomobject]@{ nome = 'Cliente Telnet'; feat = 'TelnetClient'; desc = 'Cliente telnet para testes de rede e equipamentos antigos.' }
     )
+    try { $estados=@(Get-WindowsOptionalFeature -Online -ErrorAction Stop); $consultou=$true }
+    catch { $estados=@(); $consultou=$false }
     foreach ($r in $recursos) {
-        [void]$painel.Children.Add((Nova-Checkbox -Texto $r.nome -Tag $r -Dica $r.desc))
+        $f=@($estados | Where-Object {$_.FeatureName -eq $r.feat})
+        $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($f.Count -ne 1) {'indisponivel nesta instalacao'} else {$f[0].State.ToString()}
+        $cb=Nova-Checkbox -Texto ($r.nome+' ['+$estado+']') -Tag $r -Dica ($r.desc+"`nEstado: "+$estado+". Dependencias e reinicio podem exigir recuperacao manual.")
+        $cb.IsEnabled=($consultou -and $f.Count -eq 1 -and $estado -eq 'Disabled')
+        [void]$painel.Children.Add($cb)
     }
 }
 
@@ -303,15 +309,19 @@ function Trocar-Pagina {
     if ($Nome -eq 'PaginaInicio') { Preencher-PaginaInicio }
     if ($Nome -eq 'PaginaAjustes') { Verificar-EstadoAjustes }
     if ($Nome -eq 'PaginaDebloat') { Verificar-EstadoUwp }
+    if ($Nome -eq 'PaginaConfig') { Montar-PaginaRecursos }
     if ($Nome -eq 'PaginaDesfazer') { Atualizar-ListaDesfazer }
     if ($Nome -eq 'PaginaDesinstalar') {
         if ($null -eq $global:ProgramasInstalados) { Carregar-Programas }
         Atualizar-ListaProgramas
     }
     if ($Nome -eq 'PaginaAtualizacoes') {
-        $atual = Tem-Atualizacoes
-        $global:UI.ChkBloquearDrivers.IsChecked = ($null -ne $atual -and $null -ne $atual.ExcludeWUDriverInQualityUpdate)
-        $global:UI.ChkAdiarRecursos.IsChecked = ($null -ne $atual -and $null -ne $atual.DeferFeatureUpdates)
+        try {
+            $atual=Tem-Atualizacoes
+            $global:UI.ChkBloquearDrivers.IsChecked=($null -ne $atual -and $atual.ExcludeWUDriverInQualityUpdate -eq 1)
+            $global:UI.ChkAdiarRecursos.IsChecked=($null -ne $atual -and $atual.DeferFeatureUpdates -eq 1)
+            $global:UI.InfoPoliticasUpdate.Text=('Drivers: '+(Formatar-PoliticaAtualizacao $atual.ExcludeWUDriverInQualityUpdate)+"`nVersoes: "+(Formatar-PoliticaAtualizacao $atual.DeferFeatureUpdates)+"`nPeriodo registrado: "+$atual.DeferFeatureUpdatesPeriodInDays+"`nValores do registro nao comprovam politica efetiva.")
+        } catch { $global:UI.InfoPoliticasUpdate.Text='Consulta de politicas indisponivel.' }
     }
 }
 
@@ -422,7 +432,7 @@ function Clique-InstalarApps {
 }
 
 function Clique-InstalarRecursos {
-    $selecionados = @(Get-Checkboxes $global:UI.ListaRecursos | Where-Object { $_.IsChecked })
+    $selecionados = @(Get-Checkboxes $global:UI.ListaRecursos | Where-Object { $_.IsChecked -and $_.IsEnabled })
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os recursos do Windows que quer habilitar.'
         return
@@ -1052,6 +1062,20 @@ function Clique-CargaPadronizada {
     } catch { Avisar 'Teste indisponivel' $_.Exception.Message }
 }
 
+function Clique-DiagnosticoAvancado {
+    try {
+        $res=@(Executar-ConsultaLocal -Titulo 'Diagnostico de dispositivos e eventos' -Codigo ${function:Obter-DiagnosticoAvancado})
+        if ($res.Count -eq 1 -and $res[0]) { Avisar 'Diagnostico avancado - somente leitura' ([string]$res[0]) }
+    } catch { Avisar 'Consulta indisponivel' $_.Exception.Message }
+}
+
+function Clique-HistoricoAtualizacoes {
+    try {
+        $res=@(Executar-ConsultaLocal -Titulo 'Historico local de atualizacoes' -Codigo ${function:Obter-HistoricoAtualizacoes})
+        if ($res.Count -eq 1 -and $res[0]) { Avisar 'Historico local do Windows Update' ([string]$res[0]) }
+    } catch { Avisar 'Consulta indisponivel' $_.Exception.Message }
+}
+
 function Clique-MonitorSistema {
     try {
         $med = @(Executar-ConsultaLocal -Titulo 'Monitor de recursos - 10 amostras' -Codigo ${function:Medir-EstadoSistema} -Parametros @{Amostras=10; Cenario='monitor'})
@@ -1111,6 +1135,7 @@ function Ligar-Tudo {
         }
         $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
         $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
+    $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
         Trocar-Pagina 'PaginaInicio'
         Status 'Modo protegido: somente diagnostico local.'
         return
@@ -1185,9 +1210,8 @@ function Ligar-Tudo {
     })
 
     # pagina atualizacoes
-    $global:UI.BotaoAplicarAtualizacoes.Add_Click({
-        Executar-OperacaoUI { Configurar-Atualizacoes -BloquearDrivers ([bool]$global:UI.ChkBloquearDrivers.IsChecked) -AdiarRecursos ([bool]$global:UI.ChkAdiarRecursos.IsChecked) }
-    })
+    $global:UI.BotaoAplicarAtualizacoes.Add_Click({ Clique-HistoricoAtualizacoes })
+    $global:UI.BotaoFixIntegridade.Add_Click({ Executar-OperacaoUI { Verificar-Integridade } })
     $global:UI.BotaoBuscarAtualizacoes.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
     $global:UI.BotaoResetUpdate2.Add_Click({ Executar-OperacaoUI { Resetar-WindowsUpdate } })
 
@@ -1214,6 +1238,7 @@ function Ligar-Tudo {
     $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
     $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
     $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
+    $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
     $global:UI.BotaoCarga.Add_Click({ Clique-CargaPadronizada })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
@@ -1224,7 +1249,6 @@ function Ligar-Tudo {
     Montar-PaginaAjustes
     # Debloat consulta pacotes somente ao abrir a aba.
     Montar-PaginaInstalar
-    Montar-PaginaRecursos
     Montar-PaineisLegados
     Trocar-Pagina 'PaginaInicio'
 }

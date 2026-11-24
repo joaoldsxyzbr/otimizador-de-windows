@@ -261,32 +261,50 @@ function Recuperar-CacheIcones {
 
 # ---- atualizacoes ----
 
+# Politicas de atualizacao sao apenas consultadas. Nao apagar valores que
+# podem ter origem fora do app; journals antigos continuam recuperaveis.
 function Configurar-Atualizacoes {
-    param([bool]$BloquearDrivers, [bool]$AdiarRecursos)
+    param([bool]$BloquearDrivers,[bool]$AdiarRecursos)
     Confirmar-PermissaoAlteracao
-    Iniciar-Sessao 'atualizacoes'
-    if ($BloquearDrivers) {
-        Executar-Acao ([pscustomobject]@{ tipo = 'registro'; caminho = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'; nome = 'ExcludeWUDriverInQualityUpdate'; tipoValor = 'DWord'; dados = '1' }) 'bloquear drivers'
-    } else {
-        Executar-Acao ([pscustomobject]@{ tipo = 'registro'; caminho = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'; nome = 'ExcludeWUDriverInQualityUpdate'; remover = $true }) 'desbloquear drivers'
-    }
-    if ($AdiarRecursos) {
-        Executar-Acao ([pscustomobject]@{ tipo = 'registro'; caminho = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'; nome = 'DeferFeatureUpdates'; tipoValor = 'DWord'; dados = '1' }) 'adiar recursos'
-        Executar-Acao ([pscustomobject]@{ tipo = 'registro'; caminho = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'; nome = 'DeferFeatureUpdatesPeriodInDays'; tipoValor = 'DWord'; dados = '180' }) 'adiar recursos - periodo'
-    } else {
-        foreach ($nome in @('DeferFeatureUpdates','DeferFeatureUpdatesPeriodInDays')) {
-            Executar-Acao ([pscustomobject]@{ tipo = 'registro'; caminho = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'; nome = $nome; remover = $true }) 'adiar recursos - remover'
-        }
-    }
-    $arq = Salvar-Sessao
-    if ($arq) { Log ("sessao de atualizacoes salva para desfazer: {0}" -f (Split-Path -Leaf $arq)) }
-    if ($global:ErrosSessao -gt 0) { Status 'configuracao parcial; consulte o log.' }
-    else { Status 'atualizacoes configuradas. reinicie para aplicar de vez.' }
+    throw 'Edicao de politicas indisponivel nesta versao. Use configuracoes oficiais do Windows.'
 }
 
 function Tem-Atualizacoes {
-    $r = Get-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' -ErrorAction SilentlyContinue
-    return $r
+    $p='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+    if (Test-Path -LiteralPath $p -ErrorAction Stop) { return (Get-ItemProperty -LiteralPath $p -ErrorAction Stop) }
+}
+
+function Formatar-PoliticaAtualizacao {
+    param($Valor)
+    if ($null -eq $Valor) { return 'Nao configurada no registro consultado' }
+    if ($Valor -eq 1) { return 'Configurada (1)' }
+    if ($Valor -eq 0) { return 'Desativada (0)' }
+    return 'Valor nao reconhecido'
+}
+
+function Obter-HistoricoAtualizacoes {
+    $linhas=@()
+    $sessao=$null; $busca=$null; $sistema=$null
+    try {
+        $sistema=New-Object -ComObject Microsoft.Update.SystemInfo -ErrorAction Stop
+        $linhas+=('Reinicio requerido por Windows Update: '+$sistema.RebootRequired)
+        $sessao=New-Object -ComObject Microsoft.Update.Session -ErrorAction Stop
+        $busca=$sessao.CreateUpdateSearcher()
+        $total=$busca.GetTotalHistoryCount()
+        $linhas+=('Historico local: '+$total+' entradas; ultimas 20. Sem busca online.')
+        if ($total -gt 0) {
+            foreach ($h in $busca.QueryHistory(0,[Math]::Min(20,$total))) {
+                $resultado=switch ([int]$h.ResultCode) { 2 {'Sucesso'} 3 {'Sucesso com erros'} 4 {'Falha'} 5 {'Abortado'} default {'Outro/pendente'} }
+                $linhas+=('{0:dd/MM/yyyy HH:mm} | {1} | {2}' -f $h.Date,$resultado,$h.Title)
+            }
+        }
+    } catch { $linhas+='Historico ou estado de reinicio indisponivel.' }
+    finally {
+        foreach ($obj in @($busca,$sessao,$sistema)) {
+            if ($null -ne $obj -and [Runtime.InteropServices.Marshal]::IsComObject($obj)) { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($obj) }
+        }
+    }
+    return ($linhas -join [Environment]::NewLine)
 }
 
 # ---- winget ----

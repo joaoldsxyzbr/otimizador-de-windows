@@ -34,7 +34,79 @@ function Detectar-AmbienteTrabalho {
         })
         if ($avs.Count -gt 0) { $achados+='Sinal de seguranca de terceiros ou gerenciamento; pode ser PC pessoal.' }
     } catch { $achados+='Inconclusivo: consulta de agentes/servicos indisponivel.' }
+    $achados+=@(Obter-SinaisRedeGerenciada)
     return @($achados | Sort-Object -Unique)
+}
+
+# Consulta local de sinais, sem leitura de certificados, URLs ou credenciais.
+function Obter-SinaisRedeGerenciada {
+    $sinais=@()
+    try {
+        foreach ($hive in @('HKLM','HKCU')) {
+            $p=$hive+':\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings'
+            if (Test-Path -LiteralPath $p -ErrorAction Stop) {
+                $v=Get-ItemProperty -LiteralPath $p -ErrorAction Stop
+                if ($null -ne $v.ProxySettingsPerUser -or $null -ne $v.ProxyEnable -or $v.ProxyServer -or $v.AutoConfigURL) { $sinais+='Sinal de politica de proxy.'; break }
+            }
+        }
+        $p='HKLM:\SOFTWARE\Policies\Microsoft\Cryptography\AutoEnrollment'
+        if (Test-Path -LiteralPath $p -ErrorAction Stop) {
+            $v=Get-ItemProperty -LiteralPath $p -ErrorAction Stop
+            if ($v.AEPolicy -gt 0) { $sinais+='Sinal de politica de inscricao automatica de certificados.' }
+        }
+    } catch { $sinais+='Inconclusivo: politicas de rede/certificados.' }
+    try {
+        if (Get-Command Get-VpnConnection -ErrorAction SilentlyContinue) {
+            $perfis=@(Get-VpnConnection -ErrorAction Stop)+@(Get-VpnConnection -AllUserConnection -ErrorAction Stop)
+            if ($perfis.Count -gt 0) { $sinais+='Perfil VPN nativo detectado; pode ser pessoal.' }
+        } else { $sinais+='Inconclusivo: consulta VPN nativa indisponivel.' }
+    } catch { $sinais+='Inconclusivo: consulta VPN nativa falhou.' }
+    return @($sinais | Sort-Object -Unique)
+}
+
+# Consultas independentes: falhas nao viram zero ou estado saudavel.
+function Obter-DiagnosticoAvancado {
+    $linhas=@()
+    try {
+        $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $cv=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+        $linhas+=('Windows: {0} | edicao {1} | versao {2} | build {3}.{4}' -f $os.Caption,$cv.EditionID,$cv.DisplayVersion,$os.BuildNumber,$cv.UBR)
+        if ([int]$os.BuildNumber -eq 19045) { $linhas+='Windows 10 22H2: suporte regular encerrado; verificar ESU ou ciclo de vida aplicavel com TI.' }
+    } catch { $linhas+='Edicao/build indisponivel.' }
+    try {
+        $discos=@(Get-PhysicalDisk -ErrorAction Stop)
+        if (-not $discos.Count) { $linhas+='Nenhum disco fisico informado pelo provedor.' }
+        foreach ($d in $discos) {
+            $linhas+=('Disco: {0} | midia {1} | saude reportada {2}' -f $d.FriendlyName,$d.MediaType,$d.HealthStatus)
+            try {
+                $rel=$d | Get-StorageReliabilityCounter -ErrorAction Stop
+                $temperatura=if ($null -ne $rel.Temperature -and $rel.Temperature -gt 0) { "$($rel.Temperature) C" } else {'indisponivel'}
+                $desgaste=if ($null -ne $rel.Wear) {"$($rel.Wear)% reportado"} else {'indisponivel'}
+                $linhas+=('  Temperatura: '+$temperatura+'; desgaste: '+$desgaste+' (quando reportados; nao e previsao de falha).')
+            } catch { $linhas+='  Contadores de confiabilidade indisponiveis.' }
+        }
+    } catch { $linhas+='Consulta de discos fisicos indisponivel.' }
+    try {
+        $dev=@(Get-CimInstance Win32_PnPEntity -Filter 'ConfigManagerErrorCode <> 0' -ErrorAction Stop)
+        $linhas+=('Dispositivos com codigo PnP diferente de zero: '+$dev.Count+' (inclui dispositivos desabilitados; nao implica falha).')
+        foreach ($d in @($dev | Select-Object -First 10)) { $linhas+=('  '+$d.Name+' | codigo '+$d.ConfigManagerErrorCode) }
+    } catch { $linhas+='Consulta PnP indisponivel.' }
+    try {
+        $f=@{LogName='System';Level=@(1,2);StartTime=(Get-Date).AddDays(-7)}
+        $ev=@(Get-WinEvent -FilterHashtable $f -MaxEvents 200 -ErrorAction Stop)
+        $linhas+=('Eventos criticos/erro do sistema nos ultimos 7 dias: '+$ev.Count+' na amostra (limite 200).')
+        foreach ($grupo in @($ev | Group-Object ProviderName,Id | Sort-Object Count -Descending | Select-Object -First 8)) { $linhas+=('  '+$grupo.Name+' | '+$grupo.Count+' ocorrencias') }
+        $linhas+='Eventos sao evidencias para investigar, nao diagnostico de causa. Mensagens e identificadores pessoais nao sao coletados.'
+    } catch {
+        if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound') { $linhas+='Nenhum evento critico/erro encontrado no periodo consultado.' }
+        else { $linhas+='Consulta de eventos indisponivel.' }
+    }
+    try {
+        $bat=@(Get-CimInstance Win32_Battery -ErrorAction Stop)
+        if ($bat.Count) { $linhas+='Bateria detectada. Avalie autonomia e temperatura antes de ajustes de energia.' }
+        else { $linhas+='Nenhuma bateria informada por CIM.' }
+    } catch { $linhas+='Estado de bateria indisponivel.' }
+    return ($linhas -join [Environment]::NewLine)
 }
 
 function Resolver-ModoOtimizador {
@@ -120,7 +192,7 @@ function Preencher-PaginaInicio {
             try {
                 $pontos = @(Get-ComputerRestorePoint -ErrorAction Stop)
                 if ($pontos.Count -gt 0) {
-                    $global:UI.InfoRestore.Text = ('protecao ativa, {0} ponto(s) criado(s)' -f $pontos.Count)
+                    $global:UI.InfoRestore.Text = ('{0} ponto(s) listado(s); protecao atual nao confirmada' -f $pontos.Count)
                 } else {
                     $global:UI.InfoRestore.Text = 'sem pontos de restauracao ainda'
                 }
