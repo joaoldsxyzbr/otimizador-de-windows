@@ -37,6 +37,7 @@ $arquivos = @(
     'src/ui/principal.xaml', 'data/tweaks.json', 'data/aplicativos.json', 'data/uwp.json'
 )
 $tlsAnterior = [Net.ServicePointManager]::SecurityProtocol
+$temporarioCriado = $false
 try {
     if ($SomenteValidar) { New-Item -ItemType Directory -Path $temporario | Out-Null }
     else {
@@ -52,6 +53,7 @@ try {
         if (Test-Path -LiteralPath $temporario) { throw 'Pasta temporaria ja existe.' }
         [void][IO.Directory]::CreateDirectory($temporario,$acl)
     }
+    $temporarioCriado = $true
     if ($FonteLocal) {
         $origem = (Get-Item -LiteralPath $FonteLocal).FullName
         $fonte = Join-Path $temporario 'fonte'
@@ -66,14 +68,36 @@ try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $headers = @{ 'User-Agent' = 'OtimizadorPC-Launcher'; Accept = 'application/vnd.github+json' }
         if ($env:GITHUB_ACTIONS -eq 'true' -and $env:GH_TOKEN) { $headers.Authorization = 'Bearer ' + $env:GH_TOKEN }
-        $commit = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/commits/' + $Ref) -Headers $headers -TimeoutSec 30
-        $sha = [string]$commit.sha
-        $treeSha = [string]$commit.commit.tree.sha
-        if ($sha -notmatch '^[0-9a-f]{40}$' -or $treeSha -notmatch '^[0-9a-f]{40}$') { throw 'Resposta de commit invalida.' }
-        if ($Ref -match '^[0-9a-f]{40}$' -and $sha -ne $Ref) { throw 'Commit recebido diferente do solicitado.' }
+        try {
+            $commit = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/commits/' + $Ref) -Headers $headers -TimeoutSec 30
+            $sha = [string]$commit.sha
+            $treeSha = [string]$commit.commit.tree.sha
+            if ($sha -notmatch '^[0-9a-f]{40}$' -or $treeSha -notmatch '^[0-9a-f]{40}$') { throw 'Resposta de commit invalida.' }
+            if ($Ref -match '^[0-9a-f]{40}$' -and $sha -ne $Ref) { throw 'Commit recebido diferente do solicitado.' }
+            $arvore = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/git/trees/' + $treeSha + '?recursive=1') -Headers $headers -TimeoutSec 30
+            if ($arvore.truncated -or $arvore.sha -ne $treeSha) { throw 'Arvore Git invalida ou incompleta.' }
+        } catch {
+            # Exclusivo da validacao de um commit ja presente no checkout.
+            # Nao ignora divergencia de hash e nao executa o aplicativo.
+            $status = $null
+            if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+            if ($status -notin @(403,429) -or -not $SomenteValidar -or $Ref -notmatch '^[0-9a-f]{40}$') { throw }
+            $git = Get-Command git.exe -CommandType Application -ErrorAction Stop
+            $checkout = $PSScriptRoot
+            $sha = [string](& $git.Source -C $checkout rev-parse HEAD)
+            if ($LASTEXITCODE -ne 0 -or $sha -ne $Ref) { throw 'API indisponivel e checkout nao corresponde ao commit solicitado.' }
+            $linhas = @(& $git.Source -C $checkout ls-tree -r $sha)
+            if ($LASTEXITCODE -ne 0) { throw 'Nao foi possivel ler a arvore Git local.' }
+            $entradas = @()
+            foreach ($linha in $linhas) {
+                if ($linha -match '^([0-9]{6}) (blob) ([0-9a-f]{40})\t(.+)$') {
+                    $entradas += [pscustomobject]@{ mode=$Matches[1]; type=$Matches[2]; sha=$Matches[3]; path=$Matches[4] }
+                }
+            }
+            $arvore = [pscustomobject]@{ tree=$entradas }
+            Write-Warning 'API retornou 403/429; usando arvore do checkout fixado para conferir os arquivos remotos. Aplicativo nao sera aberto.'
+        }
         Write-Host ('Baixando OtimizadorPC: ' + $Ref + ' (' + $sha + ')')
-        $arvore = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/git/trees/' + $treeSha + '?recursive=1') -Headers $headers -TimeoutSec 30
-        if ($arvore.truncated -or $arvore.sha -ne $treeSha) { throw 'Arvore Git invalida ou incompleta.' }
         $fonte = Join-Path $temporario 'fonte'
         New-Item -ItemType Directory -Path $fonte | Out-Null
         # Le os bytes originais de cada blob Git, sem conversao de final de linha.
@@ -112,7 +136,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw ('OtimizadorPC terminou com codigo ' + $LASTEXITCODE) }
 } finally {
     [Net.ServicePointManager]::SecurityProtocol = $tlsAnterior
-    if (Test-Path -LiteralPath $temporario) {
+    if ($temporarioCriado -and (Test-Path -LiteralPath $temporario)) {
         try { Remove-Item -LiteralPath $temporario -Recurse -Force -ErrorAction Stop }
         catch { Write-Warning ('Nao foi possivel limpar a pasta temporaria: ' + $temporario) }
     }
