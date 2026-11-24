@@ -116,7 +116,7 @@ function Confirmar-ContextoJournal {
     if (-not $PSBoundParameters.ContainsKey('Atual')) {$Atual=Obter-ContextoJournal}
     $c=$Journal.contexto
     if (-not $c.usuarioSid -or -not $c.maquina -or $c.registro64 -isnot [bool] -or
-        -not $Atual -or $c.usuarioSid -ne $Atual.usuarioSid -or $c.maquina -ne $Atual.maquina -or $c.registro64 -ne $Atual.registro64) {
+        -not $Atual -or $Atual.registro64 -isnot [bool] -or $c.usuarioSid -ne $Atual.usuarioSid -or $c.maquina -ne $Atual.maquina -or $c.registro64 -ne $Atual.registro64) {
         throw 'Journal pertence a outro usuario, maquina ou visao de registro; reversao indisponivel neste contexto.'
     }
 }
