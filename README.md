@@ -6,13 +6,20 @@ App de otimizacao do Windows 10 e 11 em PowerShell + janela nativa WPF (estilo W
 
 ## abrir sem instalar (previa v2)
 
-Abra **Windows PowerShell como administrador** e cole o comando abaixo. Use apenas a URL deste repositorio e confira o [launcher](iniciar.ps1) antes de executa-lo.
+O montador gera duas variantes: `dist/otimizadorpc-portatil.ps1` (arquivo local) e `dist/otimizadorpc.ps1` (execucao em memoria), com modulos, catalogos e XAML embutidos. O segundo vem acompanhado de um arquivo SHA256.
+
+Para testar a variante em memoria em uma copia local, abra Windows PowerShell 5.1 como administrador:
 
 ```powershell
-$p = Join-Path $env:TEMP ('otimizadorpc-iniciar-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/joaoldsxyzbr/otimizador-de-windows/desenvolvimento-v2/iniciar.ps1' -OutFile $p -ErrorAction Stop; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Ref desenvolvimento-v2 } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
+.\montar-portatil.ps1
+& ([scriptblock]::Create([IO.File]::ReadAllText((Resolve-Path 'dist\otimizadorpc.ps1')))) -Cli essencial -Simular
 ```
 
-O launcher baixa um commit especifico da branch, confere os arquivos necessarios contra os blobs Git, monta a versao portatil em pasta temporaria e abre a janela. Nao instala o app nem exige Git, Python ou outros programas. A pasta temporaria e removida ao sair; logs e journals continuam em `%ProgramData%\otimizadorpc`. Arquivos customizados em `custom\` da copia temporaria nao persistem. O launcher usa HTTPS e a integridade do GitHub, nao assinatura independente; confie no repositorio antes de executar como administrador. A previa ainda precisa de validacao manual. Para CLI, acrescente `-Cli seguro -Simular` depois de `-Ref desenvolvimento-v2` no comando. Para fixar uma versao, substitua o valor de `-Ref` pelo SHA completo do commit.
+Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O modo remoto nao carrega tweaks customizados locais; os logs, journals e backups permanecem no ProgramData.
+
+O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/latest/download/otimizadorpc.ps1 | iex` **somente depois de uma release estavel contendo esse asset ser publicada**. A publicacao automatica ainda precisa ser configurada. O comando direto executa codigo remoto sem conferir o hash automaticamente: revise a origem e a versao antes de executar como administrador.
+
+O launcher `iniciar.ps1` permanece como alternativa baseada na montagem do codigo-fonte: confere os blobs Git antes de montar em pasta temporaria. Essa alternativa nao e execucao exclusivamente em memoria.
 
 ## como usar
 
