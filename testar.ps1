@@ -242,6 +242,33 @@ foreach ($c in $chamadas) {
 if ($faltam.Count -eq 0) { Passou ('as ' + $chamadas.Count + ' funcoes chamadas por gui/entrypoint existem nos modulos') }
 else { Falhou 'funcoes chamadas mas nao definidas' ($faltam -join ', ') }
 
+# ---- 8. persistencia e recuperacao (sem alterar o Windows) ----
+Secao 'journal atomico e recuperacao'
+$testeJournal = Join-Path ([System.IO.Path]::GetTempPath()) ('otimizadorpc-teste-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $testeJournal -ErrorAction Stop | Out-Null
+    . (Join-Path $raiz 'src\modules\motor.ps1')
+    $arquivoTeste = Join-Path $testeJournal 'sessao.json'
+    Gravar-JSONAtomico -Arquivo $arquivoTeste -Objeto @{ itens = @(@{ tipo = 'teste'; estadoReversao = 'em_andamento' }) }
+    Gravar-JSONAtomico -Arquivo $arquivoTeste -Objeto @{ itens = @(@{ tipo = 'teste'; estadoReversao = 'concluido' }) }
+    $atual = Get-Content -LiteralPath $arquivoTeste -Raw | ConvertFrom-Json
+    $anterior = Get-Content -LiteralPath ($arquivoTeste + '.bak') -Raw | ConvertFrom-Json
+    if ($atual.itens[0].estadoReversao -ne 'concluido' -or $anterior.itens[0].estadoReversao -ne 'em_andamento') {
+        throw 'Estado atual ou backup incorreto.'
+    }
+    Passou 'journal atomico preserva estado atual e anterior'
+    $falha = $false
+    try {
+        Gravar-JSONAtomico -Arquivo (Join-Path $testeJournal 'ausente\sessao.json') -Objeto @{ itens = @() }
+    } catch { $falha = $true }
+    if ($falha) { Passou 'falha de persistencia propagada' }
+    else { Falhou 'falha de persistencia propagada' 'gravacao invalida nao gerou erro' }
+} catch {
+    Falhou 'journal atomico' $_.Exception.Message
+} finally {
+    if (Test-Path -LiteralPath $testeJournal) { Remove-Item -LiteralPath $testeJournal -Recurse -Force }
+}
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
