@@ -74,3 +74,11 @@ RC.6 orientada: testar rotulos de estado e perfil recomendado, guias de ajustes,
 RC.7: validar em conta comum e administrador, ambiente de dominio/Entra/MDM e ambiente inconclusivo. O modo protegido deve abrir sem UAC, sem criar pasta de estado ou logs, com apenas diagnostico local e sem exportacao. Preset real deve ser recusado e simulacao permitida. Testar criacao de ponto em Windows cliente; runner Windows Server nao oferece System Restore. A integracao usa stub isolado exclusivamente para exercitar journal/reversao em ambiente descartavel; teste separado comprova interrupcao sem ponto. Nao usar o app em empresa sem autorizacao do TI.
 
 RC.7 adicional: diagnostico por padrao mesmo elevado; -Pessoal e explicito e nao sobrepoe sinais de TI. Testar WinGet registrado e assinado, instalacao sem upgrade, upgrade selecionado, diagnosticos avancados e historico WUA, estados dos recursos e conflitos de energia. Testar desinstalacao HKLM assinada e recusa de HKCU/arquivo nao assinado. Limpeza so apos ausencia da entrada original. Validacao real de WinGet e System Restore exige Windows cliente; runner nao certifica esses caminhos.
+
+## Pendencias antes da estavel
+
+- Validacao manual com Windows 10/11 cliente, conta comum e ambiente organizacional autorizado: diagnostico sem elevacao, sem arquivos de estado do app, nenhuma alteracao no modo protegido, sem contornar politicas.
+- Testar modo pessoal explicito, ponto de restauracao real (limite diario), WinGet instalado/assinado, drivers reais, recursos opcionais e conflitos de reversao. CI Windows Server nao substitui esses testes.
+- Corrigir caminhos de artefatos nos workflows para ProgramData\\otimizadorpc-v2 e manter todos os gates; alteracao depende do mantenedor quando a ferramenta de edicao de workflow estiver bloqueada.
+- Evolucao posterior: matriz de compatibilidade por build/edicao para cada tweak documentado, APIs MSI de componentes compartilhados, medicao de gargalos com contadores e ETW, inventario PnP mais completo, relatorios de bateria e otimizacao de volumes apropriada a midia. Nao executar remocao automatica de drivers nem ajustes corporativos. Traducao EN e mudancas visuais nao bloqueiam a estavel PT-BR.
+- Merge na main e release estavel somente apos aceite e verificacao dos artefatos.

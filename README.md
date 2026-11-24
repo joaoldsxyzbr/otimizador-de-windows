@@ -5,12 +5,12 @@
 Abra o **Windows PowerShell 5.1 como administrador** e cole:
 
 ```powershell
-irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.5/otimizadorpc.ps1 | iex
+irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.6/otimizadorpc.ps1 | iex
 ```
 
 O OtimizadorPC abre diretamente em memoria, sem instalacao. Requer Windows 10/11 e conexao com a internet.
 
-**Versao candidata v2.0.0-rc.5:** testes automatizados aprovados; validacao manual ainda pendente. O comando executa codigo remoto com privilegios administrativos. Revise a origem e use inicialmente o modo de simulacao. [Release e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.5).
+**Versao candidata v2.0.0-rc.6:** testes automatizados aprovados; validacao manual ainda pendente. Nao use esta versao em PC empresarial: o modo protegido esta em desenvolvimento na RC.7. O comando executa codigo remoto com privilegios administrativos. Revise a origem e use inicialmente o modo de simulacao. [Release e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.6).
 
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 

@@ -165,6 +165,7 @@ try {
 # ---- 8. remover e restaurar chave de teste pelo fluxo real da aba Desinstalar ----
 . (Join-Path $raiz 'src\modules\desinstalador.ps1')
 $nomeQuar = 'Software\OtimizadorPC-CI-Quar-' + [guid]::NewGuid().ToString('N')
+$nomeRegistroOriginal='Software\Microsoft\Windows\CurrentVersion\Uninstall\OtimizadorPC-CI-'+[guid]::NewGuid().ToString('N')
 $quarTeste = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-quar-ci-' + [guid]::NewGuid().ToString('N'))
 $quarAnterior = $global:PastaQuarantena
 try {
@@ -180,7 +181,14 @@ try {
     $linha.Content = $marca
     [void]$lb.Items.Add($linha)
     $global:UI = @{ ListaRastros=$lb; RotuloRastros=(New-Object System.Windows.Controls.TextBlock) }
-    $global:ProgVarredura = [pscustomobject]@{ nome='teste descartavel' }
+    $entrada=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($nomeRegistroOriginal)
+    try { $entrada.SetValue('DisplayName','teste descartavel'); $entrada.SetValue('UninstallString','nao-executar.exe') } finally { $entrada.Dispose() }
+    $global:ProgVarredura=Converter-EntradaPrograma (Get-ItemProperty -LiteralPath ('HKCU:\'+$nomeRegistroOriginal) -ErrorAction Stop)
+    $recusou=$false
+    try { $null=Confirmar-ProgramaAusenteParaLimpeza $global:ProgVarredura } catch { $recusou=$_.Exception.Message -match 'ainda existe' }
+    if (-not $recusou -or -not (Test-Path -LiteralPath $caminhoQuar)) { throw 'Limpeza de programa registrado nao recusada.' }
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeRegistroOriginal,$false)
+    Log 'CI ok: limpeza bloqueada enquanto registro de desinstalacao existe'
     & {
         function Perguntar { param($Titulo,$Mensagem) return ($Titulo -eq 'Apagar rastros') }
         function Avisar { param($Titulo,$Mensagem) throw ('Aviso inesperado: ' + $Titulo) }
@@ -198,6 +206,7 @@ try {
     Log ('FALHOU: quarentena real: ' + $_.Exception.Message) -Erro
     exit 1
 } finally {
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeRegistroOriginal,$false)
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeQuar, $false)
     if (Test-Path -LiteralPath $quarTeste) { Remove-Item -LiteralPath $quarTeste -Recurse -Force }
     $global:PastaQuarantena = $quarAnterior

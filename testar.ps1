@@ -996,6 +996,37 @@ try {
     Passou 'dependencia AppX declarada bloqueada no motor e guia'
 } catch { Falhou 'dependentes AppX' $_.Exception.Message }
 
+# ---- WPF pessoal: montar e ligar sem executar acao administrativa ----
+Secao 'interface pessoal'
+try {
+    & {
+        Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+        $uiAntes=$global:UI; $janelaAntes=$global:Janela; $modoAntes=$global:ModoProtegido
+        $ctAntes=$global:CatalogoTweaks; $caAntes=$global:CatalogoApps
+        try {
+            $global:ModoProtegido=$false
+            $global:CatalogoTweaks=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            $global:CatalogoApps=Get-Content -LiteralPath (Join-Path $raiz 'data\aplicativos.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            function Preencher-PaginaInicio { }
+            $global:Janela=[Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Join-Path $raiz 'src\ui\principal.xaml') -Raw -Encoding UTF8))
+            $global:UI=@{}
+            foreach ($nome in $nomesCtrl) {
+                $global:UI[$nome]=$global:Janela.FindName($nome)
+                if (-not $global:UI[$nome]) {throw ('Controle ausente: '+$nome)}
+            }
+            Ligar-Tudo
+            if (-not $global:UI.BotaoNavAjustes.IsEnabled -or -not $global:UI.BotaoAtualizarSelecionados.IsEnabled) {throw 'Interface pessoal nao habilitada.'}
+            if (@(Get-Checkboxes $global:UI.ListaApps | Where-Object {$_.IsChecked}).Count) {throw 'Apps preselecionados.'}
+            if (@(Get-Checkboxes $global:UI.ListaApps).Count -ne @($global:CatalogoApps.aplicativos).Count) {throw 'Catalogo incompleto.'}
+            Passou 'interface pessoal ligada, sem apps preselecionados'
+        } finally {
+            if ($global:Janela -and $global:Janela -ne $janelaAntes) {$global:Janela.Close()}
+            $global:UI=$uiAntes; $global:Janela=$janelaAntes; $global:ModoProtegido=$modoAntes
+            $global:CatalogoTweaks=$ctAntes; $global:CatalogoApps=$caAntes
+        }
+    }
+} catch { Falhou 'interface pessoal' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
