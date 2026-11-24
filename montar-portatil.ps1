@@ -108,14 +108,17 @@ foreach ($m in $modulos) {
     Add-Texto '# ------------------------------------------------------------'
     Add-Texto ('# modulo embutido: ' + $m)
     Add-Texto '# ------------------------------------------------------------'
-    Add-Texto (Get-Content -Path $caminho -Raw).TrimEnd()
+    $textoModulo = (Get-Content -Path $caminho -Raw).TrimEnd()
+    if ($m -eq 'comum.ps1') {
+        $textoModulo = $textoModulo.Replace('$global:PastaApp      = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)', '$global:PastaApp = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path $env:ProgramData ''otimizadorpc'' }')
+    }
+    Add-Texto $textoModulo
     Add-Texto ''
 }
 
 # arquivo unico: nao existe src\ ao redor; define as pastas pelo local do ps1
 Add-Texto '# ---- pastas do app (arquivo unico) ----'
-Add-Texto '$global:PastaApp   = $PSScriptRoot'
-Add-Texto '$global:PastaDados = $PSScriptRoot'
+Add-Texto '$global:PastaDados = $global:PastaApp'
 Add-Texto 'Garantir-Pastas'
 Add-Texto '$global:AmbienteTrabalho = Detectar-AmbienteTrabalho'
 Add-Texto ''
@@ -178,6 +181,44 @@ $final = $sb.ToString()
 Set-Content -Path $arquivoFinal -Value $final -Encoding UTF8
 $kb = [math]::Round((Get-Item $arquivoFinal).Length / 1KB, 1)
 Write-Host ('OK: ' + $arquivoFinal + ' (' + $kb + ' KB)') -ForegroundColor Green
+
+# Script unico para distribuicao online. Nao depende de caminho fisico.
+$memoria = $final
+$inicioElev = $memoria.IndexOf('# ---- auto-elevacao para administrador ----')
+$fimElev = $memoria.IndexOf('# ---- assemblies do wpf ----')
+if ($inicioElev -lt 0 -or $fimElev -le $inicioElev) { throw 'Marcadores de elevacao ausentes.' }
+$novoCabecalho = @'
+# ---- execucao em memoria: exige console ja elevado ----
+if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5) {
+    throw 'Abra o Windows PowerShell 5.1 como administrador.'
+}
+$identidade = [Security.Principal.WindowsIdentity]::GetCurrent()
+$principal = New-Object Security.Principal.WindowsPrincipal($identidade)
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw 'Abra o Windows PowerShell como administrador.'
+}
+if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
+    throw 'Abra o Windows PowerShell em modo STA.'
+}
+$ErrorActionPreference = 'Continue'
+
+'@
+$memoria = $memoria.Substring(0, $inicioElev) + $novoCabecalho + $memoria.Substring($fimElev)
+$memoria = $memoria.Replace('$global:PastaApp = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path $env:ProgramData ''otimizadorpc'' }', '$global:PastaApp = Join-Path $env:ProgramData ''otimizadorpc''')
+$memoria = $memoria -replace '(\[switch\]\$Simular)\s*\r?\n\)', ('$1,' + [Environment]::NewLine + '    [switch]$ValidarInterface' + [Environment]::NewLine + ')')
+$memoria = $memoria.Replace('if ($ok) { exit 0 } else { exit 1 }', 'if (-not $ok) { throw ''Preset terminou com erros.'' }; return')
+$memoria = $memoria.Replace('exit 1', 'throw ''Falha na inicializacao do OtimizadorPC.''')
+$memoria = $memoria.Replace('# ---- monta a interface e mostra ----', 'if ($ValidarInterface) { $global:Janela.Close(); Write-Host ''Interface WPF validada.''; return }' + [Environment]::NewLine + '# ---- monta a interface e mostra ----')
+# O modo remoto nao carrega arquivos .reg locais; use o portatil para custom.
+$memoria = $memoria.Replace('$tweaksCustom = @(Carregar-TweaksCustom)', '$tweaksCustom = @()')
+$arquivoOnline = Join-Path $destino 'otimizadorpc.ps1'
+[IO.File]::WriteAllText($arquivoOnline, $memoria, (New-Object Text.UTF8Encoding($false)))
+$errosOnline = $null
+[void][System.Management.Automation.Language.Parser]::ParseFile($arquivoOnline, [ref]$null, [ref]$errosOnline)
+if (@($errosOnline).Count -gt 0) { throw ('Script online invalido: ' + ($errosOnline.Message -join '; ')) }
+$hashOnline = (Get-FileHash -LiteralPath $arquivoOnline -Algorithm SHA256).Hash.ToLowerInvariant()
+[IO.File]::WriteAllText(($arquivoOnline + '.sha256'), ($hashOnline + '  otimizadorpc.ps1' + [Environment]::NewLine), [Text.Encoding]::ASCII)
+Write-Host ('OK: ' + $arquivoOnline + ' (execucao em memoria)')
 
 # bat de atalho: dois cliques e o app abre (pede uac e abre a janela)
 $bat = Join-Path $destino 'rodar-portatil.bat'
