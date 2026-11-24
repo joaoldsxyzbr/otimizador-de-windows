@@ -57,7 +57,7 @@ nao quer janela? modo cli:
 - detalhes da sessao e quarentena: inspecione os itens, estados de reversao e existencia dos backups sem excluir nada.
 - reversao individual: desfaz apenas a ultima acao pendente da sessao, respeitando a ordem inversa; nao permite escolher uma acao arbitraria.
 - recuperacao: a lista informa quantas acoes foram revertidas; itens concluidos nao sao repetidos.
-- se uma acao ficar em andamento ou falhar, a reversao para. Preserve o journal e o arquivo .bak, consulte o log e revise o estado real do sistema. Nao repita a acao nem edite o journal sem verificar os efeitos.
+- se uma acao ficar em andamento ou falhar, a reversao para. Preserve o journal e o arquivo .bak, consulte o log e revise o estado real do sistema. Depois de restaurar e verificar manualmente o estado anterior, use Confirmar recuperacao manual para registrar o atestado e continuar. O app nao verifica o atestado nem repete a acao.
 - a copia .bak e um estado anterior, nao uma garantia de recuperacao completa.
 - a versao de desenvolvimento requer os testes do GitHub Actions no Windows e verificacao manual da interface antes de ser considerada estavel.
 

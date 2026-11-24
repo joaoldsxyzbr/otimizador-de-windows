@@ -587,6 +587,27 @@ function Reverter-Sessao {
     }
 }
 
+# Atestado manual: registra a verificacao feita pelo usuario, sem repetir a acao.
+function Confirmar-ReversaoManual {
+    param([string]$Arquivo, [int]$Indice)
+    $ErrorActionPreference = 'Stop'
+    $json = Ler-JSON $Arquivo
+    $itens = @($json.itens)
+    for ($i = $itens.Count - 1; $i -ge 0; $i--) {
+        if ($itens[$i].estadoReversao -eq 'concluido') { continue }
+        if ($i -ne $Indice -or $itens[$i].estadoReversao -ne 'em_andamento') { throw 'Somente a ultima acao incerta pode ser confirmada.' }
+        $itens[$i].estadoReversao = 'concluido'
+        $itens[$i] | Add-Member -NotePropertyName confirmadoManualEm -NotePropertyValue (Get-Date -Format 'o') -Force
+        Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+        Log ('Acao ' + $i + ' confirmada manualmente pelo usuario, sem repetir a operacao.')
+        if (@($itens | Where-Object { $_.estadoReversao -ne 'concluido' }).Count -eq 0) {
+            Rename-Item -LiteralPath $Arquivo -NewName ((Split-Path -Leaf $Arquivo) + '.revertido') -ErrorAction Stop
+        }
+        return
+    }
+    throw 'Nenhuma acao incerta encontrada.'
+}
+
 # ---- ponto de restauracao ----
 
 function Criar-PontoRestauracao {

@@ -309,6 +309,15 @@ try {
         $estado = Ler-JSON $incerto
         if ($estado.itens[1].estadoReversao -ne 'em_andamento') { throw 'Estado incerto nao preservado.' }
         Passou 'falha preserva journal e bloqueia repeticao'
+        $rejeitou = $false
+        try { Confirmar-ReversaoManual -Arquivo $incerto -Indice 0 } catch { $rejeitou = $true }
+        if (-not $rejeitou) { throw 'Confirmacao pulou a acao incerta.' }
+        Confirmar-ReversaoManual -Arquivo $incerto -Indice 1
+        $estado = Ler-JSON $incerto
+        if (-not $estado.itens[1].confirmadoManualEm -or (Reverter-Sessao $incerto) -ne $true -or ($script:acoesTeste -join ',') -ne 'falha,pendente') {
+            throw 'Confirmacao manual nao permitiu retomar sem repetir.'
+        }
+        Passou 'confirmacao manual registra atestado e permite retomada'
     }
 
     $falha = $false

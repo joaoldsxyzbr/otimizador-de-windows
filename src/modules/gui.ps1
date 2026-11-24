@@ -494,6 +494,31 @@ function Clique-Desfazer {
 # ---- ligacao geral (chamada pelo script principal) ----
 
 # Consulta sob demanda; nenhuma alteracao automatica em servicos ou tarefas.
+function Clique-ConfirmarManual {
+    try {
+        $lb = $global:UI.ListaDesfazer
+        if ($lb.SelectedIndex -lt 0) { Avisar 'Selecione' 'Escolha uma sessao na lista.'; return }
+        $arquivo = $lb.Tag[$lb.SelectedIndex]
+        if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo)) { throw 'Sessao indisponivel.' }
+        $json = Ler-JSON $arquivo
+        $itens = @($json.itens)
+        for ($i = $itens.Count - 1; $i -ge 0; $i--) {
+            $item = $itens[$i]
+            if ($item.estadoReversao -eq 'concluido') { continue }
+            if ($item.estadoReversao -ne 'em_andamento') { throw 'A ultima acao pendente nao esta incerta.' }
+            $alvo = @($item.caminho,$item.origem,$item.chave,$item.nome,$item.pacote,$item.contexto) -join ' '
+            $msg = ('Acao {0}: {1} - {2}. Confirme SOMENTE se voce verificou e restaurou manualmente o estado anterior. O programa nao testa nem repete essa operacao. Confirmar?' -f $i,$item.tipo,$alvo)
+            if (Perguntar 'Atestado de recuperacao manual' $msg) {
+                Confirmar-ReversaoManual -Arquivo $arquivo -Indice $i
+                Atualizar-ListaDesfazer
+                Status 'confirmacao manual registrada.'
+            }
+            return
+        }
+        throw 'Nenhuma acao incerta encontrada.'
+    } catch { Avisar 'Confirmacao indisponivel' $_.Exception.Message }
+}
+
 function Clique-InventarioLocal {
     try {
         Status 'coletando inventario local...'
@@ -654,6 +679,7 @@ function Clique-DetalhesSessao {
             if ($item.estadoReversao -eq 'concluido') { $estado = 'revertido' }
             elseif ($item.estadoReversao -eq 'em_andamento') { $estado = 'incerto - revisao manual' }
             $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '
+            if ($item.confirmadoManualEm) { $estado = 'confirmado manualmente' }
             $linhas += ('[{0}] {1}: {2}' -f $estado, $item.tipo, $alvo)
             foreach ($backup in @($item.destino, $item.arquivoReg, $item.backupReg) + @($item.backups)) {
                 if (-not $backup) { continue }
@@ -865,6 +891,7 @@ function Ligar-Tudo {
     # pagina desfazer
     $global:UI.BotaoDesfazer.Add_Click({ Clique-Desfazer })
     $global:UI.BotaoDesfazerUma.Add_Click({ Clique-Desfazer -UmaAcao })
+    $global:UI.BotaoConfirmarManual.Add_Click({ Clique-ConfirmarManual })
     $global:UI.BotaoDetalhesSessao.Add_Click({ Clique-DetalhesSessao })
     $global:UI.BotaoAtualizarListaSessoes.Add_Click({ Atualizar-ListaDesfazer; Log 'lista de sessoes atualizada.' })
 
