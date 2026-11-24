@@ -8,6 +8,8 @@
 $raiz = $PSScriptRoot
 $global:Ok = 0
 $global:Erros = 0
+# Somente o harness testa funcoes mutaveis em dados descartaveis/mocks.
+$global:ModoProtegido=$false
 
 function Passou {
     param([string]$Nome)
@@ -453,7 +455,7 @@ try {
         function Avisar { param($Titulo,$Mensagem) throw ('Aviso inesperado: ' + $Titulo) }
         $script:confirmacaoTeste = ''
         function Perguntar { param($Titulo,$Mensagem) $script:confirmacaoTeste = $Mensagem; return $false }
-        $script:progTeste = [pscustomobject]@{ nome='teste' }
+        $script:progTeste = [pscustomobject]@{ nome='teste'; chavePs=('HKCU:\Software\OtimizadorPC-CI-Ausente-'+[guid]::NewGuid().ToString('N')) }
         $script:rastroTeste = [pscustomobject]@{ tipo='chave'; caminho='HKCU:\Software\Teste'; extra='teste' }
         function Varrer-Rastros { param($Prog) return $script:rastroTeste }
         $lb = New-Object System.Windows.Controls.ListBox
@@ -880,7 +882,7 @@ try {
 # ---- decisao conservadora e motor protegido ----
 Secao 'modo corporativo'
 try {
-    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Corporativo/Protetivo' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Pessoal (sem sinais detectados)') { throw 'Decisao de modo incorreta.' }
+    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Corporativo/Protetivo' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @() $true) -ne 'Pessoal (sem sinais detectados)' -or (Resolver-ModoOtimizador $true $false @('MDM') $true) -ne 'Corporativo/Protetivo') { throw 'Decisao de modo incorreta.' }
     $modoAntes=$global:ModoProtegido
     try {
         $global:ModoProtegido=$true
@@ -960,6 +962,19 @@ try {
     }
     Passou 'reversao de energia preserva mudanca posterior'
 } catch { Falhou 'conflito energia' $_.Exception.Message }
+
+# ---- protecao de rastros quando registro permanece ----
+Secao 'rastros de programa ainda registrado'
+try {
+    & {
+        function Test-Path { [CmdletBinding()] param([string]$LiteralPath) return $true }
+        function Validar-ProtecaoPrograma { param($Prog) [pscustomobject]@{risco='Normal'} }
+        $recusou=$false
+        try {$null=Confirmar-ProgramaAusenteParaLimpeza ([pscustomobject]@{nome='Teste';chavePs='HKCU:\Software\Teste'})} catch {$recusou=$_.Exception.Message -match 'ainda existe'}
+        if (-not $recusou) {throw 'Limpeza de app registrado permitida.'}
+    }
+    Passou 'limpeza recusa registro original ainda existente'
+} catch { Falhou 'rastros de programa ainda registrado' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

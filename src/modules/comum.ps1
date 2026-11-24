@@ -15,7 +15,7 @@ $global:UI            = @{}
 # A protecao e uma regra do app, nao uma fronteira de seguranca do Windows.
 # O entrypoint inicializa o modo antes de qualquer operacao de estado.
 function Confirmar-PermissaoAlteracao {
-    if ($global:ModoProtegido) { throw 'Modo protegido: alteracoes e exportacoes indisponiveis. Consulte o TI.' }
+    if ($global:ModoProtegido -ne $false) { throw 'Modo protegido: alteracoes e exportacoes indisponiveis. Consulte o TI.' }
 }
 
 # Estado novo com ACL explicita. Nao confia retroativamente em journals antigos.

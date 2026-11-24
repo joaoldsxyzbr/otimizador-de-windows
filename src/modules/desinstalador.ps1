@@ -200,6 +200,9 @@ function Desinstalar-Programa {
     param($Prog)
     Confirmar-PermissaoAlteracao
     $info = Validar-ProtecaoPrograma $Prog -Desinstalar
+    if ([string]$Prog.chavePs -notmatch '^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\(?:WOW6432Node\\)?Microsoft\\Windows\\CurrentVersion\\Uninstall\\[^\\]+$') {
+        throw 'Entrada por usuario ou fora da raiz de desinstalacao confiavel. Use Aplicativos instalados do Windows.'
+    }
     $nome = [string]$Prog.nome
     if ($info.risco -ne 'Normal' -and -not (Perguntar 'Cautela na desinstalacao' ($info.motivo + ' Continuar com ' + $nome + '?'))) { throw 'Desinstalacao cancelada pelo usuario.' }
     # Preferir o desinstalador normal; nao inventar flags silenciosas pelo nome.
@@ -221,7 +224,11 @@ function Desinstalar-Programa {
         if ($an.exe -notmatch '^[A-Za-z]:\\' -or [IO.Path]::GetExtension($an.exe) -ine '.exe' -or -not (Test-Path -LiteralPath $an.exe -PathType Leaf)) {
             throw 'Executavel local do desinstalador nao encontrado. Use Aplicativos instalados do Windows.'
         }
-        $exe = $an.exe
+        $exe=[IO.Path]::GetFullPath($an.exe)
+        $roots=@($env:ProgramFiles,${env:ProgramFiles(x86)}) | Where-Object {$_}
+        if (-not @($roots | Where-Object {$exe.StartsWith(([IO.Path]::GetFullPath($_).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)}).Count) { throw 'Desinstalador fora de Program Files; use Aplicativos instalados do Windows.' }
+        $sig=Get-AuthenticodeSignature -LiteralPath $exe -ErrorAction Stop
+        if ($sig.Status -ne 'Valid') { throw 'Assinatura do desinstalador nao validada; use Aplicativos instalados do Windows.' }
         $argumentos = $an.args
     }
     $msg = ('Executar o desinstalador de {0}?{1}{1}{2}{1}{3}{1}{1}Confirme que reconhece este arquivo.' -f $nome,[Environment]::NewLine,$exe,$argumentos)
@@ -748,6 +755,14 @@ function Marcar-Rastros {
     Atualizar-ContagemRastros
 }
 
+function Confirmar-ProgramaAusenteParaLimpeza {
+    param($Prog)
+    $info=Validar-ProtecaoPrograma $Prog
+    if (-not $Prog.chavePs) { throw 'Registro original nao identificado. Limpeza indisponivel.' }
+    if (Test-Path -LiteralPath $Prog.chavePs -ErrorAction Stop) { throw 'Entrada de desinstalacao ainda existe. Desinstale pelo Windows antes de remover rastros.' }
+    return $info
+}
+
 function Clique-ApagarRastros {
     Confirmar-PermissaoAlteracao
     $lb = $global:UI.ListaRastros
@@ -757,7 +772,7 @@ function Clique-ApagarRastros {
         Avisar 'Nada selecionado' 'Marque a caixa ao lado de cada rastro ou use "Marcar todos". Apenas o realce azul nao marca a caixa.'
         return
     }
-    try { $info=Validar-ProtecaoPrograma $global:ProgVarredura }
+    try { $info=Confirmar-ProgramaAusenteParaLimpeza $global:ProgVarredura }
     catch { Avisar 'Limpeza bloqueada' $_.Exception.Message; return }
     $resumo = ''
     if ($selecionados.Count -le 12) {
@@ -773,7 +788,7 @@ function Clique-ApagarRastros {
     if ($info.risco -ne 'Normal') { $msg += (' - CAUTELA: ' + $info.motivo) }
     $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
-    try { [void](Validar-ProtecaoPrograma $global:ProgVarredura) }
+    try { [void](Confirmar-ProgramaAusenteParaLimpeza $global:ProgVarredura) }
     catch { Avisar 'Limpeza bloqueada' $_.Exception.Message; return }
 
     Garantir-PastaPrivada $global:PastaQuarantena
@@ -791,6 +806,7 @@ function Clique-ApagarRastros {
         $i++
         Status ('limpando {0}/{1}...' -f $i, $selecionados.Count)
         try {
+            [void](Confirmar-ProgramaAusenteParaLimpeza $global:ProgVarredura)
             Apagar-Rastro $r $pastaSessao $i
             $apagados++
         } catch {

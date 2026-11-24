@@ -649,7 +649,7 @@ function Alterar-ItemInventario {
 function Clique-InventarioLocal {
     try {
         Status 'coletando inventario local...'
-        $resultado = @(Executar-ConsultaLocal -Titulo 'Inventario local' -Codigo ${function:Obter-InventarioLocal})
+        $resultado = @(Executar-ConsultaLocal -Titulo 'Inventario local' -Codigo ${function:Obter-InventarioLocal} -Parametros @{Protegido=[bool]$global:ModoProtegido})
         if ($resultado.Count -ne 1 -or $null -eq $resultado[0]) { Status 'inventario cancelado.'; return }
         $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window

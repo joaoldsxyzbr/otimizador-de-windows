@@ -14,6 +14,8 @@ if ($env:GITHUB_ACTIONS -ne 'true' -and -not $ConfirmarAmbienteDescartavel) {
     throw 'Teste altera o Windows. Execute somente em runner descartavel ou VM com -ConfirmarAmbienteDescartavel.'
 }
 $ErrorActionPreference = 'Continue'
+# Teste de integracao ja exige VM/runner descartavel. Nao altera o entrypoint.
+$global:ModoProtegido=$false
 
 # raiz do repo (este script vive em testes\)
 $raiz = Split-Path -Parent $PSScriptRoot

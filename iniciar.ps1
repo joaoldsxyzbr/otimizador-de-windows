@@ -7,6 +7,7 @@ param(
     [ValidateSet('seguro','balanceado','agressivo','essencial','gamer','notebook','privacidade','corporativo','recomendado')]
     [string]$Cli,
     [switch]$Simular,
+    [switch]$Pessoal,
     [switch]$SomenteValidar,
     # Fonte local para testes e uso offline; somente de uma copia confiavel.
     [string]$FonteLocal
@@ -129,9 +130,10 @@ try {
     if ($SomenteValidar) { Write-Host 'Launcher validado; aplicativo nao executado.'; return }
 
     Write-Host 'Abrindo OtimizadorPC...'
-    $argsApp = @('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',$portatil)
+    $argsApp = @('-NoProfile','-STA','-File',$portatil)
     if ($Cli) { $argsApp += @('-Cli',$Cli) }
     if ($Simular) { $argsApp += '-Simular' }
+    if ($Pessoal) { $argsApp += '-Pessoal' }
     & $hostPS @argsApp
     if ($LASTEXITCODE -ne 0) { throw ('OtimizadorPC terminou com codigo ' + $LASTEXITCODE) }
 } finally {

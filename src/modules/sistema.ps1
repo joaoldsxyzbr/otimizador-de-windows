@@ -110,14 +110,15 @@ function Obter-DiagnosticoAvancado {
 }
 
 function Resolver-ModoOtimizador {
-    param([bool]$Admin,[bool]$Diagnostico,$Sinais)
+    param([bool]$Admin,[bool]$Diagnostico,$Sinais,[bool]$Pessoal=$false)
     if ($Diagnostico -or -not $Admin) { return 'Diagnostico' }
     if (@($Sinais | Where-Object {$_}).Count -gt 0) { return 'Corporativo/Protetivo' }
+    if (-not $Pessoal) { return 'Diagnostico' }
     return 'Pessoal (sem sinais detectados)'
 }
 
 function Inicializar-ModoOtimizador {
-    param([switch]$Diagnostico)
+    param([switch]$Diagnostico,[switch]$Pessoal)
     $global:ModoProtegido=$true
     $global:AmbienteTrabalho=@(Detectar-AmbienteTrabalho)
     $id=[Security.Principal.WindowsIdentity]::GetCurrent()
@@ -125,7 +126,7 @@ function Inicializar-ModoOtimizador {
         $principal=New-Object Security.Principal.WindowsPrincipal($id)
         $admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } finally { $id.Dispose() }
-    $global:ModoOtimizador=Resolver-ModoOtimizador -Admin $admin -Diagnostico ([bool]$Diagnostico) -Sinais $global:AmbienteTrabalho
+    $global:ModoOtimizador=Resolver-ModoOtimizador -Admin $admin -Diagnostico ([bool]$Diagnostico) -Sinais $global:AmbienteTrabalho -Pessoal ([bool]$Pessoal)
     $global:ModoProtegido=($global:ModoOtimizador -ne 'Pessoal (sem sinais detectados)')
 }
 
@@ -214,6 +215,7 @@ function Preencher-PaginaInicio {
 
 # Inventario local, sem comandos de inicializacao, usuarios ou credenciais.
 function Obter-InventarioLocal {
+    param([bool]$Protegido=$true)
     $relatorio = [ordered]@{
         criado = (Get-Date -Format 'o')
         windows = ('{0} (build {1})' -f $(if ([Environment]::OSVersion.Version.Build -ge 22000) { 'Windows 11' } else { 'Windows 10' }),[Environment]::OSVersion.Version.Build)
@@ -234,7 +236,7 @@ function Obter-InventarioLocal {
     try {
         $chave = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
         if ($chave) {
-            try { $relatorio.runUsuario = @($chave.GetValueNames() | ForEach-Object { [pscustomobject]@{ nome=$_; tipo=$chave.GetValueKind($_).ToString(); valor=$chave.GetValue($_,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } }) }
+            try { $relatorio.runUsuario = @($chave.GetValueNames() | ForEach-Object { [pscustomobject]@{ nome=$_; tipo=$chave.GetValueKind($_).ToString(); valor=$(if ($Protegido) {'(oculto no modo protegido)'} else {$chave.GetValue($_,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}) } }) }
             finally { $chave.Dispose() }
         }
     } catch { $relatorio.avisos += 'Nao foi possivel consultar Run do usuario.' }

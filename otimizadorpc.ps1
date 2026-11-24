@@ -9,6 +9,7 @@ param(
     # modo cli: aplica um preset (seguro/balanceado/agressivo) sem abrir janela
     [string]$Cli,
     # junto com -Cli: so descreve o que faria, nao altera nada
+    [switch]$Pessoal,
     [switch]$Diagnostico,
     [switch]$Simular
 )
@@ -40,8 +41,8 @@ $pastaModulos = Join-Path $PSScriptRoot 'src\modules'
 
 $travaInstancia = $null
 try {
-    Inicializar-ModoOtimizador -Diagnostico:($Diagnostico -or ($Cli -and $Simular))
-    if ($Cli -and -not $Simular -and $global:ModoProtegido) { throw 'Preset real indisponivel no modo protegido. Use -Cli essencial -Simular.' }
+    Inicializar-ModoOtimizador -Pessoal:$Pessoal -Diagnostico:($Diagnostico -or ($Cli -and $Simular))
+    if ($Cli -and -not $Simular -and $global:ModoProtegido) { throw 'Preset real exige -Pessoal, administrador e nenhum sinal de gerenciamento. Use -Cli essencial -Simular.' }
     if (-not $global:ModoProtegido) {
         Garantir-Pastas
         $travaInstancia = Obter-TravaInstancia
