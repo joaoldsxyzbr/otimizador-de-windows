@@ -111,8 +111,39 @@ Write-Host 'REINICIE O PC para completar a correcao.' -ForegroundColor Yellow
     Executar-NoConsole -Titulo 'Reset da rede' -Bloco $bloco
 }
 
+function Diagnosticar-Integridade {
+    Confirmar-PermissaoAlteracao
+    if (-not (Perguntar 'Diagnosticar integridade' 'Executar DISM ScanHealth e SFC verifyonly? Consultas podem demorar e gravar logs do Windows, mas nao solicitam reparo.')) { return }
+    $bloco=@'
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/ScanHealth')
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\sfc.exe') @('/verifyonly')
+'@
+    Executar-NoConsole -Titulo 'Diagnosticar integridade' -Bloco $bloco
+}
+
+function Analisar-ComponentesWindows {
+    Confirmar-PermissaoAlteracao
+    $bloco=@'
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/AnalyzeComponentStore')
+'@
+    Executar-NoConsole -Titulo 'Analisar armazenamento de componentes' -Bloco $bloco
+}
+
+function Consultar-Energia {
+    Confirmar-PermissaoAlteracao
+    $bloco=@'
+$exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
+Executar-Nativo $exe @('/getactivescheme')
+Executar-Nativo $exe @('/requests')
+Executar-Nativo $exe @('/lastwake')
+Executar-Nativo $exe @('/waketimers')
+'@
+    Executar-NoConsole -Titulo 'Diagnostico de energia e suspensao' -Bloco $bloco
+}
+
 function Verificar-Integridade {
     Confirmar-PermissaoAlteracao
+    if (-not (Perguntar 'Reparar integridade' 'DISM RestoreHealth e SFC scannow podem alterar arquivos de sistema e usar Windows Update. Use para corrupcao ou falhas confirmadas. Nao ha journal de rollback. Continuar?')) { return }
     $bloco = @'
 Write-Host '== Verificacao de integridade do sistema ==' -ForegroundColor Cyan
 Write-Host '1/2 - DISM (pode demorar varios minutos)...' -ForegroundColor Cyan
@@ -125,6 +156,7 @@ Executar-Nativo sfc.exe @('/scannow')
 
 function Manutencao-DISM {
     Confirmar-PermissaoAlteracao
+    if (-not (Perguntar 'Limpar componentes' 'Analise primeiro o armazenamento de componentes. DISM StartComponentCleanup remove componentes substituidos; nao possui desfazer pelo app. Continuar?')) { return }
     $bloco = @'
 Write-Host '== Limpeza do armazenamento de componentes ==' -ForegroundColor Cyan
 Write-Host 'Isso apaga versoes antigas de atualizacoes do Windows. Pode demorar.'
@@ -144,14 +176,8 @@ Executar-Nativo chkdsk.exe @($env:SystemDrive,'/scan')
 
 function Limpeza-Disco {
     Confirmar-PermissaoAlteracao
-    $bloco = @'
-Write-Host '== Limpeza de disco profunda no C: ==' -ForegroundColor Cyan
-Write-Host 'Executando cleanmgr automatico...'
-Executar-Nativo cleanmgr.exe @('/d',$env:SystemDrive,'/VERYLOWDISK')
-Write-Host 'Limpeza de componentes obsoletos do Windows...'
-Executar-Nativo Dism.exe @('/Online','/Cleanup-Image','/StartComponentCleanup') @(0,3010)
-'@
-    Executar-NoConsole -Titulo 'Limpeza de disco' -Bloco $bloco
+    if (-not (Perguntar 'Limpeza de disco' 'Abrir ferramenta nativa para revisar categorias antes da exclusao? Nao selecionaremos categorias automaticamente.')) { return }
+    Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cleanmgr.exe') -ArgumentList @('/d',$env:SystemDrive) -ErrorAction Stop | Out-Null
 }
 
 # ---- rapidas (rodam direto, sem console) ----

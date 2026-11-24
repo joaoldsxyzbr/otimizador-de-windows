@@ -105,9 +105,11 @@ function Montar-PaginaAjustes {
 function Obter-GuiaUwp {
     param($Entrada,$Pacotes)
     $achados=@($Pacotes | Where-Object { $_.Name -eq $Entrada.pacote })
-    $bloqueado=@($achados | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0
+    $dependentes=@($achados | ForEach-Object { Obter-DependentesAppx $_ $Pacotes } | Sort-Object -Unique)
+    $bloqueado=(@($achados | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0 -or $dependentes.Count -gt 0)
     $categoria=if ($bloqueado -or $Entrada.protegido) {'Sistema/dependencia - bloqueado'} elseif ($Entrada.desconhecido) {'Nao catalogado - bloqueado'} elseif ($Entrada.remover) {'Opcional - se nao usa'} else {'Aplicativo util - cautela'}
     $motivo=if ($bloqueado -or $Entrada.protegido) {'Metadados ou nome indicam componente protegido. Remocao indisponivel.'} elseif ($Entrada.desconhecido) {'Sem classificacao no catalogo local; remocao indisponivel.'} else {'Remover somente se nao usa. Outros recursos podem depender do aplicativo. Dados locais e reinstalacao nao garantidos.'}
+    if ($dependentes.Count) { $motivo+=' Dependentes declarados: '+($dependentes -join ', ') }
     return [pscustomobject]@{ categoria=$categoria; permitido=(-not ($bloqueado -or $Entrada.protegido -or $Entrada.desconhecido) -and $achados.Count -gt 0); instalado=($achados.Count -gt 0); texto=($Entrada.desc + "`n" + $motivo + "`nEscopo: usuario atual. Nenhum desprovisionamento.") }
 }
 
@@ -1229,6 +1231,9 @@ function Ligar-Tudo {
     $global:UI.BotaoLimpezaDisco.Add_Click({ Executar-OperacaoUI { Limpeza-Disco } })
     $global:UI.BotaoVerificarDisco.Add_Click({ Executar-OperacaoUI { Verificar-Disco } })
     $global:UI.BotaoLimpezaDism.Add_Click({ Executar-OperacaoUI { Manutencao-DISM } })
+    $global:UI.BotaoAnalisarComponentes.Add_Click({ Executar-OperacaoUI { Analisar-ComponentesWindows } })
+    $global:UI.BotaoDiagnosticarIntegridade.Add_Click({ Executar-OperacaoUI { Diagnosticar-Integridade } })
+    $global:UI.BotaoConsultarEnergia.Add_Click({ Executar-OperacaoUI { Consultar-Energia } })
     $global:UI.BotaoVerificarIntegridade.Add_Click({ Executar-OperacaoUI { Verificar-Integridade } })
 
     # pagina desfazer

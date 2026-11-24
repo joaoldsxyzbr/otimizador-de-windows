@@ -316,6 +316,20 @@ function Testar-AppxProtegido {
         [string]$Pacote.Name -match '^(Microsoft\.(WindowsStore|StorePurchaseApp|DesktopAppInstaller|SecHealthUI|VCLibs|NET\.Native|UI\.Xaml)(\.|$)|MicrosoftWindows\.|Microsoft\.Windows\.|windows\.immersivecontrolpanel$)'))
 }
 
+# Dependencias declaradas do pacote no usuario atual. Nao e grafo de
+# dependencias completo de Win32 nem de outros usuarios.
+function Obter-DependentesAppx {
+    param($Pacote,$Pacotes)
+    if (-not $Pacote.PackageFullName) { return }
+    foreach ($p in @($Pacotes)) {
+        if ($p.PackageFullName -eq $Pacote.PackageFullName) { continue }
+        foreach ($dep in @($p.Dependencies)) {
+            $full=if ($dep -is [string]) {$dep} else {[string]$dep.PackageFullName}
+            if ($full -eq $Pacote.PackageFullName) { [string]$p.Name; break }
+        }
+    }
+}
+
 function Testar-AppxCatalogado {
     param([string]$Nome)
     return (@($global:CatalogoUwp.pacotes | Where-Object { $_.pacote -eq $Nome -and -not $_.protegido -and -not $_.desconhecido }).Count -eq 1)
@@ -420,11 +434,14 @@ function Executar-Acao {
                 # Remocao apenas do usuario atual, sem afetar outros usuarios
                 # nem o provisionamento. O nome deve ser exato.
                 if (-not (Testar-AppxCatalogado $Acao.pacote)) { throw 'Pacote fora do catalogo de remocao.' }
-                $pkgs = @(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Acao.pacote })
+                $todos=@(Get-AppxPackage -ErrorAction Stop)
+                $pkgs=@($todos | Where-Object { $_.Name -eq $Acao.pacote })
                 if (@($pkgs | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0) { throw 'Pacote protegido; nenhum pacote removido.' }
                 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
                 foreach ($p in $pkgs) {
                     if (Testar-AppxProtegido $p) { throw ('Pacote protegido: ' + $p.Name) }
+                    $dependentes=@(Obter-DependentesAppx $p $todos)
+                    if ($dependentes.Count) { throw ('Pacote usado por dependentes declarados: '+($dependentes -join ', ')) }
                     Registrar-Jornal ([pscustomobject]@{
                         tipo = 'appx'; pacote = $p.Name; completo = $p.PackageFullName
                         familia = $p.PackageFamilyName; usuarioSid = $sid

@@ -976,6 +976,26 @@ try {
     Passou 'limpeza recusa registro original ainda existente'
 } catch { Falhou 'rastros de programa ainda registrado' $_.Exception.Message }
 
+# ---- dependencias AppX declaradas ----
+Secao 'dependentes AppX'
+try {
+    $p=[pscustomobject]@{Name='Teste';PackageFullName='Teste_1'}
+    $q=[pscustomobject]@{Name='Consumidor';PackageFullName='Consumidor_1';Dependencies=@('Teste_1')}
+    if (@(Obter-DependentesAppx $p @($p,$q)).Count -ne 1) {throw 'Dependente nao detectado.'}
+    if ((Obter-GuiaUwp ([pscustomobject]@{pacote='Teste';remover=$true;desc='teste'}) @($p,$q)).permitido) {throw 'Dependencia removivel na UI.'}
+    & {
+        $script:removeuDependente=$false
+        $script:erroDependente=$false
+        function Log {param($Mensagem,[switch]$Erro) if ($Erro -and $Mensagem -match 'dependentes declarados') {$script:erroDependente=$true}}
+        function Testar-AppxCatalogado {return $true}
+        function Get-AppxPackage {[CmdletBinding()]param() $p;$q}
+        function Remove-AppxPackage {$script:removeuDependente=$true}
+        Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Teste'}) 'teste'
+        if ($script:removeuDependente -or -not $script:erroDependente) {throw 'Motor aceitou dependencia declarada.'}
+    }
+    Passou 'dependencia AppX declarada bloqueada no motor e guia'
+} catch { Falhou 'dependentes AppX' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

@@ -121,7 +121,7 @@ $controles = @(
     'ListaApps', 'BotaoInstalarApps', 'BotaoAtualizarSelecionados', 'BotaoAtualizarTudo', 'BotaoMarcarPadroes', 'FiltroApps',
     'ListaRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'BotaoTema', 'PainelLegado',
     'ChkBloquearDrivers', 'ChkAdiarRecursos', 'InfoPoliticasUpdate', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
-    'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',
+    'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoAnalisarComponentes', 'BotaoDiagnosticarIntegridade', 'BotaoConsultarEnergia', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',
     'BotaoRecuperarIcones', 'BotaoLimparDns', 'BotaoSincronizarHora', 'BotaoBackupDrivers', 'BotaoAnalisarArmazenamento',
     'ListaDesfazer', 'BotaoDesfazer', 'BotaoDesfazerUma', 'BotaoConfirmarManual', 'BotaoAtualizarListaSessoes', 'BotaoDetalhesSessao'
 )
