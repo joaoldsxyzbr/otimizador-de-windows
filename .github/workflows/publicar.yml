@@ -1,6 +1,9 @@
 name: Publicar OtimizadorPC
 
 on:
+  push:
+    branches: [main]
+    paths: ['publicar-previa.txt']
   workflow_dispatch:
     inputs:
       canal:
@@ -34,35 +37,58 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       sha: ${{ steps.fonte.outputs.sha }}
+      canal: ${{ steps.solicitacao.outputs.canal }}
+      tag: ${{ steps.solicitacao.outputs.tag }}
     steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push'
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
       - name: Validar solicitacao
+        id: solicitacao
         shell: bash
         env:
           CANAL: ${{ inputs.canal }}
           TAG: ${{ inputs.tag }}
           CONFIRMAR: ${{ inputs.confirmar_estavel }}
+          EVENTO: ${{ github.event_name }}
         run: |
           set -euo pipefail
           [[ "$GITHUB_REPOSITORY" == 'joaoldsxyzbr/otimizador-de-windows' ]]
           [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'Execute o workflow pela main.'; exit 1; }
+          REF=''
+          if [[ "$EVENTO" == 'push' ]]; then
+            CANAL=previa
+            TAG=$(sed -n '1p' publicar-previa.txt | tr -d '\r')
+            REF=$(sed -n '2p' publicar-previa.txt | tr -d '\r')
+            [[ "$REF" =~ ^[0-9a-f]{40}$ ]] || { echo 'Commit de previa invalido.'; exit 1; }
+          fi
           if [[ "$CANAL" == 'estavel' ]]; then
             [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Tag estavel invalida.'; exit 1; }
             [[ "$CONFIRMAR" == 'true' ]] || { echo 'Confirme a revisao e os testes manuais.'; exit 1; }
           else
             [[ "$CANAL" == 'previa' && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(rc|beta|alpha|preview)\.[0-9]+$ ]] || { echo 'Tag de previa invalida.'; exit 1; }
           fi
+          if [[ -z "$REF" ]]; then
+            if [[ "$CANAL" == 'estavel' ]]; then REF=main; else REF=desenvolvimento-v2; fi
+          fi
+          echo "canal=$CANAL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.canal == 'estavel' && 'main' || 'desenvolvimento-v2' }}
+          ref: ${{ steps.solicitacao.outputs.ref }}
           persist-credentials: false
 
       - name: Fixar commit de origem
         id: fonte
         shell: bash
         env:
-          CANAL: ${{ inputs.canal }}
-          TAG: ${{ inputs.tag }}
+          CANAL: ${{ steps.solicitacao.outputs.canal }}
+          TAG: ${{ steps.solicitacao.outputs.tag }}
         run: |
           set -euo pipefail
           sha=$(git rev-parse HEAD)
@@ -178,8 +204,8 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-          CANAL: ${{ inputs.canal }}
+          TAG: ${{ needs.preparar.outputs.tag }}
+          CANAL: ${{ needs.preparar.outputs.canal }}
           SOURCE_SHA: ${{ needs.preparar.outputs.sha }}
         run: |
           set -euo pipefail
