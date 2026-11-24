@@ -32,7 +32,8 @@ nao quer janela? modo cli:
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
 - os perfis novos sao conservadores; nao garantem FPS ou autonomia. O ajuste de avisos RDP fica exclusivamente manual por reduzir protecoes contra conexoes nao confiaveis.
 
-- inventario local de inicializacao, servicos, tarefas e discos, exportacao JSON sob demanda e atalhos para ferramentas nativas. O inventario nao altera o Windows; revise o relatorio antes de compartilhar.
+- backup de drivers de terceiros na aba Manutencao, usando Export-WindowsDriver. Escolha a pasta de destino; nao reinstala drivers automaticamente.
+- inventario local de inicializacao, servicos, tarefas, discos e adaptadores de rede, exportacao JSON sob demanda e atalhos para ferramentas nativas. O inventario nao altera o Windows; revise o relatorio antes de compartilhar.
 - diagnostico local na pagina inicial: memoria, espaco em disco, entradas de inicializacao e sinais de reinicio pendente.
 - recuperacao: a lista informa quantas acoes foram revertidas; itens concluidos nao sao repetidos.
 - se uma acao ficar em andamento ou falhar, a reversao para. Preserve o journal e o arquivo .bak, consulte o log e revise o estado real do sistema. Nao repita a acao nem edite o journal sem verificar os efeitos.

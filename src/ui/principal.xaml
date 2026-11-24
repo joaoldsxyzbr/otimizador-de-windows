@@ -515,6 +515,7 @@
                                 <Button x:Name="BotaoRecuperarIcones" Content="Reconstruir cache de icones" Margin="4" Padding="10,14"/>
                                 <Button x:Name="BotaoLimparDns" Content="Limpar cache do DNS" Margin="4" Padding="10,14"/>
                                 <Button x:Name="BotaoSincronizarHora" Content="Sincronizar hora com a internet" Margin="4" Padding="10,14"/>
+                                <Button x:Name="BotaoBackupDrivers" Content="Exportar backup de drivers" Margin="4" Padding="10,14" ToolTip="Exporta drivers de terceiros para uma pasta escolhida, sem instalar nem remover drivers."/>
                             </UniformGrid>
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="Dica: limpeza de disco profunda e a limpeza DISM soltam bastante espaco em pcs que nunca passaram por manutencao, mas sao lentas; deixe rodar com paciencia."/>
                         </StackPanel>

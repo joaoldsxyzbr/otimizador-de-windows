@@ -115,6 +115,7 @@ function Obter-InventarioLocal {
         servicos = @()
         tarefas = @()
         discos = @()
+        rede = @()
         avisos = @()
     }
     try {
@@ -136,5 +137,10 @@ function Obter-InventarioLocal {
             [pscustomobject]@{ unidade = $_.DeviceID; capacidadeGB = [math]::Round($_.Size / 1GB, 2); livreGB = [math]::Round($_.FreeSpace / 1GB, 2) }
         })
     } catch { $relatorio.avisos += 'Nao foi possivel consultar discos.' }
+    try {
+        $relatorio.rede = @(Get-NetAdapter -ErrorAction Stop | Sort-Object Name | ForEach-Object {
+            [pscustomobject]@{ nome = $_.Name; estado = $_.Status.ToString(); velocidadeLink = [string]$_.LinkSpeed }
+        })
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar adaptadores de rede.' }
     return [pscustomobject]$relatorio
 }

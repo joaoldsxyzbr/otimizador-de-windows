@@ -545,7 +545,7 @@ function Clique-InventarioLocal {
         $caixa.HorizontalScrollBarVisibility = 'Auto'
         $caixa.FontFamily = 'Consolas'
         $linhas = @('Inventario local (somente leitura). Revise antes de compartilhar.', '')
-        foreach ($grupo in @('inicializacao','servicos','tarefas','discos')) {
+        foreach ($grupo in @('inicializacao','servicos','tarefas','discos','rede')) {
             $linhas += ('--- {0} ({1}) ---' -f $grupo, @($dados.$grupo).Count)
             $linhas += (($dados.$grupo | Format-Table -AutoSize | Out-String -Width 220).Trim())
             $linhas += ''
@@ -559,6 +559,37 @@ function Clique-InventarioLocal {
     } catch {
         Log ('falha ao exibir inventario: ' + $_.Exception.Message) -Erro
         Status 'falha no inventario.'
+    }
+}
+
+# Exporta drivers de terceiros do Driver Store. Nunca instala ou remove drivers.
+function Clique-BackupDrivers {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $escolher = New-Object System.Windows.Forms.FolderBrowserDialog
+        try {
+            $escolher.Description = 'Escolha uma pasta para o backup dos drivers de terceiros'
+            if ($escolher.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+            $pasta = Join-Path $escolher.SelectedPath ('drivers-otimizadorpc-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,8))
+        } finally { $escolher.Dispose() }
+        if (-not (Perguntar 'Backup de drivers' ('Exportar drivers de terceiros? Pode ocupar varios GB. A pasta sera criada em: ' + $pasta))) { return }
+        $global:Janela.IsEnabled = $false
+        try {
+            Ocupado $true
+            Status 'exportando drivers...'
+            New-Item -ItemType Directory -Path $pasta -ErrorAction Stop | Out-Null
+            $drivers = @(Export-WindowsDriver -Online -Destination $pasta -ErrorAction Stop)
+            Log ('exportacao de drivers: ' + $pasta + ' (' + $drivers.Count + ' pacote(s) informado(s)).')
+            Status 'exportacao de drivers concluida.'
+        } finally {
+            $global:Janela.IsEnabled = $true
+            Ocupado $false
+        }
+        Avisar 'Backup concluido' ('Confira os arquivos em: ' + $pasta + '. O backup nao inclui todos os drivers nativos do Windows.')
+    } catch {
+        Log ('falha no backup de drivers: ' + $_.Exception.Message) -Erro
+        Status 'backup de drivers incompleto.'
+        Avisar 'Falha no backup' 'Confira o log. Arquivos parcialmente exportados foram preservados.'
     }
 }
 
@@ -630,6 +661,7 @@ function Ligar-Tudo {
     $global:UI.BotaoLimparTemp.Add_Click({ Limpar-Temporarios })
     $global:UI.BotaoLimparDns.Add_Click({ Limpar-DNS; Status 'dns limpo.' })
     $global:UI.BotaoSincronizarHora.Add_Click({ Sincronizar-Hora })
+    $global:UI.BotaoBackupDrivers.Add_Click({ Clique-BackupDrivers })
     $global:UI.BotaoRecuperarIcones.Add_Click({ Recuperar-CacheIcones })
     $global:UI.BotaoLimpezaDisco.Add_Click({ Limpeza-Disco })
     $global:UI.BotaoVerificarDisco.Add_Click({ Verificar-Disco })
