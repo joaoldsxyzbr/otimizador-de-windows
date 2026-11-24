@@ -6,9 +6,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, desenvolvimento-v2]
   pull_request:
-    branches: [main]
+    branches: [main, desenvolvimento-v2]
   workflow_dispatch:
 
 jobs:
@@ -66,7 +66,7 @@ jobs:
       - name: simulacao nao pode ter gravado journal
         shell: powershell
         run: |
-          $journals = @(Get-ChildItem "$env:ProgramData\otimizadorpc\desfazer" -Filter '*.json' -ErrorAction SilentlyContinue)
+          $journals = @(Get-ChildItem "$env:ProgramData\otimizadorpc-v2\desfazer" -Filter '*.json' -ErrorAction SilentlyContinue)
           if ($journals.Count -gt 0) {
             Write-Host ('FALHOU: modo simular gravou ' + $journals.Count + ' journal(s)')
             exit 1
@@ -99,6 +99,6 @@ jobs:
         with:
           name: journal-do-teste
           path: |
-            C:/ProgramData/otimizadorpc/desfazer/*
-            C:/ProgramData/otimizadorpc/logs/*.log
+            C:/ProgramData/otimizadorpc-v2/desfazer/*
+            C:/ProgramData/otimizadorpc-v2/logs/*.log
           if-no-files-found: ignore
