@@ -3,16 +3,66 @@
 
 $global:PastaApp      = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $global:PastaDados    = Join-Path $global:PastaApp 'data'
-$global:PastaLog      = Join-Path $env:ProgramData 'otimizadorpc\logs'
-$global:PastaDesfazer = Join-Path $env:ProgramData 'otimizadorpc\desfazer'
+$global:RaizEstado = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)) 'otimizadorpc-v2'
+$global:PastaLog = Join-Path $global:RaizEstado 'logs'
+$global:PastaDesfazer = Join-Path $global:RaizEstado 'desfazer'
+$global:PastaQuarantena = Join-Path $global:RaizEstado 'quarentena'
 $global:ArquivoLog    = Join-Path $global:PastaLog ("otimizadorpc-" + (Get-Date -Format 'yyyy-MM-dd') + ".log")
 $global:VersaoOtimizador = '2.0.0-rc.3'
 $global:ErrosSessao   = 0
 $global:UI            = @{}
 
+# Estado novo com ACL explicita. Nao confia retroativamente em journals antigos.
+function Nova-ACLPrivada {
+    $acl = New-Object Security.AccessControl.DirectorySecurity
+    $acl.SetAccessRuleProtection($true,$false)
+    $admin = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+    $sistema = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+    $ownerRights = [Security.Principal.SecurityIdentifier]::new('S-1-3-4')
+    $acl.SetOwner($admin)
+    $heranca = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    foreach ($sid in @($admin,$sistema)) {
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,[Security.AccessControl.FileSystemRights]::FullControl,$heranca,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))
+    }
+    # OWNER RIGHTS restringe o WRITE_DAC implicito do proprietario individual.
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($ownerRights,[Security.AccessControl.FileSystemRights]::ReadPermissions,$heranca,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))
+    return $acl
+}
+
+function Verificar-PastaPrivada {
+    param([string]$Pasta)
+    $item = Get-Item -LiteralPath $Pasta -Force -ErrorAction Stop
+    if (-not $item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw ('Pasta de estado invalida: ' + $Pasta) }
+    $acl = Get-Acl -LiteralPath $Pasta -ErrorAction Stop
+    if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @('S-1-5-32-544','S-1-5-18') -or -not $acl.AreAccessRulesProtected) {
+        throw ('Proprietario ou heranca insegura na pasta de estado: ' + $Pasta)
+    }
+    $regras = @($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+    $esperados = @('S-1-5-32-544','S-1-5-18','S-1-3-4')
+    foreach ($regra in $regras) {
+        $sid = $regra.IdentityReference.Value
+        if ($sid -notin $esperados -or $regra.AccessControlType -ne 'Allow') { throw ('ACL inesperada na pasta de estado: ' + $Pasta) }
+        if ($regra.InheritanceFlags -ne [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit' -or $regra.PropagationFlags -ne 'None') { throw 'Heranca de ACL insegura.' }
+        $direitos = if ($sid -eq 'S-1-3-4') { [Security.AccessControl.FileSystemRights]::ReadPermissions -bor [Security.AccessControl.FileSystemRights]::Synchronize } else { [Security.AccessControl.FileSystemRights]::FullControl }
+        if ($regra.FileSystemRights -ne $direitos) { throw ('Direitos inesperados na pasta de estado: ' + $Pasta) }
+    }
+    foreach ($sid in $esperados) {
+        if (@($regras | Where-Object { $_.IdentityReference.Value -eq $sid }).Count -ne 1) { throw ('ACL incompleta: ' + $Pasta) }
+    }
+}
+
+function Garantir-PastaPrivada {
+    param([string]$Pasta)
+    if (-not (Test-Path -LiteralPath $Pasta)) {
+        [void][IO.Directory]::CreateDirectory($Pasta,(Nova-ACLPrivada))
+    }
+    Verificar-PastaPrivada $Pasta
+}
+
 function Garantir-Pastas {
-    foreach ($p in @($global:PastaLog, $global:PastaDesfazer)) {
-        if (-not (Test-Path $p)) { New-Item -Path $p -ItemType Directory -Force | Out-Null }
+    Garantir-PastaPrivada $global:RaizEstado
+    foreach ($p in @($global:PastaLog, $global:PastaDesfazer, $global:PastaQuarantena)) {
+        Garantir-PastaPrivada $p
     }
 }
 

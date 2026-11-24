@@ -514,6 +514,31 @@ try {
     Passou 'console preserva falhas PowerShell e de executaveis nativos'
 } catch { Falhou 'resultado de comandos nativos' $_.Exception.Message }
 
+# ---- ACL do estado administrativo (apenas em console elevado) ----
+Secao 'protecao do estado'
+try {
+    $ident = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($ident)
+    if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        & {
+            . (Join-Path $raiz 'src\modules\comum.ps1')
+            $tmpAcl = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-acl-' + [guid]::NewGuid().ToString('N'))
+            try {
+                New-Item -ItemType Directory -Path $tmpAcl -ErrorAction Stop | Out-Null
+                $recusou = $false
+                try { Verificar-PastaPrivada $tmpAcl } catch { $recusou = $true }
+                if (-not $recusou) { throw 'Pasta com ACL herdada foi aceita.' }
+                Remove-Item -LiteralPath $tmpAcl -Force -ErrorAction Stop
+                Garantir-PastaPrivada $tmpAcl
+                Verificar-PastaPrivada $tmpAcl
+                Garantir-PastaPrivada $tmpAcl
+                Passou 'ACL privada aceita; pasta herdada recusada'
+            } finally { if (Test-Path -LiteralPath $tmpAcl) { Remove-Item -LiteralPath $tmpAcl -Recurse -Force } }
+            if (@(Get-ChildItem -LiteralPath $global:PastaDesfazer -File -Filter '*.json' -ErrorAction SilentlyContinue).Count -gt 0 -and $env:GITHUB_ACTIONS -eq 'true') { throw 'Simulacao criou journal no estado novo.' }
+        }
+    } else { Write-Host '  [info]   teste de ACL requer administrador.' }
+} catch { Falhou 'protecao do estado' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

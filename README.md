@@ -27,7 +27,7 @@ Para testar a variante em memoria em uma copia local, abra Windows PowerShell 5.
 & ([scriptblock]::Create([IO.File]::ReadAllText((Resolve-Path 'dist\otimizadorpc.ps1')))) -Cli essencial -Simular
 ```
 
-Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O modo remoto nao carrega tweaks customizados locais; os logs, journals e backups permanecem no ProgramData.
+Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O modo remoto nao carrega tweaks customizados locais; os logs, journals e backups permanecem em ProgramData\otimizadorpc-v2.
 
 O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/latest/download/otimizadorpc.ps1 | iex` **somente depois de uma release estavel contendo esse asset ser publicada**. A publicacao automatica esta configurada e a primeira pre-release foi publicada. O comando direto executa codigo remoto sem conferir o hash automaticamente: revise a origem e a versao antes de executar como administrador.
 
@@ -61,6 +61,7 @@ nao quer janela? modo cli:
 ## desenvolvimento v2 (pre-release)
 
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- estado administrativo: a nova pasta ProgramData\otimizadorpc-v2 exige ACL restrita a administradores/SYSTEM, sem confiar automaticamente no estado antigo. Os arquivos anteriores em ProgramData\otimizadorpc permanecem intactos, mas precisam de recuperacao manual/revisao; nao copie journals antigos para a pasta nova.
 - manutencao: erros nativos e PowerShell propagados ao console; reset de Windows Update preserva caches com nomes unicos e tenta reiniciar somente os servicos que estavam ativos. Limpeza rapida de temporarios limitada a arquivos na raiz, sem seguir links. Reset de rede exige confirmacao.
 - operacoes mutaveis da interface passam por um controlador que evita reentrada; codigos de saida de desinstaladores e comandos sao verificados.
 - ajustes com reversao aproximada ficam fora dos presets (hibernacao, svchost, F8 e armazenamento reservado). Efeitos visuais, telemetria do PowerShell e tipo padrao de pastas usam valores de registro com snapshot.

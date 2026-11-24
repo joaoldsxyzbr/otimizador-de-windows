@@ -2,7 +2,8 @@
 # rastros apagados vao para uma pasta de quarantena (arquivos movidos, registro exportado em .reg);
 # a aba Desfazer tudo restaura a partir do journal da sessao
 
-$global:PastaQuarantena = Join-Path $env:ProgramData 'otimizadorpc\quarantena'
+if (-not $global:RaizEstado) { $global:RaizEstado = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)) 'otimizadorpc-v2' }
+$global:PastaQuarantena = Join-Path $global:RaizEstado 'quarentena'
 
 # ---- listagem dos programas instalados ----
 
@@ -654,9 +655,9 @@ function Clique-ApagarRastros {
     $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
 
-    if (-not (Test-Path $global:PastaQuarantena)) { New-Item -Path $global:PastaQuarantena -ItemType Directory -Force | Out-Null }
+    Garantir-PastaPrivada $global:PastaQuarantena
     $pastaSessao = Join-Path $global:PastaQuarantena ((Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,12))
-    New-Item -Path $pastaSessao -ItemType Directory -Force | Out-Null
+    Garantir-PastaPrivada $pastaSessao
 
     Status 'limpando rastros...'
     Ocupado $true

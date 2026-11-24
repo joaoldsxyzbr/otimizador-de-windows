@@ -40,4 +40,4 @@ Para testar uma pre-release, use o endereco do asset mostrado na propria release
 
 ## Limites
 
-O script online executa em memoria e dispensa instalacao; logs e backups permanecem em ProgramData. A verificacao SHA256 do arquivo nao substitui assinatura digital. O modo online exige Windows PowerShell 5.1 elevado, nao carrega custom .reg e nao atualiza o app automaticamente.
+O script online executa em memoria e dispensa instalacao; logs e backups permanecem em ProgramData\otimizadorpc-v2; estado legado nao e importado automaticamente. A verificacao SHA256 do arquivo nao substitui assinatura digital. O modo online exige Windows PowerShell 5.1 elevado, nao carrega custom .reg e nao atualiza o app automaticamente.

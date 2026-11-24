@@ -93,6 +93,7 @@ function Iniciar-Sessao {
 # arquivo vazio quando o usuario cancela antes de mexer em nada)
 function Obter-ArquivoSessao {
     if (-not [string]::IsNullOrWhiteSpace($global:SessaoArquivo)) { return $global:SessaoArquivo }
+    Verificar-PastaPrivada $global:PastaDesfazer
     $global:SessaoArquivo = Join-Path $global:PastaDesfazer ("{0}_{1}.json" -f $global:CarimboSessao, ($global:RotuloSessao -replace '[^a-z0-9-]', ''))
     return $global:SessaoArquivo
 }
@@ -153,7 +154,8 @@ function Salvar-Sessao {
 
 function Listar-Sessoes {
     if (-not (Test-Path $global:PastaDesfazer)) { return @() }
-    return @(Get-ChildItem -Path $global:PastaDesfazer -Filter '*.json' | Sort-Object LastWriteTime -Descending)
+    Verificar-PastaPrivada $global:PastaDesfazer
+    return @(Get-ChildItem -LiteralPath $global:PastaDesfazer -File -Filter '*.json' | Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } | Sort-Object LastWriteTime -Descending)
 }
 
 # descreve em texto o que uma acao faria (usado no modo simulacao)
