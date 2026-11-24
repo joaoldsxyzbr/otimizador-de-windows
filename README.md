@@ -81,7 +81,7 @@ nao quer janela? modo cli:
 - comparativo antes/depois na pagina inicial: salva referencia JSON e compara medias de CPU, RAM, processos e espaco livre. Nao e benchmark; repita sob condicoes semelhantes. O arquivo inclui nome do PC. Consultas de medicao e armazenamento usam runspace separado, com cancelamento.
 - analisador de arquivos grandes na aba Manutencao: somente leitura, ate 30 maiores arquivos, limite de tempo e itens, sem seguir links/junctions; resultados parciais identificados.
 - backup de drivers de terceiros na aba Manutencao, usando Export-WindowsDriver. Escolha a pasta de destino; nao reinstala drivers automaticamente.
-- inventario local de inicializacao, servicos, tarefas, discos e adaptadores de rede, exportacao JSON sob demanda e atalhos para ferramentas nativas. O inventario nao altera o Windows; revise o relatorio antes de compartilhar.
+- teste sintetico padronizado de SHA256 e copia de memoria, tres rodadas com exportacao JSON. Nao representa FPS; compare sob condicoes iguais. Backup de drivers usa runspace sem interromper a exportacao.
 - diagnostico local na pagina inicial: memoria, espaco em disco, entradas de inicializacao e sinais de reinicio pendente.
 - detalhes da sessao e quarentena: inspecione os itens, estados de reversao e existencia dos backups sem excluir nada.
 - reversao individual: desfaz apenas a ultima acao pendente da sessao, respeitando a ordem inversa; nao permite escolher uma acao arbitraria.

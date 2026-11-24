@@ -249,6 +249,31 @@ function Medir-EstadoSistema {
     }
 }
 
+# Carga fixa em memoria; nao mede FPS nem desempenho geral.
+function Medir-CargaPadronizada {
+    param([ValidateRange(1,16)][int]$MiB=8,[ValidateRange(1,32)][int]$Repeticoes=16)
+    $dados=New-Object byte[] ($MiB*1MB)
+    $destino=New-Object byte[] ($dados.Length)
+    for ($i=0; $i -lt $dados.Length; $i+=4096) { $dados[$i]=[byte](($i/4096)%251) }
+    $sha=[Security.Cryptography.SHA256]::Create()
+    $rodadas=@()
+    try {
+        [void]$sha.ComputeHash($dados)
+        [Buffer]::BlockCopy($dados,0,$destino,0,$dados.Length)
+        for ($r=1; $r -le 3; $r++) {
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            for ($j=0; $j -lt $Repeticoes; $j++) { [void]$sha.ComputeHash($dados) }
+            $sw.Stop()
+            $hashMs=[math]::Round($sw.Elapsed.TotalMilliseconds,3)
+            $sw.Restart()
+            for ($j=0; $j -lt ($Repeticoes*4); $j++) { [Buffer]::BlockCopy($dados,0,$destino,0,$dados.Length) }
+            $sw.Stop()
+            $rodadas += [pscustomobject]@{ rodada=$r; hashMs=$hashMs; copiaMemoriaMs=[math]::Round($sw.Elapsed.TotalMilliseconds,3) }
+        }
+    } finally { $sha.Dispose() }
+    return [pscustomobject]@{ formato='otimizadorpc-carga-v1'; criado=(Get-Date -Format 'o'); maquina=$env:COMPUTERNAME; build=[Environment]::OSVersion.Version.Build; MiB=$MiB; repeticoes=$Repeticoes; rodadas=$rodadas }
+}
+
 function Comparar-Medicoes {
     param($Antes, $Depois)
     foreach ($item in @($Antes,$Depois)) {

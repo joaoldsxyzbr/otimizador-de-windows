@@ -43,3 +43,5 @@ Para testar uma pre-release, use o endereco do asset mostrado na propria release
 O script online executa em memoria e dispensa instalacao; logs e backups permanecem em ProgramData\otimizadorpc-v2; estado legado nao e importado automaticamente. A verificacao SHA256 do arquivo nao substitui assinatura digital. O modo online exige Windows PowerShell 5.1 elevado, nao carrega custom .reg e nao atualiza o app automaticamente.
 
 O CI deve conferir a nova pasta de estado `ProgramData\otimizadorpc-v2` para journals e logs; os caminhos antigos dos artefatos de CI precisam ser atualizados pelo mantenedor. O teste offline verifica a pasta nova no runner.
+
+RC.5: validar manualmente os dois temas, os botoes de gerenciador (Run do usuario, servicos do catalogo e tarefas descartaveis), o cancelamento entre acoes, o monitor, o teste sintetico e o download verificado. A escolha de atualizar permanece explicita; nunca executar um download automaticamente como administrador.

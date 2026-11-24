@@ -312,6 +312,7 @@
                                 <StackPanel Margin="6,8">
                                     <TextBlock x:Name="InfoDiagnostico" Foreground="#d1d5db" TextWrapping="Wrap" Text="Coletando informacoes..."/>
                                     <Button x:Name="BotaoInventario" Content="Inventario e ferramentas do Windows" HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                                    <Button x:Name="BotaoCarga" Content="Teste de carga padronizado (CPU e memoria)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMonitor" Content="Monitor de recursos (10 amostras)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMedicoes" Content="Comparar antes e depois dos ajustes" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoVerificarRelease" Content="Consultar e baixar versao oficial" HorizontalAlignment="Left" Margin="0,6,0,0"/>

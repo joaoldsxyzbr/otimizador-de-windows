@@ -689,6 +689,14 @@ try {
     }
 } catch { Falhou 'temas' $_.Exception.Message }
 
+# ---- carga padronizada reduzida para CI ----
+Secao 'teste de carga padronizada'
+try {
+    $med=Medir-CargaPadronizada -MiB 1 -Repeticoes 1
+    if ($med.formato -ne 'otimizadorpc-carga-v1' -or @($med.rodadas).Count -ne 3 -or @($med.rodadas | Where-Object { $_.hashMs -lt 0 -or $_.copiaMemoriaMs -lt 0 }).Count -gt 0) { throw 'Resultado invalido.' }
+    Passou 'carga fixa produz tres rodadas sem tocar arquivos'
+} catch { Falhou 'teste de carga padronizada' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

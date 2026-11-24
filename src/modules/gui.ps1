@@ -710,7 +710,7 @@ function Clique-BackupDrivers {
             Ocupado $true
             Status 'exportando drivers...'
             New-Item -ItemType Directory -Path $pasta -ErrorAction Stop | Out-Null
-            $drivers = @(Export-WindowsDriver -Online -Destination $pasta -ErrorAction Stop)
+            $drivers = @(Executar-ConsultaLocal -Titulo 'Exportando drivers' -Codigo { param([string]$Destino) Export-WindowsDriver -Online -Destination $Destino -ErrorAction Stop } -Parametros @{Destino=$pasta} -Mensagem 'Copiando drivers para a pasta escolhida. Nao interrompa a exportacao.' -SemCancelar)
             Log ('exportacao de drivers: ' + $pasta + ' (' + $drivers.Count + ' pacote(s) informado(s)).')
             Status 'exportacao de drivers concluida.'
         } finally {
@@ -813,7 +813,7 @@ function Clique-DetalhesSessao {
 
 # Executa consultas somente leitura em um runspace separado, com janela modal.
 function Executar-ConsultaLocal {
-    param([string]$Titulo, [scriptblock]$Codigo, [hashtable]$Parametros = @{})
+    param([string]$Titulo, [scriptblock]$Codigo, [hashtable]$Parametros = @{}, [string]$Mensagem='Consultando o sistema. Nenhuma alteracao sera aplicada.', [switch]$SemCancelar)
     $ps = [PowerShell]::Create()
     $estado = @{ cancelado=$false; resultado=$null; erro=$null; terminou=$false; parada=$null }
     $dlg = New-Object System.Windows.Window
@@ -826,7 +826,7 @@ function Executar-ConsultaLocal {
     $painel = New-Object System.Windows.Controls.StackPanel
     $painel.Margin = '16'
     $mensagem = New-Object System.Windows.Controls.TextBlock
-    $mensagem.Text = 'Consultando o sistema. Nenhuma alteracao sera aplicada.'
+    $mensagem.Text = $Mensagem
     $mensagem.TextWrapping = 'Wrap'
     [void]$painel.Children.Add($mensagem)
     $barra = New-Object System.Windows.Controls.ProgressBar
@@ -836,6 +836,7 @@ function Executar-ConsultaLocal {
     [void]$painel.Children.Add($barra)
     $cancelar = New-Object System.Windows.Controls.Button
     $cancelar.Content = 'Cancelar'
+    if ($SemCancelar) { $cancelar.IsEnabled=$false; $cancelar.Content='Aguarde a conclusao' }
     [void]$painel.Children.Add($cancelar)
     $dlg.Content = $painel
     $timer = New-Object System.Windows.Threading.DispatcherTimer
@@ -845,7 +846,7 @@ function Executar-ConsultaLocal {
         foreach ($chave in $Parametros.Keys) { [void]$ps.AddParameter($chave,$Parametros[$chave]) }
         $async = $ps.BeginInvoke()
         $pedirCancelamento = {
-            if (-not $estado.cancelado -and -not $async.IsCompleted) {
+            if (-not $SemCancelar -and -not $estado.cancelado -and -not $async.IsCompleted) {
                 $estado.cancelado = $true
                 $cancelar.IsEnabled = $false
                 $mensagem.Text = 'Cancelando consulta...'
@@ -935,6 +936,21 @@ function Clique-VerificarRelease {
             Avisar 'Download verificado' 'Script salvo; nenhuma atualizacao foi executada. SHA256 verifica integridade, nao substitui assinatura digital. Revise o codigo antes de executar.'
         }
     } catch { Avisar 'Falha na consulta/download' $_.Exception.Message }
+}
+
+function Clique-CargaPadronizada {
+    try {
+        if (-not (Perguntar 'Teste de carga' 'Executar tres rodadas de SHA256 e copia de memoria? Feche outras tarefas para comparacao. Este teste sintetico nao representa FPS ou desempenho geral.')) { return }
+        $res=@(Executar-ConsultaLocal -Titulo 'Teste de carga padronizada' -Codigo ${function:Medir-CargaPadronizada})
+        if ($res.Count -ne 1) { return }
+        $dados=$res[0]
+        $linhas=$dados.rodadas | Format-Table -AutoSize | Out-String -Width 100
+        if (Perguntar 'Resultados (ms) - salvar?' ($linhas + "`nMenor tempo e melhor neste teste especifico. Repita com mesma energia, temperatura e programas abertos. Exportar JSON?")) {
+            $salvar=New-Object Microsoft.Win32.SaveFileDialog
+            $salvar.Filter='Teste JSON (*.json)|*.json'; $salvar.FileName='otimizadorpc-carga.json'
+            if ($salvar.ShowDialog()) { Gravar-JSONAtomico -Arquivo $salvar.FileName -Objeto $dados }
+        }
+    } catch { Avisar 'Teste indisponivel' $_.Exception.Message }
 }
 
 function Clique-MonitorSistema {
@@ -1081,6 +1097,7 @@ function Ligar-Tudo {
     $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
     $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
     $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
+    $global:UI.BotaoCarga.Add_Click({ Clique-CargaPadronizada })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
         Executar-OperacaoUI { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false }; Preencher-PaginaInicio }
