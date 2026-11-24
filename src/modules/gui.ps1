@@ -487,6 +487,81 @@ function Clique-Desfazer {
 
 # ---- ligacao geral (chamada pelo script principal) ----
 
+# Consulta sob demanda; nenhuma alteracao automatica em servicos ou tarefas.
+function Clique-InventarioLocal {
+    try {
+        Status 'coletando inventario local...'
+        $global:Janela.IsEnabled = $false
+        try { $dados = Obter-InventarioLocal }
+        finally { $global:Janela.IsEnabled = $true }
+        $dlg = New-Object System.Windows.Window
+        $dlg.Title = 'Inventario local - OtimizadorPC'
+        $dlg.Owner = $global:Janela
+        $dlg.WindowStartupLocation = 'CenterOwner'
+        $dlg.Width = 760
+        $dlg.Height = 560
+        $dlg.MaxWidth = [System.Windows.SystemParameters]::WorkArea.Width
+        $dlg.MaxHeight = [System.Windows.SystemParameters]::WorkArea.Height
+        $painel = New-Object System.Windows.Controls.DockPanel
+        $painel.Margin = '12'
+        $barra = New-Object System.Windows.Controls.WrapPanel
+        [System.Windows.Controls.DockPanel]::SetDock($barra, 'Top')
+        [void]$painel.Children.Add($barra)
+        $salvar = New-Object System.Windows.Controls.Button
+        $salvar.Content = 'Exportar JSON'
+        $salvar.Padding = '10,6'
+        $salvar.Margin = '0,0,8,8'
+        $salvar.Tag = $dados
+        $salvar.Add_Click({
+            $arq = New-Object Microsoft.Win32.SaveFileDialog
+            $arq.Filter = 'Inventario JSON (*.json)|*.json'
+            $arq.FileName = 'inventario-otimizadorpc.json'
+            if ($arq.ShowDialog()) {
+                try { Gravar-JSONAtomico -Arquivo $arq.FileName -Objeto $this.Tag; Log 'inventario exportado.' }
+                catch { Avisar 'Falha na exportacao' $_.Exception.Message }
+            }
+        })
+        [void]$barra.Children.Add($salvar)
+        foreach ($atalho in @(
+            @{ nome='Inicializacao'; comando='taskmgr.exe' },
+            @{ nome='Servicos'; comando='services.msc' },
+            @{ nome='Tarefas'; comando='taskschd.msc' }
+        )) {
+            $botao = New-Object System.Windows.Controls.Button
+            $botao.Content = $atalho.nome
+            $botao.Tag = $atalho.comando
+            $botao.Padding = '10,6'
+            $botao.Margin = '0,0,8,8'
+            $botao.Add_Click({
+                try { Start-Process -FilePath ([string]$this.Tag) -ErrorAction Stop | Out-Null }
+                catch { Avisar 'Falha ao abrir ferramenta' $_.Exception.Message }
+            })
+            [void]$barra.Children.Add($botao)
+        }
+        $caixa = New-Object System.Windows.Controls.TextBox
+        $caixa.IsReadOnly = $true
+        $caixa.AcceptsReturn = $true
+        $caixa.VerticalScrollBarVisibility = 'Auto'
+        $caixa.HorizontalScrollBarVisibility = 'Auto'
+        $caixa.FontFamily = 'Consolas'
+        $linhas = @('Inventario local (somente leitura). Revise antes de compartilhar.', '')
+        foreach ($grupo in @('inicializacao','servicos','tarefas','discos')) {
+            $linhas += ('--- {0} ({1}) ---' -f $grupo, @($dados.$grupo).Count)
+            $linhas += (($dados.$grupo | Format-Table -AutoSize | Out-String -Width 220).Trim())
+            $linhas += ''
+        }
+        $linhas += @($dados.avisos)
+        $caixa.Text = ($linhas -join [Environment]::NewLine)
+        [void]$painel.Children.Add($caixa)
+        $dlg.Content = $painel
+        Status 'inventario coletado.'
+        [void]$dlg.ShowDialog()
+    } catch {
+        Log ('falha ao exibir inventario: ' + $_.Exception.Message) -Erro
+        Status 'falha no inventario.'
+    }
+}
+
 function Ligar-Tudo {
 
     # navegacao da barra lateral
@@ -566,6 +641,7 @@ function Ligar-Tudo {
     $global:UI.BotaoAtualizarListaSessoes.Add_Click({ Atualizar-ListaDesfazer; Log 'lista de sessoes atualizada.' })
 
     # pagina inicio
+    $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
     $global:UI.BotaoCriarRestore.Add_Click({
         Ocupado $true
         [void](Criar-PontoRestauracao)

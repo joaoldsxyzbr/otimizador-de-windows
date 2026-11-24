@@ -105,3 +105,36 @@ function Preencher-PaginaInicio {
         Log ('falha ao coletar informacoes do sistema: ' + $_.Exception.Message) -Erro
     }
 }
+
+# Inventario local, sem comandos de inicializacao, usuarios ou credenciais.
+function Obter-InventarioLocal {
+    $relatorio = [ordered]@{
+        criado = (Get-Date -Format 'o')
+        windows = (Nome-Windows)
+        inicializacao = @()
+        servicos = @()
+        tarefas = @()
+        discos = @()
+        avisos = @()
+    }
+    try {
+        $relatorio.inicializacao = @(Get-CimInstance Win32_StartupCommand -ErrorAction Stop |
+            Select-Object Name, Location | Sort-Object Name)
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar entradas de inicializacao.' }
+    try {
+        $relatorio.servicos = @(Get-Service -ErrorAction Stop | Sort-Object Name | ForEach-Object {
+            [pscustomobject]@{ nome = $_.Name; descricao = $_.DisplayName; estado = $_.Status.ToString(); inicio = $_.StartType.ToString() }
+        })
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar servicos.' }
+    try {
+        $relatorio.tarefas = @(Get-ScheduledTask -ErrorAction Stop | Sort-Object TaskPath, TaskName | ForEach-Object {
+            [pscustomobject]@{ nome = $_.TaskName; caminho = $_.TaskPath; estado = $_.State.ToString() }
+        })
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar tarefas agendadas.' }
+    try {
+        $relatorio.discos = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction Stop | ForEach-Object {
+            [pscustomobject]@{ unidade = $_.DeviceID; capacidadeGB = [math]::Round($_.Size / 1GB, 2); livreGB = [math]::Round($_.FreeSpace / 1GB, 2) }
+        })
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar discos.' }
+    return [pscustomobject]$relatorio
+}
