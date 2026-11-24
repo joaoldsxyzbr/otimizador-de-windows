@@ -154,12 +154,43 @@ function Gravar-SessaoArquivo {
         rotulo = $global:RotuloSessao
         itens  = @($global:SessaoItens)
     }
-    Gravar-JSONAtomico -Arquivo $arquivo -Objeto $obj
+    Gravar-JournalSeguro -Arquivo $arquivo -Objeto $obj
     return $arquivo
 }
 
+# Make the file ACL explicit: NTFS inheritance and File.Replace can differ by host.
+function Nova-ACLJournal {
+    $acl=New-Object Security.AccessControl.FileSecurity
+    $acl.SetAccessRuleProtection($true,$false)
+    $admin=[Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+    $sistema=[Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+    $owner=[Security.Principal.SecurityIdentifier]::new('S-1-3-4')
+    $acl.SetOwner($admin)
+    foreach ($sid in @($admin,$sistema)) {
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,[Security.AccessControl.FileSystemRights]::FullControl,[Security.AccessControl.AccessControlType]::Allow))
+    }
+    $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($owner,[Security.AccessControl.FileSystemRights]::ReadPermissions,[Security.AccessControl.AccessControlType]::Allow))
+    return $acl
+}
+
+function Gravar-JournalSeguro {
+    param([string]$Arquivo,$Objeto)
+    $pasta=[IO.Path]::GetFullPath($global:PastaDesfazer).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Arquivo)
+    if ([IO.Path]::GetDirectoryName($full) -ine $pasta -or [IO.Path]::GetExtension($full) -ine '.json' -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Destino de journal invalido.'}
+    Verificar-PastaPrivada $pasta
+    if (Test-Path -LiteralPath $full) {[void](Confirmar-ArquivoJournal $full)}
+    $backup=$full+'.bak'
+    if (Test-Path -LiteralPath $backup) {
+        $b=Get-Item -LiteralPath $backup -Force -ErrorAction Stop
+        if ($b.PSIsContainer -or ($b.Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Backup de journal redirecionado.'}
+    }
+    Gravar-JSONAtomico -Arquivo $full -Objeto $Objeto -AclJournal
+    [void](Confirmar-ArquivoJournal $full)
+}
+
 function Gravar-JSONAtomico {
-    param([string]$Arquivo, $Objeto)
+    param([string]$Arquivo, $Objeto,[switch]$AclJournal)
     Confirmar-PermissaoAlteracao
     $json = ConvertTo-Json -InputObject $Objeto -Depth 12
     # Grava no mesmo volume e publica somente apos fechar e sincronizar.
@@ -171,6 +202,7 @@ function Gravar-JSONAtomico {
             $stream.Write($bytes, 0, $bytes.Length)
             $stream.Flush($true)
         } finally { $stream.Dispose() }
+        if ($AclJournal) {[IO.File]::SetAccessControl($temporario,(Nova-ACLJournal))}
         if ([System.IO.File]::Exists($arquivo)) {
             [System.IO.File]::Replace($temporario, $arquivo, $arquivo + '.bak')
         } else {
@@ -221,9 +253,13 @@ function Confirmar-ArquivoJournal {
         $direitos=if ($sid -eq 'S-1-3-4') {[Security.AccessControl.FileSystemRights]::ReadPermissions -bor [Security.AccessControl.FileSystemRights]::Synchronize} else {[Security.AccessControl.FileSystemRights]::FullControl}
         if ($regra.FileSystemRights -ne $direitos) {throw 'Direitos do journal nao confirmados.'}
     }
-    foreach ($sid in $esperados) {
+    foreach ($sid in @('S-1-5-32-544','S-1-5-18')) {
         if (@($regras | Where-Object {$_.IdentityReference.Value -eq $sid}).Count -ne 1) {throw 'ACL do journal incompleta.'}
     }
+    # Trusted owner needs no OWNER RIGHTS restriction; any other owner does.
+    $dono=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    $ownerRules=@($regras | Where-Object {$_.IdentityReference.Value -eq 'S-1-3-4'}).Count
+    if ($ownerRules -gt 1 -or ($ownerRules -ne 1 -and $dono -notin @('S-1-5-32-544','S-1-5-18'))) {throw 'Proprietario do journal nao protegido.'}
     return $full
 }
 
@@ -896,12 +932,12 @@ function Reverter-Sessao {
                 throw ("Acao {0} com resultado incerto. Revise manualmente antes de continuar." -f $i)
             }
             $item | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force
-            Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+            Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
             if (-not (Desfazer-Item $item)) {
                 throw ("Falha na acao {0}. Journal preservado; revisao manual necessaria." -f $i)
             }
             $item.estadoReversao = 'concluido'
-            Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+            Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
             $feitas++
             Atualizar-UI
             if ($UmaAcao -and $feitas -ge 1) { break }
@@ -935,7 +971,7 @@ function Confirmar-ReversaoManual {
         if ($i -ne $Indice -or $itens[$i].estadoReversao -ne 'em_andamento') { throw 'Somente a ultima acao incerta pode ser confirmada.' }
         $itens[$i].estadoReversao = 'concluido'
         $itens[$i] | Add-Member -NotePropertyName confirmadoManualEm -NotePropertyValue (Get-Date -Format 'o') -Force
-        Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+        Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
         Log ('Acao ' + $i + ' confirmada manualmente pelo usuario, sem repetir a operacao.')
         if (@($itens | Where-Object { $_.estadoReversao -ne 'concluido' }).Count -eq 0) {
             Rename-Item -LiteralPath $Arquivo -NewName ((Split-Path -Leaf $Arquivo) + '.revertido') -ErrorAction Stop

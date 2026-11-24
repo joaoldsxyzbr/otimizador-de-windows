@@ -11,3 +11,5 @@ Pendentes: identidade por alvo em journals antigos, validacao de caminho/ACL do 
 ## Validacao adicional do arquivo
 
 A recuperacao, confirmacao manual e inventario validam o arquivo JSON diretamente dentro da pasta de estado, rejeitam redirecionamento e verificam ACL esperada do arquivo e da pasta. Journals antigos sem ACL esperada ficam indisponiveis para restauracao automatica. Esta barreira nao autentica o conteudo contra um administrador e nao valida todos os backups referenciados; esses requisitos permanecem pendentes. Testes unitarios exercitam caminhos externos/redirecionados; a integracao real exercita journals novos com ACL herdada.
+
+O CI identificou que heranca de ACL de arquivo nao reproduz necessariamente as tres ACEs da pasta. A gravacao de journals agora aplica ACL explicita no arquivo temporario antes da publicacao atomica, valida o destino existente e o resultado publicado. Journals anteriores sem OWNER RIGHTS so podem ser aceitos se o dono for Administradores ou SYSTEM e os demais direitos forem estritamente esperados. Nao flexibiliza ACL para usuarios comuns.

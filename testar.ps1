@@ -307,6 +307,7 @@ try {
         $script:acoesTeste = @()
         # Unit test uses a deliberately isolated temporary folder, not production ACLs.
         function Confirmar-ArquivoJournal {param($Arquivo) return $Arquivo}
+        function Gravar-JournalSeguro {param($Arquivo,$Objeto) Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $Objeto}
         function Desfazer-Item { param($Item) $script:acoesTeste += $Item.tipo; return ($Item.tipo -ne 'falha') }
         $retomar = Join-Path $testeJournal 'retomar.json'
         Gravar-JSONAtomico -Arquivo $retomar -Objeto @{ rotulo = 'teste'; itens = @(@{ tipo = 'pendente' }, @{ tipo = 'ja-feita'; estadoReversao = 'concluido' }) }
