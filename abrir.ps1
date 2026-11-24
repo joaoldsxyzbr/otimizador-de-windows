@@ -10,7 +10,7 @@
     $web = New-Object System.Net.WebClient
     try {
         $tag = $web.DownloadString('https://raw.githubusercontent.com/joaoldsxyzbr/otimizador-de-windows/main/versao-atual.txt').Trim()
-        if ($tag -notmatch '\Av2\.\d+\.\d+(?:-(?:rc|beta|alpha|preview)\.\d+)?\z') {
+        if ($tag -notmatch '\Av\d+\.\d+\.\d+(?:-(?:rc|beta|alpha|preview)\.\d+)?\z') {
             throw 'Versao publicada invalida. Nenhum aplicativo foi executado.'
         }
         $base = 'https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/' + $tag
