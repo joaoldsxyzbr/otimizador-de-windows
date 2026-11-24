@@ -469,8 +469,17 @@ function Desfazer-Item {
             }
 
             'tarefa' {
-                Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
-                Log ("tarefa reativada: {0}{1}" -f [string]$Item.tarefaPath, [string]$Item.tarefaNome)
+                if ($Item.estadoAnterior -eq 'Disabled') {
+                    Disable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
+                } else {
+                    Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
+                }
+                Log ("estado de habilitacao da tarefa restaurado: {0}{1}" -f [string]$Item.tarefaPath, [string]$Item.tarefaNome)
+            }
+
+            'firewall-estado' {
+                Set-NetFirewallRule -PolicyStore PersistentStore -Name $Item.nome -Enabled $Item.ativada -ErrorAction Stop | Out-Null
+                Log ('estado da regra de firewall restaurado: ' + $Item.nome)
             }
 
             'regra-firewall' {

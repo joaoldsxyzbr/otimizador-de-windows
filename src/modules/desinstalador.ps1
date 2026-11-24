@@ -504,9 +504,9 @@ function Apagar-Rastro {
         $svc = Get-Service -Name $Rastro.caminho -ErrorAction Stop
         $estadoAnt = [string]$svc.Status
         $tipoAnt = [string]$svc.StartType
-        if ($estadoAnt -eq 'Running') { Stop-Service -Name $Rastro.caminho -Force -ErrorAction SilentlyContinue }
-        Set-Service -Name $Rastro.caminho -StartupType Disabled -ErrorAction Stop
         Registrar-Jornal ([pscustomobject]@{ tipo = 'servico'; nome = $Rastro.caminho; tipoAnterior = $tipoAnt; estadoAnterior = $estadoAnt; contexto = 'varredura de rastros' })
+        if ($estadoAnt -eq 'Running') { Stop-Service -Name $Rastro.caminho -ErrorAction Stop }
+        Set-Service -Name $Rastro.caminho -StartupType Disabled -ErrorAction Stop
         Log ('servico orfao parado e desativado (desfazer restaura): ' + $Rastro.caminho)
         return
     }
@@ -515,60 +515,40 @@ function Apagar-Rastro {
     if ($Rastro.tipo -eq 'tarefa') {
         $t = Get-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop
         $estadoAnt = [string]$t.State
-        Disable-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop | Out-Null
         Registrar-Jornal ([pscustomobject]@{ tipo = 'tarefa'; tarefaPath = $Rastro.tarefaPath; tarefaNome = $Rastro.tarefaNome; estadoAnterior = $estadoAnt })
+        Disable-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop | Out-Null
         Log ('tarefa agendada desativada (desfazer reativa): ' + $Rastro.caminho)
         return
     }
 
-    # regra de firewall: remove, mas o journal guarda tudo pra recriar igual
+    # Desativa a regra local pelo ID; preserva todos os filtros e propriedades.
     if ($Rastro.tipo -eq 'firewall') {
-        $cands = @(Get-NetFirewallRule -DisplayName $Rastro.caminho -ErrorAction SilentlyContinue)
-        $regras = @()
-        foreach ($c in $cands) {
-            if ([string]$c.DisplayName -ne $Rastro.caminho) { continue }
-            $af = $c | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue
-            if ($null -eq $af) { continue }
-            if ([string]$af.Program -eq $Rastro.programa) { $regras += $c }
-        }
-        if ($regras.Count -eq 0) { Log ('regra de firewall nao encontrada (ja foi?): ' + $Rastro.caminho); return }
+        $regras = @(Get-NetFirewallRule -PolicyStore PersistentStore -ErrorAction Stop | Where-Object { $_.DisplayName -eq $Rastro.caminho })
         foreach ($regra in $regras) {
-            $app = $regra | Get-NetFirewallApplicationFilter
-            $porta = $regra | Get-NetFirewallPortFilter
-            $ender = $regra | Get-NetFirewallAddressFilter
-            $j = [pscustomobject]@{
-                tipo = 'regra-firewall'
-                displayName = [string]$regra.DisplayName
-                dir = [string]$regra.Direction
-                acao = [string]$regra.Action
-                ativada = [string]$regra.Enabled
-                perfil = (@($regra.Profile) -join ',')
-                programa = [string]$app.Program
-                servico = [string]$app.Service
-                protocolo = [string]$porta.Protocol
-                portasLocais = (@($porta.LocalPort) -join ',')
-                portasRemotas = (@($porta.RemotePort) -join ',')
-                ipLocal = (@($ender.LocalAddress) -join ',')
-                ipRemoto = (@($ender.RemoteAddress) -join ',')
-            }
-            Remove-NetFirewallRule -Name $regra.Name -ErrorAction Stop
-            Registrar-Jornal $j
+            $app = $regra | Get-NetFirewallApplicationFilter -ErrorAction Stop
+            if ([string]$app.Program -ne $Rastro.programa) { continue }
+            if ([string]$regra.Enabled -ne 'True') { continue }
+            # Nao desative bloqueios: isso poderia enfraquecer a protecao.
+            if ([string]$regra.Action -ne 'Allow') { continue }
+            Registrar-Jornal ([pscustomobject]@{ tipo = 'firewall-estado'; nome = [string]$regra.Name; ativada = [string]$regra.Enabled })
+            $regra | Disable-NetFirewallRule -ErrorAction Stop | Out-Null
+            Log ('regra local de permissao desativada: ' + $regra.DisplayName)
         }
-        Log ('regra(s) de firewall removida(s) (desfazer recria): ' + $Rastro.caminho)
         return
     }
 
-    # entrada de inicializacao (Run): exporta backup .reg e apaga so o valor
+    # Run: preserva somente o valor removido, nao sobrescreve os outros.
     if ($Rastro.tipo -eq 'run') {
-        if (-not (Test-Path $Rastro.chave)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
-        $nativa = ($Rastro.chave -replace '^([A-Za-z]+):', '$1')
-        $folha = (($Rastro.valor + '_' + $nativa) -replace '[^a-zA-Z0-9_.{}-]', '_')
-        if ($folha.Length -gt 70) { $folha = $folha.Substring($folha.Length - 70) }
-        $arqReg = Join-Path $PastaSessao ('{0:00}_run_{1}.reg' -f $Num, $folha)
-        reg.exe export $nativa $arqReg /y | Out-Null
-        Remove-ItemProperty -Path $Rastro.chave -Name $Rastro.valor -ErrorAction Stop
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg })
-        Log ('entrada de inicializacao removida (backup .reg na quarantena): ' + $Rastro.caminho)
+        $leitura = Ler-ValorRegistro -CaminhoPS $Rastro.chave -Nome $Rastro.valor
+        if (-not $leitura.existia) { Log ('ja sumiu: ' + $Rastro.caminho); return }
+        Registrar-Jornal ([pscustomobject]@{
+            tipo = 'registro'; caminho = $Rastro.chave; nome = $Rastro.valor
+            existia = $true; tipoAnterior = $leitura.tipo
+            valorAnterior = (ConvertTo-Json -InputObject $leitura.valor -Compress)
+            valorAnteriorEstruturado = [pscustomobject]@{ valor = $leitura.valor }
+        })
+        Remove-ItemProperty -LiteralPath $Rastro.chave -Name $Rastro.valor -ErrorAction Stop
+        Log ('entrada de inicializacao removida com journal: ' + $Rastro.caminho)
         return
     }
 
@@ -601,15 +581,17 @@ function Apagar-Rastro {
         if ($folha.Length -gt 70) { $folha = $folha.Substring($folha.Length - 70) }
         $arqReg = Join-Path $PastaSessao ('{0:00}_registro_{1}.reg' -f $Num, $folha)
         reg.exe export $nativa $arqReg /y | Out-Null
-        Remove-Item -Path $Rastro.caminho -Recurse -Force -ErrorAction Stop
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $arqReg -PathType Leaf)) { throw 'Backup do registro falhou; chave preservada.' }
         Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg })
+        Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
         Log ('chave apagada (backup .reg na quarantena): ' + $nativa)
     } else {
         if (-not (Test-Path $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
         $folha = Split-Path -Leaf $Rastro.caminho
         $destino = Join-Path $PastaSessao ('{0:00}_{1}' -f $Num, $folha)
-        Move-Item -Path $Rastro.caminho -Destination $destino -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $destino) { throw 'Destino da quarentena ja existe.' }
         Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino })
+        Move-Item -LiteralPath $Rastro.caminho -Destination $destino -ErrorAction Stop
         Log ('rastro movido pra quarantena: ' + $Rastro.caminho)
     }
 }
@@ -632,11 +614,11 @@ function Clique-ApagarRastros {
     if ($null -ne $global:ProgVarredura) { $nomeProg = [string]$global:ProgVarredura.nome }
     $msg = ('Apagar {0} rastro(s)' -f $selecionados.Count)
     if ($nomeProg -ne '') { $msg = $msg + (' de "{0}"' -f $nomeProg) }
-    $msg = $msg + ("`n`n" + $resumo + "`n`nNada se perde de vez: arquivos e chaves vao para a quarantena com backup, servicos e tarefas ficam apenas desativados e regras de firewall removidas ganham journal pra recriar; a aba Desfazer tudo restaura. Continuar?")
+    $msg = $msg + ("`n`n" + $resumo + "`n`nArquivos e chaves selecionados recebem journal antes da alteracao; servicos, tarefas e regras locais de permissao podem ser desativados. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
 
     if (-not (Test-Path $global:PastaQuarantena)) { New-Item -Path $global:PastaQuarantena -ItemType Directory -Force | Out-Null }
-    $pastaSessao = Join-Path $global:PastaQuarantena (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss')
+    $pastaSessao = Join-Path $global:PastaQuarantena ((Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '-' + [guid]::NewGuid().ToString('N').Substring(0,12))
     New-Item -Path $pastaSessao -ItemType Directory -Force | Out-Null
 
     Status 'limpando rastros...'

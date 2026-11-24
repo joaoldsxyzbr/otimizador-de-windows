@@ -21,7 +21,7 @@ nao quer janela? modo cli:
 
 - **47 tweaks** em catalogo (3 presets: seguro / balanceado / agressivo): telemetria, privacidade (copilot/ia inclusos), desempenho, barra de tarefas, explorer, energia e rede
 - **66 apps** pra instalar via winget e **34 pacotes** da store pra debloat
-- **desinstalador com limpeza de rastros**: pastas, registro, servicos orfaos, tarefas agendadas, regras de firewall, entradas run e path morto; tudo que some vai pra quarantena (nada e apagado de verdade sem querer)
+- **desinstalador com limpeza de rastros**: pastas, registro, servicos orfaos, tarefas agendadas, regras locais de permissao do firewall (desativadas, nao removidas), entradas run e path morto; journal antes das alteracoes e backups de arquivos/chaves
 - **journal de desfazer**: cada acao grava o valor anterior; a aba desfazer reverte sessao inteira; o journal e gravado atomicamente antes das acoes registradas, com copia anterior e progresso de reversao; falhas podem exigir revisao manual
 - **planos**: exporte os ajustes marcados num .json e importe em outro pc
 - **arquivo unico**: `.\montar-portatil.ps1` gera `dist\otimizadorpc-portatil.ps1`, o app inteiro num arquivo so pro pendrive
