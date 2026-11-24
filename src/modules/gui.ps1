@@ -145,16 +145,19 @@ function Montar-PaineisLegados {
 function Atualizar-ListaDesfazer {
     $lb = $global:UI.ListaDesfazer
     $lb.Items.Clear()
+    $lb.Tag = @{}
     foreach ($s in (Listar-Sessoes)) {
         $rotulo = $s.BaseName -replace '^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_', ''
         $datahora = ($s.BaseName -split '_')[0]
         $extra = ''
         try {
             $json = Ler-JSON $s.FullName
-            $extra = (' - {0} acao(oes): {1}' -f @($json.itens).Count, $json.rotulo)
-        } catch { }
+            $concluidos = @($json.itens | Where-Object { $_.estadoReversao -eq 'concluido' }).Count
+            $incertos = @($json.itens | Where-Object { $_.estadoReversao -eq 'em_andamento' }).Count
+            $extra = (' - {0}/{1} revertidas: {2}' -f $concluidos, @($json.itens).Count, $json.rotulo)
+            if ($incertos -gt 0) { $extra += ' [revisao manual necessaria]' }
+        } catch { $extra = ' [journal invalido]' }
         [void]$lb.Items.Add(('{0} ({1}){2}' -f $datahora, $rotulo, $extra))
-        $lb.Tag = @{}
         $lb.Tag[$lb.Items.Count - 1] = $s.FullName
     }
     if ($lb.Items.Count -eq 0) { [void]$lb.Items.Add('(nenhuma sessao para desfazer ainda - vazio)') }
@@ -459,10 +462,21 @@ function Clique-Desfazer {
     if (-not $conf) { return }
     Status 'revertendo sessao...'
     Ocupado $true
-    Reverter-Sessao -Arquivo $caminho
-    Ocupado $false
+    $global:Janela.IsEnabled = $false
+    try {
+        $resultado = Reverter-Sessao -Arquivo $caminho
+    } finally {
+        $global:Janela.IsEnabled = $true
+        Ocupado $false
+    }
     Atualizar-ListaDesfazer
-    Status 'sessao revertida.'
+    if ($resultado -eq $true) {
+        Status 'sessao revertida.'
+    } else {
+        Status 'reversao incompleta - consulte o log.'
+        Cor-Status 'vermelho'
+        Avisar 'Reversao incompleta' 'O journal foi preservado. Consulte o log e revise a acao incerta antes de continuar.'
+    }
 }
 
 # ---- ligacao geral (chamada pelo script principal) ----
