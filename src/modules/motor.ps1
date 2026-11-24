@@ -202,13 +202,39 @@ function Salvar-Sessao {
 }
 
 # Only summaries cross to WPF. Invalid or foreign journals are never selectable targets.
+# Validate a recovery target at the point of reading or mutating the journal.
+function Confirmar-ArquivoJournal {
+    param([string]$Arquivo)
+    if (-not $global:PastaDesfazer -or $Arquivo -notmatch '^[A-Za-z]:\\' -or [IO.Path]::GetExtension($Arquivo) -ine '.json') {throw 'Caminho de journal invalido.'}
+    $pasta=[IO.Path]::GetFullPath($global:PastaDesfazer).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Arquivo)
+    if ([IO.Path]::GetDirectoryName($full) -ine $pasta -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Journal fora da pasta de recuperacao.'}
+    Verificar-PastaPrivada $pasta
+    $item=Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Journal redirecionado ou invalido.'}
+    $acl=Get-Acl -LiteralPath $full -ErrorAction Stop
+    $regras=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
+    $esperados=@('S-1-5-32-544','S-1-5-18','S-1-3-4')
+    foreach ($regra in $regras) {
+        $sid=$regra.IdentityReference.Value
+        if ($sid -notin $esperados -or $regra.AccessControlType -ne 'Allow') {throw 'ACL do journal contem acesso inesperado.'}
+        $direitos=if ($sid -eq 'S-1-3-4') {[Security.AccessControl.FileSystemRights]::ReadPermissions -bor [Security.AccessControl.FileSystemRights]::Synchronize} else {[Security.AccessControl.FileSystemRights]::FullControl}
+        if ($regra.FileSystemRights -ne $direitos) {throw 'Direitos do journal nao confirmados.'}
+    }
+    foreach ($sid in $esperados) {
+        if (@($regras | Where-Object {$_.IdentityReference.Value -eq $sid}).Count -ne 1) {throw 'ACL do journal incompleta.'}
+    }
+    return $full
+}
+
 function Obter-SnapshotHistorico {
     $arquivos=@(Listar-Sessoes)
     $itens=@(foreach ($s in $arquivos) {
         $rotulo=$s.BaseName
         $valido=$false
         try {
-            $json=Ler-JSON $s.FullName
+            $arquivo=Confirmar-ArquivoJournal $s.FullName
+            $json=Ler-JSON $arquivo
             if ($null -eq $json -or $null -eq $json.itens) {throw 'Journal invalido.'}
             Confirmar-ContextoJournal $json
             $concluidos=@($json.itens | Where-Object {$_.estadoReversao -eq 'concluido'}).Count
@@ -837,6 +863,7 @@ function Reverter-Sessao {
     Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     try {
+        $Arquivo=Confirmar-ArquivoJournal $Arquivo
         $json = Ler-JSON $Arquivo
         if ($null -eq $json -or $null -eq $json.itens) { throw 'Journal invalido.' }
         Confirmar-ContextoJournal $json
@@ -878,6 +905,7 @@ function Confirmar-ReversaoManual {
     param([string]$Arquivo, [int]$Indice)
     Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
+    $Arquivo=Confirmar-ArquivoJournal $Arquivo
     $json = Ler-JSON $Arquivo
     if ($null -eq $json -or $null -eq $json.itens) {throw 'Journal invalido.'}
     Confirmar-ContextoJournal $json

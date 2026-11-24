@@ -305,6 +305,8 @@ try {
         function Atualizar-UI {}
         function Ler-JSON { param([string]$Caminho) Get-Content -LiteralPath $Caminho -Raw -Encoding UTF8 | ConvertFrom-Json }
         $script:acoesTeste = @()
+        # Unit test uses a deliberately isolated temporary folder, not production ACLs.
+        function Confirmar-ArquivoJournal {param($Arquivo) return $Arquivo}
         function Desfazer-Item { param($Item) $script:acoesTeste += $Item.tipo; return ($Item.tipo -ne 'falha') }
         $retomar = Join-Path $testeJournal 'retomar.json'
         Gravar-JSONAtomico -Arquivo $retomar -Objeto @{ rotulo = 'teste'; itens = @(@{ tipo = 'pendente' }, @{ tipo = 'ja-feita'; estadoReversao = 'concluido' }) }
@@ -1296,6 +1298,7 @@ try {
     }
     & {
         function Log {param($Mensagem,[switch]$Erro)}
+        function Confirmar-ArquivoJournal {param($Arquivo) return $Arquivo}
         function Ler-JSON {param($Caminho) $j}
         function Obter-ContextoJournal {[pscustomobject]@{usuarioSid='S-1-5-21-3';maquina=$ctx.maquina;registro64=$true}}
         $script:escritasJournal=0
@@ -1364,6 +1367,29 @@ try {
     }
     Passou 'manutencao abre diagnosticos nativos e verifica disco sem reparo automatico'
 } catch {Falhou 'manutencao conservadora' $_.Exception.Message}
+
+# ---- Recovery target must be a direct journal in the private state folder ----
+Secao 'alvo de recuperacao'
+try {
+    & {
+        $pastaAntes=$global:PastaDesfazer
+        try {
+            $global:PastaDesfazer=Join-Path $env:SystemDrive 'OtimizadorTeste\desfazer'
+            function Verificar-PastaPrivada {throw 'Nao deve consultar ACL de alvo externo.'}
+            foreach ($arquivo in @('relativo.json',(Join-Path $global:PastaDesfazer '..\externo.json'),(Join-Path $global:PastaDesfazer 'sub\interno.json'),(Join-Path $global:PastaDesfazer 'sessao.reg'))) {
+                $recusou=$false
+                try {$null=Confirmar-ArquivoJournal $arquivo} catch {$recusou=$_.Exception.Message -match 'Caminho de journal invalido|fora da pasta'}
+                if (-not $recusou) {throw ('Alvo externo nao recusado: '+$arquivo)}
+            }
+            function Verificar-PastaPrivada {}
+            function Get-Item {[CmdletBinding()]param([string]$LiteralPath,[switch]$Force) [pscustomobject]@{PSIsContainer=$false;Attributes=[IO.FileAttributes]::ReparsePoint}}
+            $recusou=$false
+            try {$null=Confirmar-ArquivoJournal (Join-Path $global:PastaDesfazer 'sessao.json')} catch {$recusou=$_.Exception.Message -match 'redirecionado'}
+            if (-not $recusou) {throw 'Journal redirecionado aceito.'}
+        } finally {$global:PastaDesfazer=$pastaAntes}
+    }
+    Passou 'recuperacao rejeita journal externo, extensao invalida e redirecionamento'
+} catch {Falhou 'alvo de recuperacao' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

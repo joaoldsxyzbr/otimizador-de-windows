@@ -696,6 +696,7 @@ function Clique-ConfirmarManual {
         if ($lb.SelectedIndex -lt 0) { Avisar 'Selecione' 'Escolha uma sessao na lista.'; return }
         $arquivo = $lb.Tag[$lb.SelectedIndex]
         if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo)) { throw 'Sessao indisponivel.' }
+        $arquivo=Confirmar-ArquivoJournal $arquivo
         $json = Ler-JSON $arquivo
         $itens = @($json.itens)
         for ($i = $itens.Count - 1; $i -ge 0; $i--) {
@@ -993,6 +994,7 @@ function Clique-DetalhesSessao {
         if ($lb.SelectedIndex -lt 0) { Avisar 'Selecione' 'Escolha uma sessao na lista.'; return }
         $arquivo = $lb.Tag[$lb.SelectedIndex]
         if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo -PathType Leaf)) { Avisar 'Sessao ausente' 'Atualize a lista de sessoes.'; return }
+        $arquivo=Confirmar-ArquivoJournal $arquivo
         $json = Ler-JSON $arquivo
         $linhas = @('Journal: ' + $arquivo, ('Sessao: ' + $json.rotulo), ('Criada: ' + $json.criado), '', 'Inspecao somente leitura; nao apague backups manualmente.', '')
         foreach ($item in @($json.itens)) {
@@ -1601,7 +1603,7 @@ function Solicitar-ConsultaPainel {
             [void]$ps.AddScript($fonte)
         } elseif ($Tipo -eq 'Historico') {
             $fonte='param([string]$Pasta)'+[Environment]::NewLine+'$ErrorActionPreference="Stop"; $global:PastaDesfazer=$Pasta'+[Environment]::NewLine
-            foreach ($fn in @('Verificar-PastaPrivada','Listar-Sessoes','Ler-JSON','Obter-ContextoJournal','Confirmar-ContextoJournal','Obter-SnapshotHistorico')) {
+            foreach ($fn in @('Verificar-PastaPrivada','Listar-Sessoes','Ler-JSON','Obter-ContextoJournal','Confirmar-ContextoJournal','Confirmar-ArquivoJournal','Obter-SnapshotHistorico')) {
                 $fonte+=('function '+$fn+' {'+(Get-Command $fn -CommandType Function).ScriptBlock.ToString()+'}'+[Environment]::NewLine)
             }
             $fonte+='Obter-SnapshotHistorico'
