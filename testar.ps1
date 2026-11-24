@@ -1044,6 +1044,32 @@ try {
     Passou 'presets sem politicas administrativas; diagnostico preservado'
 } catch { Falhou 'catalogo conservador' $_.Exception.Message }
 
+# ---- consultas de bateria e gargalos com dados sinteticos ----
+Secao 'diagnosticos locais RC.8'
+try {
+    & {
+        function Get-CimInstance {
+            [CmdletBinding()] param([Parameter(Position=0)][string]$ClassName,[string]$Namespace,[string]$Filter)
+            switch ($ClassName) {
+                'Win32_Battery' {[pscustomobject]@{EstimatedChargeRemaining=55;BatteryStatus=2}}
+                'BatteryStaticData' {[pscustomobject]@{InstanceName='interno';DesignedCapacity=50000}}
+                'BatteryFullChargedCapacity' {[pscustomobject]@{InstanceName='interno';FullChargedCapacity=30000}}
+                'Win32_PerfFormattedData_PerfOS_Processor' {[pscustomobject]@{PercentProcessorTime=95}}
+                'Win32_OperatingSystem' {[pscustomobject]@{TotalVisibleMemorySize=100;FreePhysicalMemory=5}}
+                'Win32_PerfFormattedData_PerfOS_Memory' {[pscustomobject]@{PageReadsPersec=7}}
+                'Win32_PerfFormattedData_PerfDisk_PhysicalDisk' {throw 'Contador indisponivel.'}
+                default {throw 'Consulta inesperada.'}
+            }
+        }
+        function Start-Sleep {param($Seconds)}
+        $b=Obter-ResumoBateria
+        if ($b -notmatch '30000' -or $b -notmatch '60%' -or $b -match 'interno') {throw 'Estimativa de bateria ou privacidade incorreta.'}
+        $d=Medir-GargalosLocais 3
+        if ($d.serie.Count -ne 3 -or $null -ne $d.serie[0].Fila_disco -or ($d.avisos -join ' ') -notmatch 'CPU elevada' -or ($d.avisos -join ' ') -notmatch 'Pouca RAM') {throw 'Diagnostico confundiu indisponibilidade ou amostras.'}
+    }
+    Passou 'bateria correlacionada e gargalos com contadores ausentes preservados'
+} catch { Falhou 'diagnosticos locais RC.8' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

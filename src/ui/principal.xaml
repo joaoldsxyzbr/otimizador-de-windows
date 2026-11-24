@@ -314,6 +314,8 @@
                                     <Button x:Name="BotaoInventario" Content="Inventario e ferramentas do Windows" HorizontalAlignment="Left" Margin="0,10,0,0"/>
                                     <Button x:Name="BotaoCarga" Content="Teste de carga padronizado (CPU e memoria)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoDiagnosticoAvancado" Content="Diagnostico de discos, dispositivos e eventos" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                                    <Button x:Name="BotaoResumoBateria" Content="Bateria: capacidade e carga" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                                    <Button x:Name="BotaoGargalosLocais" Content="Amostras de CPU, memoria e disco" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMonitor" Content="Monitor de recursos (10 amostras)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMedicoes" Content="Comparar antes e depois dos ajustes" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoVerificarRelease" Content="Consultar e baixar versao oficial" HorizontalAlignment="Left" Margin="0,6,0,0"/>
@@ -546,6 +548,7 @@
                                 <Button x:Name="BotaoLimpezaDisco" Content="Revisar limpeza de disco (Windows)" Margin="4" Padding="10,14" ToolTip="Abre limpeza nativa do Windows. Revise as categorias; exclusao pode ser definitiva."/>
                                 <Button x:Name="BotaoAnalisarComponentes" Content="Analisar componentes do Windows" Margin="4" Padding="10,14" ToolTip="DISM AnalyzeComponentStore: avalia armazenamento antes da limpeza."/>
                                 <Button x:Name="BotaoDiagnosticarIntegridade" Content="Diagnosticar integridade (sem reparo)" Margin="4" Padding="10,14" ToolTip="DISM ScanHealth e SFC verifyonly; consulta pode gravar logs do Windows."/>
+                                <Button x:Name="BotaoOtimizarVolume" Content="Analisar e otimizar unidades (Windows)" Margin="4" Padding="10,14" ToolTip="Abre Otimizar Unidades nativo; nenhuma operacao automatica ou forcada."/>
                                 <Button x:Name="BotaoConsultarEnergia" Content="Diagnosticar energia e suspensao" Margin="4" Padding="10,14" ToolTip="Consulta plano, solicitacoes, ultima ativacao e temporizadores."/>
                                 <Button x:Name="BotaoLimpezaDism" Content="Limpeza de componentes do Windows (janela)" Margin="4" Padding="10,14" ToolTip="Remove componentes substituidos do Windows. Pode demorar; nao use como rotina de ganho de FPS."/>
                                 <Button x:Name="BotaoVerificarIntegridade" Content="Reparar arquivos do sistema (DISM + SFC)" Margin="4" Padding="10,14" ToolTip="DISM e SFC tentam reparar arquivos do sistema; use quando houver corrupcao ou falhas."/>

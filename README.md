@@ -2,15 +2,15 @@
 
 ## Abrir sem instalar
 
-Abra o **Windows PowerShell 5.1 como administrador** e cole:
+Em um computador autorizado, abra o **Windows PowerShell 5.1 normal (sem administrador)** e cole:
 
 ```powershell
-irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.6/otimizadorpc.ps1 | iex
+irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.7/otimizadorpc.ps1 | iex
 ```
 
-O OtimizadorPC abre diretamente em memoria, sem instalacao. Requer Windows 10/11 e conexao com a internet.
+A RC.7 inicia em diagnostico mesmo elevada. Para uso pessoal autorizado, revise o codigo e o SHA256, abra PowerShell como administrador e execute o script com o parametro `-Pessoal`. Sinais de gerenciamento impedem alteracoes. Em empresa, solicite autorizacao do TI antes de executar codigo externo. O comando direto nao confere hash automaticamente.
 
-**Versao candidata v2.0.0-rc.6:** testes automatizados aprovados; validacao manual ainda pendente. Nao use esta versao em PC empresarial: o modo protegido esta em desenvolvimento na RC.7. O comando executa codigo remoto com privilegios administrativos. Revise a origem e use inicialmente o modo de simulacao. [Release e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.6).
+[Release RC.7 e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.7). Validacao manual pendente.
 
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
@@ -128,3 +128,5 @@ A RC.7 inicia em diagnostico inclusive em console elevado, salvo solicitacao exp
 Debloat consulta dependencias declaradas dos pacotes no usuario atual e bloqueia remocao de alvo referenciado (nao e mapa completo de dependencias). Manutencao separa diagnostico DISM/SFC de reparo, oferece AnalyzeComponentStore antes de limpeza e consulta powercfg de energia/suspensao. Limpeza de disco abre cleanmgr para revisao humana, sem VERYLOWDISK nem limpeza DISM encadeada. Consultas administrativas podem gravar logs nativos do Windows e permanecem indisponiveis no modo protegido.
 
 Revisao final do catalogo RC.7: remove gravacao direta em PolicyManager e desativacao de DiagTrack/WerSvc/AllowTelemetry fixo. Preferencias de privacidade locais continuam manuais. Politicas dependentes de edicao/build ficam fora dos presets, com nota de compatibilidade nao certificada. Perfis nomeados sao deliberadamente conservadores (extensoes de arquivos); nao prometem ganhos especificos de jogos ou autonomia. Ajustes manuais permanecem revisaveis, com journal e explicacao.
+
+RC.8 em desenvolvimento: estimativas locais de capacidade de bateria quando correlacionaveis, amostras de CPU/RAM/paginacao/fila e I/O de disco sem ETW nem exportacao, e acesso a Otimizar Unidades nativo apenas no modo pessoal. Nao confundir contadores ausentes com zero; nenhuma operacao de disco automatica.

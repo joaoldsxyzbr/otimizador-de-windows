@@ -1068,6 +1068,22 @@ function Clique-CargaPadronizada {
     } catch { Avisar 'Teste indisponivel' $_.Exception.Message }
 }
 
+function Clique-ResumoBateria {
+    try {
+        $res=@(Executar-ConsultaLocal -Titulo 'Consultando bateria' -Codigo ${function:Obter-ResumoBateria})
+        if ($res.Count -eq 1 -and $res[0]) {Avisar 'Bateria - estimativas locais' ([string]$res[0])}
+    } catch {Avisar 'Consulta indisponivel' $_.Exception.Message}
+}
+
+function Clique-GargalosLocais {
+    try {
+        $res=@(Executar-ConsultaLocal -Titulo 'Amostrando CPU, memoria e disco' -Codigo ${function:Medir-GargalosLocais})
+        if ($res.Count -ne 1 -or -not $res[0]) {return}
+        $msg=($res[0].serie | Format-Table -AutoSize | Out-String -Width 100)+"`n"+($res[0].avisos -join "`n")
+        Avisar 'Amostras de desempenho - diagnostico local' $msg
+    } catch {Avisar 'Consulta indisponivel' $_.Exception.Message}
+}
+
 function Clique-DiagnosticoAvancado {
     try {
         $res=@(Executar-ConsultaLocal -Titulo 'Diagnostico de dispositivos e eventos' -Codigo ${function:Obter-DiagnosticoAvancado})
@@ -1142,6 +1158,8 @@ function Ligar-Tudo {
         $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
         $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
     $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
+    $global:UI.BotaoResumoBateria.Add_Click({ Clique-ResumoBateria })
+    $global:UI.BotaoGargalosLocais.Add_Click({ Clique-GargalosLocais })
         Trocar-Pagina 'PaginaInicio'
         Status 'Modo protegido: somente diagnostico local.'
         return
@@ -1235,6 +1253,7 @@ function Ligar-Tudo {
     $global:UI.BotaoAnalisarComponentes.Add_Click({ Executar-OperacaoUI { Analisar-ComponentesWindows } })
     $global:UI.BotaoDiagnosticarIntegridade.Add_Click({ Executar-OperacaoUI { Diagnosticar-Integridade } })
     $global:UI.BotaoConsultarEnergia.Add_Click({ Executar-OperacaoUI { Consultar-Energia } })
+    $global:UI.BotaoOtimizarVolume.Add_Click({ Executar-OperacaoUI { Abrir-OtimizacaoVolume } })
     $global:UI.BotaoVerificarIntegridade.Add_Click({ Executar-OperacaoUI { Verificar-Integridade } })
 
     # pagina desfazer
@@ -1249,6 +1268,8 @@ function Ligar-Tudo {
     $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
     $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
     $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
+    $global:UI.BotaoResumoBateria.Add_Click({ Clique-ResumoBateria })
+    $global:UI.BotaoGargalosLocais.Add_Click({ Clique-GargalosLocais })
     $global:UI.BotaoCarga.Add_Click({ Clique-CargaPadronizada })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({

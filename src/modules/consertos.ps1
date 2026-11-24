@@ -129,6 +129,14 @@ Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cl
     Executar-NoConsole -Titulo 'Analisar armazenamento de componentes' -Bloco $bloco
 }
 
+function Abrir-OtimizacaoVolume {
+    Confirmar-PermissaoAlteracao
+    if (-not (Perguntar 'Otimizar unidades do Windows' 'Abrir a ferramenta nativa Otimizar Unidades? Ela analisa volumes e seleciona a operacao apropriada ao tipo de midia. Revise o estado e escolha manualmente. O OtimizadorPC nao forca desfragmentacao nem TRIM.')) {return}
+    $exe=Join-Path $env:SystemRoot 'System32\dfrgui.exe'
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {throw 'Ferramenta nativa indisponivel.'}
+    Start-Process -FilePath $exe -ErrorAction Stop | Out-Null
+}
+
 function Consultar-Energia {
     Confirmar-PermissaoAlteracao
     $bloco=@'

@@ -109,6 +109,72 @@ function Obter-DiagnosticoAvancado {
     return ($linhas -join [Environment]::NewLine)
 }
 
+# Somente leitura, sem gravar relatorios nem expor identificadores de bateria.
+function Obter-ResumoBateria {
+    try {
+        $bat=@(Get-CimInstance Win32_Battery -ErrorAction Stop)
+        if (-not $bat.Count) { return 'Nenhuma bateria informada pelo Windows; pode ser desktop ou provedor indisponivel.' }
+        $linhas=@()
+        foreach ($b in $bat) {
+            $carga=if ($null -ne $b.EstimatedChargeRemaining -and $b.EstimatedChargeRemaining -ge 0 -and $b.EstimatedChargeRemaining -le 100) { "$($b.EstimatedChargeRemaining)%" } else {'indisponivel'}
+            $linhas+=('Carga atual: '+$carga+' | codigo de estado: '+$b.BatteryStatus)
+        }
+        try {
+            $projeto=@(Get-CimInstance -Namespace root/WMI -ClassName BatteryStaticData -ErrorAction Stop)
+            $cheia=@(Get-CimInstance -Namespace root/WMI -ClassName BatteryFullChargedCapacity -ErrorAction Stop)
+            $n=0
+            foreach ($p in $projeto) {
+                $f=@($cheia | Where-Object {$_.InstanceName -eq $p.InstanceName})
+                if ($f.Count -ne 1 -or $p.DesignedCapacity -le 0 -or $p.DesignedCapacity -ge 4294967295 -or $f[0].FullChargedCapacity -le 0 -or $f[0].FullChargedCapacity -ge 4294967295) {continue}
+                $n++
+                $pct=[math]::Round(100.0*$f[0].FullChargedCapacity/$p.DesignedCapacity,1)
+                $linhas+=('Bateria {0}: projeto {1} mWh, carga cheia estimada {2} mWh, proporcao {3}%' -f $n,$p.DesignedCapacity,$f[0].FullChargedCapacity,$pct)
+                if ($pct -lt 70) {$linhas+='Capacidade estimada reduzida; investigue autonomia com o fabricante/TI.'}
+            }
+            if (-not $n) {$linhas+='Capacidade de projeto/carga cheia indisponivel ou nao correlacionada.'}
+        } catch {$linhas+='Contadores de capacidade indisponiveis.'}
+        $linhas+='Valores do firmware sao estimativas; nao indicam risco fisico nem garantem autonomia.'
+        return ($linhas -join [Environment]::NewLine)
+    } catch {return 'Consulta de bateria indisponivel.'}
+}
+
+# Amostra observacional, sem ETW, sem exportar nomes ou comand lines.
+function Medir-GargalosLocais {
+    param([ValidateRange(3,20)][int]$Amostras=10)
+    $serie=@()
+    for ($i=0;$i -lt $Amostras;$i++) {
+        $cpu=$null; $ram=$null; $leituras=$null; $fila=$null; $transferencias=$null
+        try {
+            $p=Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
+            if ($null -ne $p.PercentProcessorTime) {$cpu=[double]$p.PercentProcessorTime}
+        } catch {}
+        try {
+            $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+            if ($os.TotalVisibleMemorySize -gt 0 -and $null -ne $os.FreePhysicalMemory) {$ram=[math]::Round(100.0*$os.FreePhysicalMemory/$os.TotalVisibleMemorySize,1)}
+        } catch {}
+        try {
+            $mem=Get-CimInstance Win32_PerfFormattedData_PerfOS_Memory -ErrorAction Stop
+            if ($null -ne $mem.PageReadsPersec) {$leituras=[double]$mem.PageReadsPersec}
+        } catch {}
+        try {
+            $disk=Get-CimInstance Win32_PerfFormattedData_PerfDisk_PhysicalDisk -Filter "Name='_Total'" -ErrorAction Stop
+            if ($null -ne $disk.AvgDiskQueueLength) {$fila=[double]$disk.AvgDiskQueueLength}
+            if ($null -ne $disk.DiskTransfersPersec) {$transferencias=[double]$disk.DiskTransfersPersec}
+        } catch {}
+        $serie+=[pscustomobject]@{amostra=$i+1;CPU_pct=$cpu;RAM_livre_pct=$ram;PageReads_s=$leituras;Fila_disco=$fila;IO_s=$transferencias}
+        if ($i -lt ($Amostras-1)) {Start-Sleep -Seconds 1}
+    }
+    $avisos=@()
+    $cpuValidos=@($serie | Where-Object {$null -ne $_.CPU_pct})
+    $ramValidos=@($serie | Where-Object {$null -ne $_.RAM_livre_pct})
+    if ($cpuValidos.Count -lt $Amostras) {$avisos+='CPU: amostras incompletas.'}
+    if ($ramValidos.Count -lt $Amostras) {$avisos+='RAM: amostras incompletas.'}
+    if ($cpuValidos.Count -eq $Amostras -and @($cpuValidos | Where-Object {$_.CPU_pct -ge 90}).Count -ge [math]::Ceiling($Amostras*0.8)) {$avisos+='CPU elevada na maior parte desta janela. Investigue processos; nao desative servicos automaticamente.'}
+    if ($ramValidos.Count -eq $Amostras -and @($ramValidos | Where-Object {$_.RAM_livre_pct -lt 10}).Count -ge [math]::Ceiling($Amostras*0.8)) {$avisos+='Pouca RAM livre na maior parte desta janela. Correlacione com atividade de paginacao e aplicativos.'}
+    $avisos+='Fila e I/O de disco dependem da midia/carga; sem limiar universal. Celulas vazias significam indisponivel. Amostras nao demonstram causa nem ganho de desempenho.'
+    return [pscustomobject]@{serie=$serie;avisos=$avisos}
+}
+
 function Resolver-ModoOtimizador {
     param([bool]$Admin,[bool]$Diagnostico,$Sinais,[bool]$Pessoal=$false)
     if ($Diagnostico -or -not $Admin) { return 'Diagnostico' }
