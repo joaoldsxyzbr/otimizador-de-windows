@@ -500,6 +500,20 @@ try {
     Passou 'comandos com reversao aproximada sao exclusivamente manuais'
 } catch { Falhou 'reversibilidade dos presets' $_.Exception.Message }
 
+# ---- propagacao de falhas do console, sem executar manutencao real ----
+Secao 'resultado de comandos nativos'
+try {
+    . (Join-Path $raiz 'src\modules\consertos.ps1')
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    foreach ($caso in @(@{ bloco = "Write-Host 'ok'"; esperado=0 }, @{ bloco = "throw 'falha simulada'"; esperado=1 }, @{ bloco = "Executar-Nativo cmd.exe @('/c','exit 7')"; esperado=1 })) {
+        $cmd = Montar-ComandoConsole -Bloco $caso.bloco -SemPausa
+        $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+        & $psExe -NoProfile -NonInteractive -EncodedCommand $enc
+        if ($LASTEXITCODE -ne $caso.esperado) { throw 'Codigo de saida nao preservado.' }
+    }
+    Passou 'console preserva falhas PowerShell e de executaveis nativos'
+} catch { Falhou 'resultado de comandos nativos' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

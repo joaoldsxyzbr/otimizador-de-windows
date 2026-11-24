@@ -210,6 +210,11 @@ function Executar-Acao {
                     tipoAnterior = $leitura.tipo
                     backupReg    = $arqBackup
                 })
+                if ($Acao.remover) {
+                    if ($leitura.existia) { Remove-ItemProperty -LiteralPath $Acao.caminho -Name $Acao.nome -ErrorAction Stop }
+                    Log ('valor de registro removido: ' + $Acao.nome)
+                    return
+                }
                 $kind = Converter-Kind $Acao.tipoValor
                 $dados = $Acao.dados
                 if ($kind -eq [Microsoft.Win32.RegistryValueKind]::DWord) { $dados = [int]$Acao.dados }
