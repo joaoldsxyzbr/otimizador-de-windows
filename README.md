@@ -1,5 +1,17 @@
 # otimizador-de-windows (OtimizadorPC)
 
+## Abrir sem instalar
+
+Abra o **Windows PowerShell 5.1 como administrador** e cole:
+
+```powershell
+irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.1/otimizadorpc.ps1 | iex
+```
+
+O OtimizadorPC abre diretamente em memoria, sem instalacao. Requer Windows 10/11 e conexao com a internet.
+
+**Versao candidata v2.0.0-rc.1:** testes automatizados aprovados; validacao manual ainda pendente. O comando executa codigo remoto com privilegios administrativos. Revise a origem e use inicialmente o modo de simulacao. [Release e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.1).
+
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
 App de otimizacao do Windows 10 e 11 em PowerShell + janela nativa WPF (estilo Winutil do Chris Titus, MIT), 100% PT-BR, com journal de desfazer por acao e quarantena. Feito pra uso geral/pessoal: visual, privacidade, desempenho, debloat, desinstalacao limpa e manutencao, tudo num so lugar.
