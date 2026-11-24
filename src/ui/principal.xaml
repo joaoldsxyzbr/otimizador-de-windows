@@ -305,6 +305,9 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Ambiente"/><TextBlock x:Name="InfoAmbiente" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
                                 </StackPanel>
                             </GroupBox>
+                            <GroupBox Header="Diagnostico local" Foreground="#93c5fd" BorderBrush="#374151" Margin="0,10,0,4">
+                                <TextBlock x:Name="InfoDiagnostico" Foreground="#d1d5db" Margin="6,8" TextWrapping="Wrap" Text="Coletando informacoes..."/>
+                            </GroupBox>
                             <GroupBox Header="Sugestao de uso" Foreground="#93c5fd" BorderBrush="#374151" Margin="0,10,0,4">
                                 <StackPanel Margin="6,8,6,10">
                                     <TextBlock Foreground="#d1d5db" FontSize="13" TextWrapping="Wrap" Text="1. Crie um ponto de restauracao antes de mexer (botao abaixo). 2. Va em Ajustes, marque o preset Seguro e aplique. 3. Use Debloat para tirar apps inuteis da Microsoft. 4. Instale seus programas pela aba Instalar. 5. Passadas de manutencao ficam na aba Manutencao."/>
