@@ -18,7 +18,7 @@ function Garantir-Pastas {
 
 function Ler-JSON {
     param([string]$Caminho)
-    return (Get-Content -Path $Caminho -Raw -Encoding UTF8 | ConvertFrom-Json)
+    return (Get-Content -LiteralPath $Caminho -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop)
 }
 
 function Eh-Win11 {

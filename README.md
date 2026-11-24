@@ -61,6 +61,8 @@ nao quer janela? modo cli:
 ## desenvolvimento v2 (pre-release)
 
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- operacoes mutaveis da interface passam por um controlador que evita reentrada; codigos de saida de desinstaladores e comandos sao verificados.
+- ajustes com reversao aproximada ficam fora dos presets (hibernacao, svchost, F8 e armazenamento reservado). Efeitos visuais, telemetria do PowerShell e tipo padrao de pastas usam valores de registro com snapshot.
 - os perfis novos sao conservadores; nao garantem FPS ou autonomia. O ajuste de avisos RDP fica exclusivamente manual por reduzir protecoes contra conexoes nao confiaveis.
 
 - comparativo antes/depois na pagina inicial: salva referencia JSON e compara medias de CPU, RAM, processos e espaco livre. Nao e benchmark; repita sob condicoes semelhantes. O arquivo inclui nome do PC. Consultas de medicao e armazenamento usam runspace separado, com cancelamento.

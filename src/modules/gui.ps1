@@ -301,6 +301,8 @@ function Clique-AplicarAjustes {
         Status 'simulacao concluida (nada foi alterado).'
         return
     }
+    $manuais = @($selecionados | Where-Object { $_.Tag.apenasManual })
+    if ($manuais.Count -gt 0 -and -not (Perguntar 'Ajustes de cautela' ('Ajustes manuais podem reduzir funcionalidades ou ter reversao aproximada: ' + (($manuais | ForEach-Object { $_.Tag.nome }) -join ', ') + '. Continuar?'))) { return }
     $nomes = ($selecionados | ForEach-Object { $_.Tag.nome }) -join ', '
     $conf = Perguntar 'Aplicar ajustes' ("Aplicar {0} ajuste(s):`n`n{1}`n`nContinuar?" -f $selecionados.Count, $nomes)
     if (-not $conf) { return }
@@ -327,7 +329,8 @@ function Clique-AplicarAjustes {
         Log ('todos os ' + $selecionados.Count + ' ajustes foram aplicados sem erros.')
     }
     if ($arq) { Log ('salvei o journal desta sessao para desfazer depois: ' + (Split-Path -Leaf $arq)) }
-    Status 'ajustes aplicados. alguns exigem relogar no windows.'
+    if ($global:ErrosSessao -gt 0) { Status 'ajustes com falhas; consulte o log.' }
+    else { Status 'ajustes aplicados. alguns exigem relogar no windows.' }
     if (Perguntar 'Explorador de Arquivos' 'Reiniciar o Explorador agora para aplicar as mudancas visuais? (aquivos abertos em janelas do explorer fecham)') {
         Reiniciar-Explorer
     }
@@ -477,7 +480,7 @@ function Clique-Desfazer {
     try {
         $resultado = Reverter-Sessao -Arquivo $caminho -UmaAcao:$UmaAcao
     } finally {
-        $global:Janela.IsEnabled = $true
+        $global:Janela.IsEnabled = (-not $global:OperacaoUIAtiva)
         Ocupado $false
     }
     Atualizar-ListaDesfazer
@@ -524,7 +527,7 @@ function Clique-InventarioLocal {
         Status 'coletando inventario local...'
         $global:Janela.IsEnabled = $false
         try { $dados = Obter-InventarioLocal }
-        finally { $global:Janela.IsEnabled = $true }
+        finally { $global:Janela.IsEnabled = (-not $global:OperacaoUIAtiva) }
         $dlg = New-Object System.Windows.Window
         $dlg.Title = 'Inventario local - OtimizadorPC'
         $dlg.Owner = $global:Janela
@@ -613,7 +616,7 @@ function Clique-BackupDrivers {
             Log ('exportacao de drivers: ' + $pasta + ' (' + $drivers.Count + ' pacote(s) informado(s)).')
             Status 'exportacao de drivers concluida.'
         } finally {
-            $global:Janela.IsEnabled = $true
+            $global:Janela.IsEnabled = (-not $global:OperacaoUIAtiva)
             Ocupado $false
         }
         Avisar 'Backup concluido' ('Confira os arquivos em: ' + $pasta + '. O backup nao inclui todos os drivers nativos do Windows.')
@@ -829,6 +832,25 @@ function Clique-VerificarRelease {
     } catch { Avisar 'Falha na consulta' $_.Exception.Message }
 }
 
+# Um unico controlador de cliques mutaveis evita reentrada pelo Dispatcher.
+function Executar-OperacaoUI {
+    param([scriptblock]$Acao)
+    if ($global:OperacaoUIAtiva) { return }
+    $global:OperacaoUIAtiva = $true
+    $janela = $global:Janela
+    $antes = $janela.IsEnabled
+    $janela.IsEnabled = $false
+    try { & $Acao }
+    catch {
+        Log ('operacao interrompida: ' + $_.Exception.Message) -Erro
+        Status 'operacao interrompida; consulte o log.'
+        Avisar 'Operacao interrompida' $_.Exception.Message
+    } finally {
+        $janela.IsEnabled = $antes
+        $global:OperacaoUIAtiva = $false
+    }
+}
+
 function Ligar-Tudo {
 
     # navegacao da barra lateral
@@ -857,58 +879,58 @@ function Ligar-Tudo {
     $global:UI.BotaoPerfilPrivacidade.Add_Click({ Clique-Preset 'privacidade' })
     $global:UI.BotaoPerfilCorporativo.Add_Click({ Clique-Preset 'corporativo' })
     $global:UI.BotaoPerfilRecomendado.Add_Click({ Clique-Preset 'recomendado' })
-    $global:UI.BotaoAplicarAjustes.Add_Click({ Clique-AplicarAjustes })
+    $global:UI.BotaoAplicarAjustes.Add_Click({ Executar-OperacaoUI { Clique-AplicarAjustes } })
     $global:UI.BotaoExportarPlano.Add_Click({ Clique-ExportarPlano })
     $global:UI.BotaoImportarPlano.Add_Click({ Clique-ImportarPlano })
 
     # pagina debloat
-    $global:UI.BotaoRemoverUwp.Add_Click({ Clique-RemoverUwp })
+    $global:UI.BotaoRemoverUwp.Add_Click({ Executar-OperacaoUI { Clique-RemoverUwp } })
 
     # pagina desinstalar
     $global:UI.FiltroDesinstalar.Add_TextChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
     $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas; Atualizar-ListaProgramas })
-    $global:UI.BotaoDesinstalarProg.Add_Click({ Clique-DesinstalarProg })
-    $global:UI.BotaoVarrerRastros.Add_Click({ Clique-VarrerRastros })
+    $global:UI.BotaoDesinstalarProg.Add_Click({ Executar-OperacaoUI { Clique-DesinstalarProg } })
+    $global:UI.BotaoVarrerRastros.Add_Click({ Executar-OperacaoUI { Clique-VarrerRastros } })
     $global:UI.BotaoMarcarRastros.Add_Click({ Marcar-Rastros $true })
-    $global:UI.BotaoApagarRastros.Add_Click({ Clique-ApagarRastros })
+    $global:UI.BotaoApagarRastros.Add_Click({ Executar-OperacaoUI { Clique-ApagarRastros } })
 
     # pagina instalar
-    $global:UI.BotaoInstalarApps.Add_Click({ Clique-InstalarApps })
-    $global:UI.BotaoAtualizarTudo.Add_Click({ Atualizar-Tudo })
+    $global:UI.BotaoInstalarApps.Add_Click({ Executar-OperacaoUI { Clique-InstalarApps } })
+    $global:UI.BotaoAtualizarTudo.Add_Click({ Executar-OperacaoUI { Atualizar-Tudo } })
     $global:UI.BotaoMarcarPadroes.Add_Click({
         foreach ($cb in (Get-Checkboxes $global:UI.ListaApps)) { $cb.IsChecked = [bool]$cb.Tag.padrao }
         Log 'apps padroes marcados.'
     })
 
     # pagina config
-    $global:UI.BotaoInstalarRecursos.Add_Click({ Clique-InstalarRecursos })
-    $global:UI.BotaoFixUpdate.Add_Click({ Resetar-WindowsUpdate })
-    $global:UI.BotaoFixRede.Add_Click({ Resetar-Rede })
-    $global:UI.BotaoFixWinget.Add_Click({ Instalar-Winget })
+    $global:UI.BotaoInstalarRecursos.Add_Click({ Executar-OperacaoUI { Clique-InstalarRecursos } })
+    $global:UI.BotaoFixUpdate.Add_Click({ Executar-OperacaoUI { Resetar-WindowsUpdate } })
+    $global:UI.BotaoFixRede.Add_Click({ Executar-OperacaoUI { Resetar-Rede } })
+    $global:UI.BotaoFixWinget.Add_Click({ Executar-OperacaoUI { Instalar-Winget } })
 
     # pagina atualizacoes
     $global:UI.BotaoAplicarAtualizacoes.Add_Click({
-        Configurar-Atualizacoes -BloquearDrivers ([bool]$global:UI.ChkBloquearDrivers.IsChecked) -AdiarRecursos ([bool]$global:UI.ChkAdiarRecursos.IsChecked)
+        Executar-OperacaoUI { Configurar-Atualizacoes -BloquearDrivers ([bool]$global:UI.ChkBloquearDrivers.IsChecked) -AdiarRecursos ([bool]$global:UI.ChkAdiarRecursos.IsChecked) }
     })
     $global:UI.BotaoBuscarAtualizacoes.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
-    $global:UI.BotaoResetUpdate2.Add_Click({ Resetar-WindowsUpdate })
+    $global:UI.BotaoResetUpdate2.Add_Click({ Executar-OperacaoUI { Resetar-WindowsUpdate } })
 
     # pagina manutencao
-    $global:UI.BotaoLimparTemp.Add_Click({ Limpar-Temporarios })
-    $global:UI.BotaoLimparDns.Add_Click({ Limpar-DNS; Status 'dns limpo.' })
-    $global:UI.BotaoSincronizarHora.Add_Click({ Sincronizar-Hora })
-    $global:UI.BotaoBackupDrivers.Add_Click({ Clique-BackupDrivers })
+    $global:UI.BotaoLimparTemp.Add_Click({ Executar-OperacaoUI { Limpar-Temporarios } })
+    $global:UI.BotaoLimparDns.Add_Click({ Executar-OperacaoUI { Limpar-DNS; Status 'dns limpo.' } })
+    $global:UI.BotaoSincronizarHora.Add_Click({ Executar-OperacaoUI { Sincronizar-Hora } })
+    $global:UI.BotaoBackupDrivers.Add_Click({ Executar-OperacaoUI { Clique-BackupDrivers } })
     $global:UI.BotaoAnalisarArmazenamento.Add_Click({ Clique-AnalisarArmazenamento })
-    $global:UI.BotaoRecuperarIcones.Add_Click({ Recuperar-CacheIcones })
-    $global:UI.BotaoLimpezaDisco.Add_Click({ Limpeza-Disco })
-    $global:UI.BotaoVerificarDisco.Add_Click({ Verificar-Disco })
-    $global:UI.BotaoLimpezaDism.Add_Click({ Manutencao-DISM })
-    $global:UI.BotaoVerificarIntegridade.Add_Click({ Verificar-Integridade })
+    $global:UI.BotaoRecuperarIcones.Add_Click({ Executar-OperacaoUI { Recuperar-CacheIcones } })
+    $global:UI.BotaoLimpezaDisco.Add_Click({ Executar-OperacaoUI { Limpeza-Disco } })
+    $global:UI.BotaoVerificarDisco.Add_Click({ Executar-OperacaoUI { Verificar-Disco } })
+    $global:UI.BotaoLimpezaDism.Add_Click({ Executar-OperacaoUI { Manutencao-DISM } })
+    $global:UI.BotaoVerificarIntegridade.Add_Click({ Executar-OperacaoUI { Verificar-Integridade } })
 
     # pagina desfazer
-    $global:UI.BotaoDesfazer.Add_Click({ Clique-Desfazer })
-    $global:UI.BotaoDesfazerUma.Add_Click({ Clique-Desfazer -UmaAcao })
-    $global:UI.BotaoConfirmarManual.Add_Click({ Clique-ConfirmarManual })
+    $global:UI.BotaoDesfazer.Add_Click({ Executar-OperacaoUI { Clique-Desfazer } })
+    $global:UI.BotaoDesfazerUma.Add_Click({ Executar-OperacaoUI { Clique-Desfazer -UmaAcao } })
+    $global:UI.BotaoConfirmarManual.Add_Click({ Executar-OperacaoUI { Clique-ConfirmarManual } })
     $global:UI.BotaoDetalhesSessao.Add_Click({ Clique-DetalhesSessao })
     $global:UI.BotaoAtualizarListaSessoes.Add_Click({ Atualizar-ListaDesfazer; Log 'lista de sessoes atualizada.' })
 
@@ -917,10 +939,7 @@ function Ligar-Tudo {
     $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
-        Ocupado $true
-        [void](Criar-PontoRestauracao)
-        Ocupado $false
-        Preencher-PaginaInicio
+        Executar-OperacaoUI { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false }; Preencher-PaginaInicio }
     })
 
     # monta conteudo dinamico

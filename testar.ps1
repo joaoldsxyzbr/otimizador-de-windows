@@ -79,7 +79,7 @@ try {
 if ($null -ne $tweaks) {
     $problemas = @()
     $tiposAcao = @('registro','servico','comando','appx','recurso','energia')
-    $tiposValor = @('DWord','QWord','String','ExpandString','Binary')
+    $tiposValor = @('DWord','QWord','String','ExpandString','Binary','MultiString')
     foreach ($t in $tweaks.tweaks) {
         $nome = [string]$t.nome
         if ([string]::IsNullOrWhiteSpace($nome)) { $problemas += 'tweak sem nome'; $nome = '(sem nome)' }
@@ -99,7 +99,7 @@ if ($null -ne $tweaks) {
             switch ($tipo) {
                 'registro' {
                     if (-not ([string]$a.caminho).StartsWith('HK')) { $problemas += ($nome + ': caminho de registro estranho: ' + $a.caminho) }
-                    if ([string]::IsNullOrWhiteSpace([string]$a.nome)) { $problemas += ($nome + ': acao de registro sem nome de valor') }
+                    if ($null -eq $a.nome) { $problemas += ($nome + ': acao de registro sem campo nome (vazio = valor padrao)') }
                     if ($null -eq $a.dados) { $problemas += ($nome + ': acao de registro sem dados') }
                     if ($tiposValor -notcontains [string]$a.tipoValor) { $problemas += ($nome + ': tipoValor invalido: ' + $a.tipoValor) }
                 }
@@ -488,6 +488,17 @@ try {
     }
 } catch { Falhou 'selecao WPF' $_.Exception.Message }
 finally { $global:UI = $uiAnterior }
+
+# ---- catalogo: comandos de reversao aproximada nunca entram em presets ----
+Secao 'reversibilidade dos presets'
+try {
+    foreach ($ajuste in $tweaks.tweaks) {
+        if (@($ajuste.acoes | Where-Object { $_.tipo -eq 'comando' }).Count -gt 0 -and -not $ajuste.apenasManual) {
+            throw ('Comando sem snapshot em preset: ' + $ajuste.id)
+        }
+    }
+    Passou 'comandos com reversao aproximada sao exclusivamente manuais'
+} catch { Falhou 'reversibilidade dos presets' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

@@ -184,6 +184,7 @@ function Executar-Acao {
         return
     }
 
+    $ErrorActionPreference = 'Stop'
     try {
         switch ($Acao.tipo) {
 
@@ -284,7 +285,9 @@ function Executar-Acao {
                     contexto = $desc
                     reverter = $Acao.reverter
                 })
-                $saida = (Invoke-Expression $Acao.executar 2>&1 | Out-String).Trim()
+                $global:LASTEXITCODE = 0
+                $saida = (Invoke-Expression $Acao.executar | Out-String).Trim()
+                if ($LASTEXITCODE -ne 0) { throw ('Comando terminou com codigo ' + $LASTEXITCODE) }
                 if ($saida.Length -gt 0) {
                     $resumo = $saida.Substring(0, [Math]::Min(220, $saida.Length))
                     Log ("  saida: " + $resumo)
@@ -427,9 +430,11 @@ function Desfazer-Item {
 
             'comando' {
                 if (-not [string]::IsNullOrWhiteSpace($Item.reverter)) {
-                    Invoke-Expression $Item.reverter 2>&1 | Out-Null
-                    Log ("comando revertido: {0}" -f $Item.contexto)
-                }
+                    $global:LASTEXITCODE = 0
+                    Invoke-Expression $Item.reverter | Out-Null
+                    if ($LASTEXITCODE -ne 0) { throw ('Reversao terminou com codigo ' + $LASTEXITCODE) }
+                    Log ("comando de reversao executado (estado anterior pode ser aproximado): {0}" -f $Item.contexto)
+                } else { throw 'Comando sem reversao automatica.' }
             }
 
             'energia' {

@@ -117,7 +117,7 @@ function Desinstalar-Programa {
         } else {
             Log ('winget nao encontrado no sistema; sem linha de desinstalacao para rodar.')
         }
-        return
+        throw 'Nenhum desinstalador concluiu a operacao.'
     }
 
     # pacote msi: refaz na mao em modo silencioso
@@ -125,6 +125,7 @@ function Desinstalar-Programa {
         $m = [regex]::Match($linha, '(\{[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\})')
         if ($m.Success) {
             $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/x', $m.Groups[1].Value, '/qn', '/norestart') -Wait -PassThru
+            if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('MSI falhou: ' + $proc.ExitCode) }
             Log ('msi finalizado, codigo de saida: ' + $proc.ExitCode + ' (0 = ok, 3010 = ok com reinicio pendente)')
             return
         }
@@ -135,6 +136,7 @@ function Desinstalar-Programa {
     if ($null -eq $an -or -not (Test-Path $an.exe)) {
         Log ('linha de desinstalacao nao padrao, executando via cmd: ' + $linha)
         $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', $linha) -Wait -PassThru
+        if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('Desinstalador falhou: ' + $proc.ExitCode) }
         Log ('desinstalador finalizado, codigo de saida: ' + $proc.ExitCode)
         return
     }
@@ -152,6 +154,7 @@ function Desinstalar-Programa {
     }
     Log ('executando: ' + $an.exe + ' ' + ($argsLista -join ' ') + '  (' + $modo + ')')
     $proc = Start-Process -FilePath $an.exe -ArgumentList $argsLista -Wait -PassThru
+    if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('Desinstalador falhou: ' + $proc.ExitCode) }
     Log ('desinstalador finalizado, codigo de saida: ' + $proc.ExitCode)
 }
 
@@ -214,6 +217,7 @@ function Clique-DesinstalarProg {
     Ocupado $true
     if ($global:UI.ChkPontoRestoreDesinstalar.IsChecked) { [void](Criar-PontoRestauracao) }
     Iniciar-Sessao 'desinstalar'
+    $concluidos = @()
     $i = 0
     foreach ($pr in $selecionados) {
         $i++
@@ -221,6 +225,7 @@ function Clique-DesinstalarProg {
         Registrar-Jornal ([pscustomobject]@{ tipo = 'desinstalado-app'; nome = $pr.nome })
         try {
             Desinstalar-Programa $pr
+            $concluidos += $pr
         } catch {
             Log ('falha ao desinstalar {0}: {1}' -f $pr.nome, $_.Exception.Message) -Erro
         }
@@ -228,13 +233,13 @@ function Clique-DesinstalarProg {
     }
     $arq = Salvar-Sessao
     Ocupado $false
-    $resumo = 'desinstalacao concluida.'
+    $resumo = if ($global:ErrosSessao -gt 0) { 'desinstalacao com falhas; confira o log.' } else { 'desinstaladores encerrados; confira se os programas foram removidos.' }
     if ($arq) { $resumo = $resumo + ' journal: ' + (Split-Path -Leaf $arq) }
     Log $resumo
-    Status 'desinstalacao concluida.'
+    Status $resumo
     Carregar-Programas
     Atualizar-ListaProgramas
-    foreach ($pr in $selecionados) {
+    foreach ($pr in $concluidos) {
         if (Perguntar 'Varrer rastros' ('Procurar agora os rastros que sobraram de "{0}" (pastas, registro, atalhos)?' -f $pr.nome)) {
             Executar-Varredura $pr
         }
