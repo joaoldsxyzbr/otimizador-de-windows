@@ -321,6 +321,23 @@ function Testar-AppxCatalogado {
     return (@($global:CatalogoUwp.pacotes | Where-Object { $_.pacote -eq $Nome -and -not $_.protegido -and -not $_.desconhecido }).Count -eq 1)
 }
 
+function Obter-PlanoEnergiaAtivo {
+    $exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
+    $saida=(& $exe /getactivescheme 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0 -or $saida -notmatch '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') { throw 'Plano ativo indisponivel.' }
+    return $Matches[1]
+}
+
+function Definir-PlanoEnergia {
+    param([string]$Guid)
+    Confirmar-PermissaoAlteracao
+    $id=[guid]::Empty
+    if (-not [guid]::TryParse($Guid,[ref]$id) -or $id -eq [guid]::Empty) { throw 'GUID de energia invalido.' }
+    $exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
+    & $exe /setactive $id.ToString() | Out-Null
+    if ($LASTEXITCODE -ne 0 -or (Obter-PlanoEnergiaAtivo) -ne $id.ToString()) { throw 'Plano de energia nao confirmado.' }
+}
+
 function Executar-Acao {
     param($Acao, [string]$Contexto, [switch]$Simular)
 
@@ -441,17 +458,12 @@ function Executar-Acao {
             }
 
             'energia' {
-                $saida = (powercfg /getactivescheme) 2>&1 | Out-String
-                $guidAnterior = $null
-                if ($saida -match '([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})') { $guidAnterior = $Matches[1] }
-                Registrar-Jornal ([pscustomobject]@{
-                    tipo         = 'energia'
-                    guidAnterior = $guidAnterior
-                })
-                if (-not $guidAnterior) { throw 'Plano de energia original indisponivel.' }
-                powercfg /setactive $Acao.guid | Out-Null
-                if ($LASTEXITCODE -ne 0) { throw 'Falha ao alterar plano de energia.' }
-                Log ("plano de energia alterado (anterior: {0})" -f $guidAnterior)
+                $anterior=Obter-PlanoEnergiaAtivo
+                $alvo=[guid]::Parse([string]$Acao.guid).ToString()
+                if ($anterior -eq $alvo) { return }
+                Registrar-Jornal ([pscustomobject]@{tipo='energia';guidAnterior=$anterior;guidDepois=$alvo})
+                Definir-PlanoEnergia $alvo
+                Log 'Plano de energia alterado e confirmado.'
             }
 
             default {
@@ -533,11 +545,12 @@ function Desfazer-Item {
             }
 
             'energia' {
-                if ($Item.guidAnterior) {
-                    powercfg /setactive $Item.guidAnterior | Out-Null
-                    if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar plano de energia.' }
-                    Log ("plano de energia restaurado: {0}" -f $Item.guidAnterior)
-                }
+                if (-not $Item.guidAnterior -or -not $Item.guidDepois) { throw 'Journal antigo de energia; revise manualmente.' }
+                $atual=Obter-PlanoEnergiaAtivo
+                if ($atual -eq $Item.guidAnterior) { return $true }
+                if ($atual -ne $Item.guidDepois) { throw 'Plano de energia alterado depois da sessao; preservado.' }
+                Definir-PlanoEnergia $Item.guidAnterior
+                Log 'Plano de energia restaurado e confirmado.'
             }
 
             'recurso' {

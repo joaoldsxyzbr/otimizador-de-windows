@@ -309,52 +309,66 @@ function Obter-HistoricoAtualizacoes {
 
 # ---- winget ----
 
+function Obter-WingetExe {
+    # Nao executar alias de PATH ou executavel arbitrario de pasta do usuario
+    # em contexto administrativo. Exige pacote registrado no WindowsApps.
+    $root=[IO.Path]::GetFullPath((Join-Path $env:ProgramFiles 'WindowsApps')).TrimEnd('\')+'\'
+    $pacotes=@(Get-AppxPackage -Name Microsoft.DesktopAppInstaller -ErrorAction Stop | Where-Object {
+        $_.Name -eq 'Microsoft.DesktopAppInstaller' -and $_.PublisherId -eq '8wekyb3d8bbwe' -and $_.InstallLocation
+    })
+    foreach ($p in $pacotes) {
+        $exe=[IO.Path]::GetFullPath((Join-Path $p.InstallLocation 'winget.exe'))
+        if (-not $exe.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -or -not (Test-Path -LiteralPath $exe -PathType Leaf)) { continue }
+        $sig=Get-AuthenticodeSignature -LiteralPath $exe -ErrorAction Stop
+        if ($sig.Status -eq 'Valid' -and $sig.SignerCertificate.Subject -match '(?:^|,\s*)O=Microsoft Corporation(?:,|$)') { return $exe }
+    }
+    throw 'WinGet registrado e com assinatura Microsoft valida nao localizado. Use o App Installer oficial.'
+}
+
 function Testar-Winget {
-    try { $null = & winget --version 2>$null; return ($LASTEXITCODE -eq 0) } catch { return $false }
+    try { $exe=Obter-WingetExe; $null=& $exe --version 2>$null; return ($LASTEXITCODE -eq 0) } catch { return $false }
 }
 
 function Instalar-Winget {
     Confirmar-PermissaoAlteracao
-    $bloco = @'
-Write-Host '== Instalando o winget (App Installer) ==' -ForegroundColor Cyan
-Add-AppxPackage 'https://aka.ms/getwinget'
-Executar-Nativo winget.exe @('--version')
-'@
-    Executar-NoConsole -Titulo 'Instalar winget' -Bloco $bloco
+    if (Perguntar 'App Installer' 'Abrir a pagina oficial do App Installer na Microsoft Store? O OtimizadorPC nao baixara nem executara instalador automaticamente.') {
+        Start-Process 'ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1' -ErrorAction Stop | Out-Null
+    }
+}
+
+function Obter-ArgumentosApp {
+    param($App,[ValidateSet('install','upgrade')][string]$Operacao)
+    if ([string]$App.id -notmatch '^[A-Za-z0-9._+\-]+$') { throw 'ID de aplicativo invalido.' }
+    $fonte=if (-not $App.fonte -or $App.fonte -eq 'winget') {'winget'} elseif ($App.fonte -eq 'msstore') {'msstore'} else {throw 'Fonte nao permitida.'}
+    $argsApp=@($Operacao,'--id',[string]$App.id,'--exact','--source',$fonte)
+    if ($Operacao -eq 'install') { $argsApp+='--no-upgrade' }
+    return $argsApp
 }
 
 function Instalar-Aplicativos {
-    param($Selecionados)
+    param($Selecionados,[ValidateSet('install','upgrade')][string]$Operacao='install')
     Confirmar-PermissaoAlteracao
-    if ($Selecionados.Count -eq 0) { Avisar 'Nada selecionado' 'Marque pelo menos um aplicativo na lista antes de instalar.'; return }
-    if (-not (Testar-Winget)) {
-        Log 'winget nao encontrado nesta maquina.' -Erro
-        $resp = Perguntar 'Winget ausente' 'O winget (App Installer) nao foi encontrado. Instalar agora?'
-        if ($resp) { Instalar-Winget }
-        if (-not (Testar-Winget)) { Log 'winget continua indisponivel; instale manualmente pela Store ("Instalador de Aplicativo").' -Erro; return }
-    }
-    $linhas = New-Object System.Text.StringBuilder
-    [void]$linhas.AppendLine("Write-Host '== Instalando $($Selecionados.Count) aplicativos ==' -ForegroundColor Cyan")
+    if (@($Selecionados).Count -eq 0) { Avisar 'Nada selecionado' 'Selecione aplicativos para a operacao.'; return }
+    if (-not (Testar-Winget)) { Avisar 'WinGet indisponivel' 'Use o App Installer oficial em Config.'; return }
+    $exe=Obter-WingetExe
+    $exeSeguro=$exe.Replace("'","''")
+    $linhas=New-Object System.Text.StringBuilder
+    $plano=@()
     foreach ($app in $Selecionados) {
-        $fonte = ''
-        if ($app.fonte -eq 'msstore') { $fonte = '-s msstore' }
-        [void]$linhas.AppendLine("Write-Host ''")
-        if ([string]$app.id -notmatch '^[A-Za-z0-9._-]+$') { throw 'ID de aplicativo invalido.' }
-        $nomeSeguro = ([string]$app.nome).Replace("'","''")
-        [void]$linhas.AppendLine("Write-Host ('### ' + '$nomeSeguro') -ForegroundColor Cyan")
-        $argsFonte = ''
-        if ($fonte) { $argsFonte = ",'-s','msstore'" }
-        [void]$linhas.AppendLine("Executar-Nativo winget.exe @('install','--id','$($app.id)','-e','--silent','--accept-package-agreements','--accept-source-agreements'$argsFonte)")
+        $argsApp=@(Obter-ArgumentosApp $app $Operacao)
+        $plano+=($app.nome+' | '+($argsApp -join ' '))
+        $argsTexto=($argsApp | ForEach-Object { "'"+$_.Replace("'","''")+"'" }) -join ','
+        [void]$linhas.AppendLine("Executar-Nativo '$exeSeguro' @($argsTexto)")
     }
-    Executar-NoConsole -Titulo 'Instalacao de aplicativos' -Bloco $linhas.ToString()
+    $titulo=if ($Operacao -eq 'install') {'Instalar selecionados'} else {'Atualizar selecionados'}
+    if (-not (Perguntar $titulo (($plano -join "`n")+"`n`nA operacao pode instalar dependencias e solicitar aceite de licenca. Nao ha rollback automatico. Continuar?"))) { return }
+    Executar-NoConsole -Titulo $titulo -Bloco $linhas.ToString()
 }
 
 function Atualizar-Tudo {
     Confirmar-PermissaoAlteracao
-    if (-not (Testar-Winget)) { Log 'winget nao encontrado; use a instalacao do winget na aba Config.' -Erro; return }
-    $blocovo = @'
-Write-Host '== Atualizando todos os aplicativos ==' -ForegroundColor Cyan
-Executar-Nativo winget.exe @('upgrade','--all','--silent','--accept-package-agreements','--accept-source-agreements')
-'@
-    Executar-NoConsole -Titulo 'Atualizar todos os apps (winget)' -Bloco $blocovo
+    if (-not (Testar-Winget)) { Avisar 'WinGet indisponivel' 'Use App Installer oficial em Config.'; return }
+    if (-not (Perguntar 'Consultar atualizacoes' 'Consultar ofertas do WinGet nas fontes configuradas? Pode acessar a internet e pedir aceite de fonte. Nenhum upgrade sera executado.')) { return }
+    $exeSeguro=(Obter-WingetExe).Replace("'","''")
+    Executar-NoConsole -Titulo 'Consultar atualizacoes de aplicativos' -Bloco ("Executar-Nativo '$exeSeguro' @('upgrade')")
 }

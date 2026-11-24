@@ -149,7 +149,9 @@ function Montar-PaginaInstalar {
             $grupos[$a.categoria] = Nova-Categoria $a.categoria
             [void]$painel.Children.Add($grupos[$a.categoria])
         }
-        [void]$grupos[$a.categoria].Content.Children.Add((Nova-Checkbox -Texto $a.nome -Tag $a -Dica $a.desc -Marcado ([bool]$a.padrao)))
+        $fonte=if ($a.fonte -eq 'msstore') {'msstore'} else {'winget'}
+        $dica=$a.desc+"`nID: "+$a.id+"`nFonte: "+$fonte+"`nInstalar nao solicita upgrade automatico. Use a consulta WinGet para identificar versoes instaladas/disponiveis."
+        [void]$grupos[$a.categoria].Content.Children.Add((Nova-Checkbox -Texto ($a.nome+' ['+$fonte+']') -Tag $a -Dica $dica))
     }
 }
 
@@ -427,8 +429,9 @@ function Clique-RemoverUwp {
 }
 
 function Clique-InstalarApps {
+    param([ValidateSet('install','upgrade')][string]$Operacao='install')
     $selecionados = @(Get-Checkboxes $global:UI.ListaApps | Where-Object { $_.IsChecked } | ForEach-Object { $_.Tag })
-    Instalar-Aplicativos -Selecionados $selecionados
+    Instalar-Aplicativos -Selecionados $selecionados -Operacao $Operacao
 }
 
 function Clique-InstalarRecursos {
@@ -1191,6 +1194,7 @@ function Ligar-Tudo {
     # pagina instalar
     $global:UI.BotaoInstalarApps.Add_Click({ Executar-OperacaoUI { Clique-InstalarApps } })
     $global:UI.BotaoAtualizarTudo.Add_Click({ Executar-OperacaoUI { Atualizar-Tudo } })
+    $global:UI.BotaoAtualizarSelecionados.Add_Click({ Executar-OperacaoUI { Clique-InstalarApps -Operacao upgrade } })
     $global:UI.BotaoMarcarPadroes.Add_Click({
         foreach ($cb in (Get-Checkboxes $global:UI.ListaApps)) { $cb.IsChecked = [bool]$cb.Tag.padrao }
         Log 'apps padroes marcados.'

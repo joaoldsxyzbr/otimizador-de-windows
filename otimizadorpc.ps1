@@ -117,7 +117,7 @@ $controles = @(
     'ListaAjustes', 'ChkPontoRestore', 'ChkSimularAjustes', 'BotaoPresetSeguro', 'BotaoPresetBalanceado', 'BotaoPresetAgressivo', 'BotaoPerfilEssencial', 'BotaoPerfilGamer', 'BotaoPerfilNotebook', 'BotaoPerfilPrivacidade', 'BotaoPerfilCorporativo', 'BotaoPerfilRecomendado', 'BotaoAplicarAjustes', 'FiltroAjustes', 'BotaoExportarPlano', 'BotaoImportarPlano',
     'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp',
     'ListaProgramas', 'FiltroDesinstalar', 'CategoriaDesinstalar', 'OrdemDesinstalar', 'BotaoDetalhesPrograma', 'InfoProgramas', 'DetalhePrograma', 'BotaoAtualizarProgramas', 'ChkPontoRestoreDesinstalar', 'BotaoDesinstalarProg', 'BotaoVarrerRastros', 'RotuloRastros', 'BotaoMarcarRastros', 'BotaoDesmarcarRastros', 'InfoMarcadosRastros', 'BotaoApagarRastros', 'ListaRastros',
-    'ListaApps', 'BotaoInstalarApps', 'BotaoAtualizarTudo', 'BotaoMarcarPadroes', 'FiltroApps',
+    'ListaApps', 'BotaoInstalarApps', 'BotaoAtualizarSelecionados', 'BotaoAtualizarTudo', 'BotaoMarcarPadroes', 'FiltroApps',
     'ListaRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'BotaoTema', 'PainelLegado',
     'ChkBloquearDrivers', 'ChkAdiarRecursos', 'InfoPoliticasUpdate', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
     'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',

@@ -935,6 +935,32 @@ try {
     Passou 'politicas somente leitura e diferenciam ausente/zero/um'
 } catch { Falhou 'politicas de atualizacao' $_.Exception.Message }
 
+# ---- plano WinGet e conflito de energia ----
+Secao 'instalacao orientada'
+try {
+    $a=[pscustomobject]@{id='Microsoft.VCRedist.2015+.x64';nome='Runtime'}
+    $argsApp=@(Obter-ArgumentosApp $a install)
+    if (($argsApp -join ' ') -ne 'install --id Microsoft.VCRedist.2015+.x64 --exact --source winget --no-upgrade') {throw 'Plano de instalacao incorreto.'}
+    $a | Add-Member -NotePropertyName fonte -NotePropertyValue 'msstore'
+    if ((@(Obter-ArgumentosApp $a upgrade) -join ' ') -notmatch '--source msstore$') {throw 'Fonte Store nao explicitada.'}
+    $a.fonte='outra'
+    $recusou=$false
+    try {$null=Obter-ArgumentosApp $a install} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Fonte desconhecida aceita.'}
+    Passou 'WinGet: fonte explicita, instalacao sem upgrade e sem aceite automatico'
+} catch { Falhou 'instalacao orientada' $_.Exception.Message }
+Secao 'conflito energia'
+try {
+    & {
+        function Log {param($Mensagem,[switch]$Erro)}
+        function Obter-PlanoEnergiaAtivo {return '33333333-3333-3333-3333-333333333333'}
+        function Definir-PlanoEnergia {throw 'Nao deve modificar plano em conflito.'}
+        $it=[pscustomobject]@{tipo='energia';guidAnterior='11111111-1111-1111-1111-111111111111';guidDepois='22222222-2222-2222-2222-222222222222'}
+        if (Desfazer-Item $it) {throw 'Conflito de energia aceito.'}
+    }
+    Passou 'reversao de energia preserva mudanca posterior'
+} catch { Falhou 'conflito energia' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
