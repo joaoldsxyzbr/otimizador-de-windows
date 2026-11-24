@@ -8,6 +8,11 @@
 #  NAO rode na sua maquina pessoal: ele altera e desfaz.
 # ============================================================
 
+param([switch]$ConfirmarAmbienteDescartavel)
+
+if ($env:GITHUB_ACTIONS -ne 'true' -and -not $ConfirmarAmbienteDescartavel) {
+    throw 'Teste altera o Windows. Execute somente em runner descartavel ou VM com -ConfirmarAmbienteDescartavel.'
+}
 $ErrorActionPreference = 'Continue'
 
 # raiz do repo (este script vive em testes\)
@@ -49,8 +54,8 @@ try {
     exit 1
 }
 
-# runner comeca limpo; se sobrou journal de outro teste, apaga
-Get-ChildItem -Path $global:PastaDesfazer -Filter '*.json' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+# Nunca apague journals reais para preparar um teste.
+if (@(Get-ChildItem -LiteralPath $global:PastaDesfazer -Filter '*.json' -ErrorAction Stop).Count -gt 0) { throw 'Existem journals pendentes; use uma VM limpa.' }
 
 Log ('CI integracao: pasta do journal = ' + $global:PastaDesfazer)
 
@@ -89,24 +94,22 @@ Log 'CI ok: valor existe depois de aplicar'
 
 # ---- 4. desfaz a sessao inteira pelo caminho real do app ----
 Log 'CI: revertendo a sessao inteira...'
-Reverter-Sessao $arquivo
+if (-not (Reverter-Sessao $arquivo)) { Log 'FALHOU: reversao do preset' -Erro; exit 1 }
 
-# ---- 5. o registro voltou exatamente ao estado original? ----
-$dps = Ler-ValorRegistro -CaminhoPS ([string]$alvo.caminho) -Nome ([string]$alvo.nome)
-if ($alvo.existia) {
-    $original = ($alvo.valorAnterior | ConvertFrom-Json)
-    $tipoAnterior = [string]$alvo.tipoAnterior
-    if (-not $dps.existia) { Log 'FALHOU: o valor sumiu depois do desfazer' -Erro; exit 1 }
-    $iguais = $false
-    if ($tipoAnterior -eq 'DWord') { $iguais = ([int]$dps.valor -eq [int]$original) }
-    elseif ($tipoAnterior -eq 'QWord') { $iguais = ([long]$dps.valor -eq [long]$original) }
-    else { $iguais = ([string]$dps.valor -eq [string]$original) }
-    if (-not $iguais) { Log ('FALHOU: valor nao voltou ao original: atual=' + $dps.valor + ' original=' + $original) -Erro; exit 1 }
-    Log 'CI ok: valor voltou exatamente ao original'
-} else {
-    if ($dps.existia) { Log 'FALHOU: valor que nao existia antes ficou existindo' -Erro; exit 1 }
-    Log 'CI ok: valor criado pelo preset foi removido pelo desfazer'
+# ---- 5. confere todos os valores originais (primeiro snapshot de cada valor) ----
+$vistos = @{}
+foreach ($it in $itens) {
+    if ($it.tipo -ne 'registro') { continue }
+    $id = $it.caminho + '|' + $it.nome
+    if ($vistos.ContainsKey($id)) { continue }
+    $vistos[$id] = $true
+    $atual = Ler-ValorRegistro -CaminhoPS $it.caminho -Nome $it.nome
+    if (-not (Registro-Corresponde $atual ([bool]$it.existia) $it.tipoAnterior $it.valorAnteriorEstruturado.valor)) {
+        Log ('FALHOU: valor original nao restaurado: ' + $id) -Erro
+        exit 1
+    }
 }
+Log ('CI ok: ' + $vistos.Count + ' valores distintos do preset restaurados')
 
 # ---- 6. journal marcado como revertido ----
 if (-not (Test-Path ($arquivo + '.revertido'))) { Log 'FALHOU: journal nao foi renomeado para .revertido' -Erro; exit 1 }
@@ -121,9 +124,10 @@ try {
         $chave.SetValue('expand', '%TEMP%\arquivo', [Microsoft.Win32.RegistryValueKind]::ExpandString)
         $chave.SetValue('multi', [string[]]@('um','dois'), [Microsoft.Win32.RegistryValueKind]::MultiString)
         $chave.SetValue('bin', [byte[]]@(0,255,12), [Microsoft.Win32.RegistryValueKind]::Binary)
+        $chave.SetValue('', 'valor padrao', [Microsoft.Win32.RegistryValueKind]::String)
     } finally { $chave.Dispose() }
     Iniciar-Sessao 'ci-tipos-registro'
-    foreach ($nome in @('expand','multi','bin')) {
+    foreach ($nome in @('expand','multi','bin','')) {
         Executar-Acao ([pscustomobject]@{ tipo='registro'; caminho=$caminhoTeste; nome=$nome; tipoValor='String'; dados='alterado' }) 'teste de tipo'
     }
     $journalTipos = Salvar-Sessao
@@ -136,7 +140,8 @@ try {
         $bin.tipo -ne 'Binary' -or ($bin.valor -join ',') -ne '0,255,12') {
         throw 'Tipos ou dados originais nao foram preservados.'
     }
-    Log 'CI ok: tipos reais do registro preservados'
+    if ((Ler-ValorRegistro $caminhoTeste '').valor -cne 'valor padrao') { throw 'Valor padrao nao restaurado.' }
+    Log 'CI ok: tipos reais e valor padrao do registro preservados'
 } catch {
     Log ('FALHOU: ' + $_.Exception.Message) -Erro
     exit 1
@@ -205,6 +210,40 @@ try {
     exit 1
 } finally {
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeConflito, $false)
+}
+
+# ---- 10. arquivo real: quarentena, hash e conflito no destino ----
+$dirArquivo = Join-Path $env:LOCALAPPDATA ('OtimizadorPC-CI-Arquivo-' + [guid]::NewGuid().ToString('N'))
+$dirBackup = Join-Path $global:PastaQuarantena ('ci-arquivo-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -Path $dirArquivo -ItemType Directory -ErrorAction Stop | Out-Null
+    Garantir-PastaPrivada $dirBackup
+    $origem = Join-Path $dirArquivo 'dados [teste].bin'
+    [IO.File]::WriteAllBytes($origem,[byte[]]@(0,1,2,255))
+    $hash = (Get-FileHash -LiteralPath $origem -Algorithm SHA256).Hash
+    Iniciar-Sessao 'ci-arquentena-arquivo'
+    Apagar-Rastro ([pscustomobject]@{ tipo='arquivo'; caminho=$origem }) $dirBackup 1
+    $arq = Salvar-Sessao
+    $item = (Ler-JSON $arq).itens[0]
+    if ((Test-Path -LiteralPath $origem) -or (Get-FileHash -LiteralPath $item.destino -Algorithm SHA256).Hash -ne $hash) { throw 'Movimentacao incorreta.' }
+    if (-not (Reverter-Sessao $arq) -or (Get-FileHash -LiteralPath $origem -Algorithm SHA256).Hash -ne $hash) { throw 'Arquivo nao restaurado byte a byte.' }
+    Log 'CI ok: arquivo com caracteres especiais restaurado byte a byte'
+    Iniciar-Sessao 'ci-conflito-arquivo'
+    Apagar-Rastro ([pscustomobject]@{ tipo='arquivo'; caminho=$origem }) $dirBackup 2
+    $arq = Salvar-Sessao
+    [IO.File]::WriteAllText($origem,'arquivo novo')
+    if (Reverter-Sessao $arq) { throw 'Conflito de arquivo aceito.' }
+    if ([IO.File]::ReadAllText($origem) -cne 'arquivo novo') { throw 'Arquivo novo sobrescrito.' }
+    $item = (Ler-JSON $arq).itens[0]
+    if ((Get-FileHash -LiteralPath $item.destino -Algorithm SHA256).Hash -ne $hash) { throw 'Backup perdido no conflito.' }
+    Log 'CI ok: conflito preserva arquivo novo e backup'
+} catch {
+    Log ('FALHOU: quarentena de arquivo: ' + $_.Exception.Message) -Erro
+    exit 1
+} finally {
+    foreach ($pasta in @($dirArquivo,$dirBackup)) {
+        if (Test-Path -LiteralPath $pasta) { Remove-Item -LiteralPath $pasta -Recurse -Force }
+    }
 }
 
 Log 'CI INTEGRACAO: todos os testes passaram'

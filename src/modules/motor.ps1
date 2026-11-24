@@ -550,10 +550,18 @@ function Desfazer-Item {
             }
 
             'quarantena-arquivo' {
-                if ((Test-Path $Item.destino) -and -not (Test-Path $Item.origem)) {
+                if ((Test-Path -LiteralPath $Item.destino) -and -not (Test-Path -LiteralPath $Item.origem)) {
                     $pai = Split-Path -Parent $Item.origem
-                    if (-not (Test-Path $pai)) { New-Item -Path $pai -ItemType Directory -Force | Out-Null }
-                    Move-Item -Path $Item.destino -Destination $Item.origem -Force
+                    if (-not (Test-Path -LiteralPath $pai -PathType Container)) { throw 'Pasta original ausente; revise antes de restaurar.' }
+                    $atual = $pai
+                    while ($atual) {
+                        $dir = Get-Item -LiteralPath $atual -Force -ErrorAction Stop
+                        if ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Caminho de restauracao redirecionado.' }
+                        $superior = Split-Path -Parent $atual
+                        if (-not $superior -or $superior -eq $atual) { break }
+                        $atual = $superior
+                    }
+                    Move-Item -LiteralPath $Item.destino -Destination $Item.origem -ErrorAction Stop
                     Log ("rastro restaurado da quarantena: " + $Item.origem)
                 } else {
                     throw ("Backup ausente ou conflito no destino: " + $Item.origem)
