@@ -304,6 +304,17 @@ function Desativar-TarefaComJournal {
     if ((Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Disabled') { throw 'Desativacao nao confirmada.' }
 }
 
+function Testar-AppxProtegido {
+    param($Pacote)
+    return ([bool]($Pacote.IsFramework -or $Pacote.NonRemovable -or $Pacote.IsResourcePackage -or
+        [string]$Pacote.Name -match '^(Microsoft\.(WindowsStore|StorePurchaseApp|DesktopAppInstaller|SecHealthUI|VCLibs|NET\.Native|UI\.Xaml)(\.|$)|MicrosoftWindows\.|Microsoft\.Windows\.|windows\.immersivecontrolpanel$)'))
+}
+
+function Testar-AppxCatalogado {
+    param([string]$Nome)
+    return (@($global:CatalogoUwp.pacotes | Where-Object { $_.pacote -eq $Nome }).Count -eq 1)
+}
+
 function Executar-Acao {
     param($Acao, [string]$Contexto, [switch]$Simular)
 
@@ -384,10 +395,12 @@ function Executar-Acao {
             'appx' {
                 # Remocao apenas do usuario atual, sem afetar outros usuarios
                 # nem o provisionamento. O nome deve ser exato.
+                if (-not (Testar-AppxCatalogado $Acao.pacote)) { throw 'Pacote fora do catalogo de remocao.' }
                 $pkgs = @(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Acao.pacote })
+                if (@($pkgs | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0) { throw 'Pacote protegido; nenhum pacote removido.' }
                 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
                 foreach ($p in $pkgs) {
-                    if ($p.IsFramework -or $p.NonRemovable -or $p.IsResourcePackage) { throw ('Pacote protegido: ' + $p.Name) }
+                    if (Testar-AppxProtegido $p) { throw ('Pacote protegido: ' + $p.Name) }
                     Registrar-Jornal ([pscustomobject]@{
                         tipo = 'appx'; pacote = $p.Name; completo = $p.PackageFullName
                         familia = $p.PackageFamilyName; usuarioSid = $sid

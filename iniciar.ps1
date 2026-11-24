@@ -82,7 +82,7 @@ try {
             $status = $null
             if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
             if ($status -notin @(403,429) -or -not $SomenteValidar -or $Ref -notmatch '^[0-9a-f]{40}$') { throw }
-            $git = Get-Command git.exe -CommandType Application -ErrorAction Stop
+            $git = Get-Command git.exe -CommandType Application -ErrorAction Stop | Select-Object -First 1
             $checkout = $PSScriptRoot
             $sha = [string](& $git.Source -C $checkout rev-parse HEAD)
             if ($LASTEXITCODE -ne 0 -or $sha -ne $Ref) { throw 'API indisponivel e checkout nao corresponde ao commit solicitado.' }

@@ -577,6 +577,7 @@ try {
         )
         $script:appxJournal = @()
         function Log { param($Mensagem,[switch]$Erro) if ($Erro) { throw $Mensagem } }
+        function Testar-AppxCatalogado { param($Nome) return ($Nome -eq 'Microsoft.Example') }
         function Get-AppxPackage { [CmdletBinding()] param() return $script:appxTeste }
         function Registrar-Jornal { param($Item) $script:appxJournal += $Item }
         function Remove-AppxPackage {
@@ -799,6 +800,29 @@ try {
         } finally { $global:CatalogoApps=$catalogoAnterior }
     }
 } catch { Falhou 'classificacao do desinstalador' $_.Exception.Message }
+
+# ---- guia de ajustes e protecao de pacotes ----
+Secao 'otimizacao orientada'
+try {
+    $cat=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($ajuste in $cat.tweaks) {
+        $guia=Obter-GuiaAjuste $ajuste
+        if (-not $ajuste.impacto -or $guia.texto -notmatch 'Recuperacao:' -or $guia.texto -notmatch 'Compatibilidade:') { throw ('Guia ausente: ' + $ajuste.id) }
+        if (@($ajuste.acoes | Where-Object {$_.tipo -eq 'appx'}).Count) { throw 'Ajuste tenta remover pacote AppX.' }
+    }
+    foreach ($id in @('telemetria','sysmain','pesquisa-indexacao','energia-alto-desempenho','preferir-ipv4')) {
+        if (-not ($cat.tweaks | Where-Object {$_.id -eq $id}).apenasManual) { throw ('Ajuste sensivel em preset: '+$id) }
+    }
+    foreach ($nome in @('Microsoft.WindowsStore','Microsoft.DesktopAppInstaller','MicrosoftWindows.Client.WebExperience','Microsoft.VCLibs.140.00')) {
+        if (-not (Testar-AppxProtegido ([pscustomobject]@{Name=$nome}))) { throw ('Pacote nao protegido: '+$nome) }
+    }
+    $p=[pscustomobject]@{Name='Microsoft.Example';IsFramework=$true}
+    $entrada=[pscustomobject]@{pacote='Microsoft.Example';desc='teste';remover=$true}
+    if ((Obter-GuiaUwp $entrada @($p)).permitido) { throw 'Framework catalogado permitido.' }
+    $p.IsFramework=$false; $entrada | Add-Member -NotePropertyName desconhecido -NotePropertyValue $true
+    if ((Obter-GuiaUwp $entrada @($p)).permitido) { throw 'Pacote desconhecido permitido.' }
+    Passou 'guias completos, presets conservadores e AppX protegido'
+} catch { Falhou 'otimizacao orientada' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

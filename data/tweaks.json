@@ -2,8 +2,8 @@
   "tweaks": [
     {
       "id": "telemetria",
-      "nome": "Desativar telemetria da Microsoft",
-      "desc": "Desliga os servicos de telemetria (DiagTrack e WerSvc) e reduz ao minimo os dados enviados a Microsoft (publicidade, digitacao por toque, historico de programas, prompts de feedback). Nao desativa o Windows Defender.",
+      "nome": "Reduzir telemetria e diagnosticos",
+      "desc": "Configura politicas de privacidade e desativa DiagTrack e WerSvc quando presentes; alguns dados podem continuar sendo coletados. Nao desativa Defender.",
       "categoria": "Privacidade",
       "niveis": [
         "seguro",
@@ -99,7 +99,10 @@
           "tipoValor": "String",
           "dados": "1"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode reduzir diagnosticos e relatorios de falhas; politicas variam por edicao. Nao garante eliminar toda telemetria.",
+      "reinicio": "Pode exigir reinicio ou reativacao de servico."
     },
     {
       "id": "historico-atividades",
@@ -134,7 +137,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "apps-sugeridos",
@@ -169,7 +174,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "delivery-optimization",
@@ -190,7 +197,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Pode aumentar downloads individuais e perder compartilhamento local de atualizacoes.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "wpbt",
@@ -211,7 +220,10 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode impedir software legitimo fornecido pelo fabricante.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "device-metadata",
@@ -232,7 +244,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Pode impedir a obtencao automatica de informacoes e aplicativos de dispositivos.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "bing-no-menu-iniciar",
@@ -260,7 +274,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "localizacao",
@@ -299,12 +315,15 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Clima, mapas, localizacao e outros aplicativos podem perder funcionalidades.",
+      "reinicio": "Pode exigir reinicio ou reativacao de servico."
     },
     {
       "id": "servicos-para-manual",
-      "nome": "Passar servicos nao essenciais para manual",
-      "desc": "Coloca servicos pouco usados em inicializacao manual (MapsBroker, StorSvc) e desativa compartilhamento de rede e arquivos offline (SharedAccess, CscService). Reversivel.",
+      "nome": "Alterar inicializacao de servicos selecionados",
+      "desc": "Altera MapsBroker e StorSvc para manual e desativa SharedAccess, CscService, Fax, RemoteRegistry e RetailDemo.",
       "categoria": "Desempenho",
       "niveis": [
         "balanceado",
@@ -347,7 +366,10 @@
           "nome": "RetailDemo",
           "inicio": "Disabled"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode afetar compartilhamento de internet, arquivos offline, fax e outros recursos. Nao e uma recomendacao geral.",
+      "reinicio": "Pode exigir reinicio ou reativacao de servico."
     },
     {
       "id": "sysmain",
@@ -364,7 +386,10 @@
           "nome": "SysMain",
           "inicio": "Disabled"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "So considere apos investigar atividade persistente de disco atribuida ao SysMain. Pode piorar carregamento de aplicativos.",
+      "reinicio": "Pode exigir reinicio ou reativacao de servico."
     },
     {
       "id": "pesquisa-indexacao",
@@ -381,7 +406,10 @@
           "nome": "WSearch",
           "inicio": "Disabled"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode tornar pesquisas de arquivos e Outlook mais lentas. Nao e recomendado somente por usar SSD.",
+      "reinicio": "Pode exigir reinicio ou reativacao de servico."
     },
     {
       "id": "aplicativos-em-segundo-plano",
@@ -401,7 +429,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Pode atrasar sincronizacao e notificacoes dos aplicativos da Store.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "efeitos-visuais",
@@ -485,7 +515,9 @@
             0
           ]
         }
-      ]
+      ],
+      "impacto": "Altera a aparencia e animacoes; ganho de desempenho nao medido.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "energia-alto-desempenho",
@@ -502,12 +534,15 @@
           "tipo": "energia",
           "guid": "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode aumentar consumo, temperatura e ruido. Nao garante FPS.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "widgets",
-      "nome": "Remover widgets da barra de tarefas",
-      "desc": "Remove os widgets (painel de noticias/clima) do canto da barra de tarefas e o pacote de background deles. Windows 11.",
+      "nome": "Ocultar widgets da barra de tarefas",
+      "desc": "Oculta o botao de widgets por valor do registro, sem remover pacotes do Windows.",
       "categoria": "Barra de tarefas e menu Iniciar",
       "niveis": [
         "balanceado",
@@ -516,21 +551,15 @@
       "so": "win11",
       "acoes": [
         {
-          "tipo": "appx",
-          "pacote": "MicrosoftWindows.Client.WebExperience"
-        },
-        {
-          "tipo": "appx",
-          "pacote": "Microsoft.WidgetsPlatformRuntime"
-        },
-        {
           "tipo": "registro",
           "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
           "nome": "TaskbarDa",
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "limpar-barra-tarefas",
@@ -564,7 +593,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "menu-contexto-classico",
@@ -585,7 +616,9 @@
           "dados": ""
         }
       ],
-      "apenasManual": true
+      "apenasManual": true,
+      "impacto": "Pode nao funcionar em builds recentes.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "finalizar-tarefa-barra",
@@ -606,7 +639,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "extensoes-de-arquivo",
@@ -627,7 +662,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "explorer-este-pc",
@@ -648,7 +685,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "pastas-automaticas",
@@ -668,7 +707,9 @@
           "tipoValor": "String",
           "dados": "NotSpecified"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "caminhos-longos",
@@ -688,7 +729,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "modo-escuro",
@@ -714,7 +757,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "numlock-inicializacao",
@@ -740,7 +785,9 @@
           "tipoValor": "String",
           "dados": "2"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "bsod-detalhado",
@@ -766,7 +813,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "notificacoes",
@@ -792,7 +841,10 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode ocultar alertas importantes, lembretes e notificacoes de aplicativos.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "hora-utc-dualboot",
@@ -811,7 +863,10 @@
           "tipoValor": "QWord",
           "dados": "1"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Somente para dual boot que usa RTC em UTC; nao recomendado para instalacao comum.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "edge-debloat",
@@ -915,7 +970,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Pode desabilitar funcionalidades ou integracoes desejadas do navegador.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "bateria-porcentagem",
@@ -935,7 +992,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "barra-esquerda",
@@ -955,7 +1014,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "remover-home-galeria",
@@ -981,7 +1042,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "arquivos-ocultos",
@@ -1000,7 +1063,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "verboso-logon",
@@ -1019,7 +1084,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "tela-bloqueio-off",
@@ -1039,7 +1106,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "teclas-aderencia",
@@ -1059,7 +1128,10 @@
           "tipoValor": "DWord",
           "dados": "506"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode interferir em preferencias de acessibilidade.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "mouse-precisao",
@@ -1092,7 +1164,9 @@
           "tipoValor": "String",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "bloquear-coinstaladores",
@@ -1118,7 +1192,10 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode impedir instalacao automatica de componentes e utilitarios de hardware.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "preferir-ipv4",
@@ -1137,12 +1214,15 @@
           "tipoValor": "DWord",
           "dados": "32"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode prejudicar redes IPv6. Nao e uma otimizacao geral de latencia.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "ia-copilot",
-      "nome": "Desativar Copilot e IA do Windows",
-      "desc": "Desliga o Copilot e as funcoes de IA do Windows 11: esconde a pagina de IA das Configuracoes, desativa IA do Notepad, desliga o Recall (DisableAIDataAnalysis) e para o servico de IA se existir. Em maquinas sem Copilot/Recall, as partes sem efeito sao puladas sem erro. Nao toca no Defender.",
+      "nome": "Configurar politicas de Copilot e IA",
+      "desc": "Configura politicas locais de IA e tenta parar o servico de IA quando presente. Nao remove pacotes do sistema.",
       "categoria": "Privacidade",
       "niveis": [
         "agressivo"
@@ -1174,12 +1254,11 @@
           "tipo": "servico",
           "nome": "WSAIFabricSvc",
           "inicio": "Disabled"
-        },
-        {
-          "tipo": "appx",
-          "pacote": "Microsoft.Windows.Ai.Copilot.Provider"
         }
-      ]
+      ],
+      "apenasManual": true,
+      "impacto": "Pode afetar funcionalidades de IA; politicas dependem da build e edicao.",
+      "reinicio": "Pode exigir reinicio ou reativacao de servico."
     },
     {
       "id": "recomendacoes-iniciar",
@@ -1205,7 +1284,9 @@
           "tipoValor": "DWord",
           "dados": "1"
         }
-      ]
+      ],
+      "impacto": "Tambem pode desativar Spotlight na tela de bloqueio.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "ocultar-busca-barra",
@@ -1224,7 +1305,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     },
     {
       "id": "ocultar-visao-tarefas",
@@ -1244,7 +1327,9 @@
           "tipoValor": "DWord",
           "dados": "0"
         }
-      ]
+      ],
+      "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
     }
   ]
 }

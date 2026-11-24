@@ -108,3 +108,7 @@ uso por sua conta e risco: e um app que mexe no sistema, leia o que cada ajuste 
 ### RC.6: desinstalador informado
 
 A lista de entradas nomeadas do registro inclui itens antes ocultados. Categorias: aplicativos do catalogo, opcionais, sistema protegido, drivers, dependencias, seguranca e desconhecidos. Filtre por categoria, nome/fabricante/versao e ordene por tamanho estimado ou data declarada. Detalhes explicam a finalidade, motivo e risco. SistemaComponent/NoRemove, entradas de atualizacao e componentes protegidos conhecidos bloqueiam desinstalacao e limpeza de rastros pelo app. Drivers, dependencias, seguranca e desconhecidos exigem cautela. O nome e fabricante declarados nao autenticam o software; regras locais nao identificam todos os componentes nem mapeiam dependentes reais. A lista nao e inventario completo de componentes Windows/AppX; debloat permanece separado.
+
+### Otimizacao orientada (RC.6)
+
+Ajustes exibem estado, cautela e guia de finalidade, impacto, compatibilidade, escopo e recuperacao. O perfil recomendado explica sua escolha e desmarca itens ja aplicados. Ajustes sensiveis ficam fora dos presets; widgets e IA nao removem pacotes AppX. O Debloat mostra tambem pacotes instalados nao catalogados, sem permitir sua remocao. Frameworks, recursos e componentes protegidos sao bloqueados no motor. Os metadados nao comprovam dependencias reais e nenhum ganho de FPS e garantido.

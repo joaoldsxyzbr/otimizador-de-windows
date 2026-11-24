@@ -55,6 +55,34 @@ function Classificar-RiscoAjuste {
     return 'revise impacto'
 }
 
+function Obter-GuiaAjuste {
+    param($Tweak)
+    $risco=Classificar-RiscoAjuste $Tweak
+    $escopo=@($Tweak.acoes | ForEach-Object {
+        if ($_.tipo -eq 'registro') { if ($_.caminho -like 'HKCU:*') {'usuario atual'} else {'computador'} }
+        elseif ($_.tipo -eq 'servico') {'servicos do computador'}
+        elseif ($_.tipo -eq 'energia') {'plano de energia'}
+        else {$_.tipo}
+    } | Sort-Object -Unique) -join ', '
+    $recuperacao='Journal registra valores anteriores; conflitos ou falhas podem exigir revisao manual.'
+    if (@($Tweak.acoes | Where-Object { $_.tipo -eq 'appx' }).Count -gt 0) { $recuperacao='Reinstalacao e dados do aplicativo nao garantidos.' }
+    $compat=switch ($Tweak.so) {'win11' {'Windows 11'} 'win10' {'Windows 10'} default {'Windows 10/11'}}
+    $impacto=if ($Tweak.impacto) {$Tweak.impacto} else {'Revise o efeito dos valores; impacto nao medido.'}
+    $reinicio=if ($Tweak.reinicio) {$Tweak.reinicio} else {'Pode exigir relogon ou reinicio.'}
+    return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat; disponibilidade varia por build/edicao.","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio) -join "`n") }
+}
+
+function Atualizar-RotuloAjuste {
+    param($Cb,[string]$Estado)
+    $t=$Cb.Tag
+    $rotulo=switch ($Estado) {'aplicado' {'ja aplicado'} 'parcial' {'parcial'} 'nao' {'nao aplicado'} default {'estado nao confirmado'}}
+    $Cb.Content=$t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (' + $rotulo + ')'
+    if ($t.apenasManual) { $Cb.Content += ' [manual]' }
+    $Cb.ToolTip=(Obter-GuiaAjuste $t).texto
+    $Cb.Foreground=switch ($Estado) {'aplicado' {Cor-Tema '#86efac'} 'parcial' {Cor-Tema '#fde047'} default {Cor-Tema '#e5e7eb'}}
+    if ($Estado -eq 'aplicado') { $Cb.IsChecked=$false }
+}
+
 function Montar-PaginaAjustes {
     $win11 = Eh-Win11
     $painel = $global:UI.ListaAjustes
@@ -67,31 +95,48 @@ function Montar-PaginaAjustes {
             $grupos[$t.categoria] = Nova-Categoria $t.categoria
             [void]$painel.Children.Add($grupos[$t.categoria])
         }
-        $nome = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + ']'
-        if ($t.apenasManual) { $nome += ' [somente manual]' }
-        [void]$grupos[$t.categoria].Content.Children.Add((Nova-Checkbox -Texto $nome -Tag $t -Dica $t.desc))
+        $cb=Nova-Checkbox -Texto $t.nome -Tag $t -Dica (Obter-GuiaAjuste $t).texto
+        Atualizar-RotuloAjuste $cb 'desconhecido'
+        [void]$grupos[$t.categoria].Content.Children.Add($cb)
     }
 }
 
+function Obter-GuiaUwp {
+    param($Entrada,$Pacotes)
+    $achados=@($Pacotes | Where-Object { $_.Name -eq $Entrada.pacote })
+    $bloqueado=@($achados | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0
+    $categoria=if ($bloqueado -or $Entrada.protegido) {'Sistema/dependencia - bloqueado'} elseif ($Entrada.desconhecido) {'Nao catalogado - bloqueado'} elseif ($Entrada.remover) {'Opcional - se nao usa'} else {'Aplicativo util - cautela'}
+    $motivo=if ($bloqueado -or $Entrada.protegido) {'Metadados ou nome indicam componente protegido. Remocao indisponivel.'} elseif ($Entrada.desconhecido) {'Sem classificacao no catalogo local; remocao indisponivel.'} else {'Remover somente se nao usa. Outros recursos podem depender do aplicativo. Dados locais e reinstalacao nao garantidos.'}
+    return [pscustomobject]@{ categoria=$categoria; permitido=(-not ($bloqueado -or $Entrada.protegido -or $Entrada.desconhecido) -and $achados.Count -gt 0); instalado=($achados.Count -gt 0); texto=($Entrada.desc + "`n" + $motivo + "`nEscopo: usuario atual. Nenhum desprovisionamento.") }
+}
+
 function Montar-PaginaDebloat {
-    $win11 = Eh-Win11
-    $painel = $global:UI.ListaUwp
+    $win11=Eh-Win11
+    $painel=$global:UI.ListaUwp
     $painel.Children.Clear()
-    $grupos = @{}
-    $grupoSeguroNome = 'opcionais - revise antes de remover'
-    $grupoCautelaNome = 'com cautela (leia as descricoes)'
-    foreach ($p in $global:CatalogoUwp.pacotes) {
-        if ($p.so -eq 'win11' -and -not $win11) { continue }
-        if ($p.so -eq 'win10' -and $win11) { continue }
-        $titulo = $grupoCautelaNome
-        $marcado = $false
-        if ($p.remover) { $titulo = $grupoSeguroNome }
+    $grupos=@{}
+    try { $pacotes=@(Get-AppxPackage -ErrorAction Stop); $consultou=$true }
+    catch { $pacotes=@(); $consultou=$false; Log 'Consulta AppX falhou; remocao indisponivel.' }
+    $entradas=@($global:CatalogoUwp.pacotes | Where-Object { ($_.so -ne 'win11' -or $win11) -and ($_.so -ne 'win10' -or -not $win11) })
+    foreach ($p in @($pacotes | Sort-Object Name -Unique)) {
+        if ($p.Name -notin @($entradas | ForEach-Object {$_.pacote})) {
+            $entradas += [pscustomobject]@{nome=$p.Name; pacote=$p.Name; desc='Pacote instalado nao catalogado.'; desconhecido=$true; protegido=(Testar-AppxProtegido $p)}
+        }
+    }
+    foreach ($p in $entradas) {
+        $info=Obter-GuiaUwp $p $pacotes
+        $titulo=$info.categoria
         if (-not $grupos.ContainsKey($titulo)) {
-            $grupos[$titulo] = Nova-Categoria $titulo
+            $grupos[$titulo]=Nova-Categoria $titulo
             [void]$painel.Children.Add($grupos[$titulo])
         }
-        [void]$grupos[$titulo].Content.Children.Add((Nova-Checkbox -Texto $p.nome -Tag $p -Dica $p.desc -Marcado $marcado))
+        $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($info.instalado) {'instalado'} else {'nao instalado'}
+        $cb=Nova-Checkbox -Texto ($p.nome + ' [' + $estado + ']') -Tag $p -Dica $info.texto
+        $cb.IsEnabled=($consultou -and $info.permitido)
+        if (-not $cb.IsEnabled) {$cb.Foreground=Cor-Tema '#6b7280'}
+        [void]$grupos[$titulo].Content.Children.Add($cb)
     }
+    Aplicar-Filtro -Texto ([string]$global:UI.FiltroUwp.Text) -Painel $painel
 }
 
 function Montar-PaginaInstalar {
@@ -189,7 +234,7 @@ function Aplicar-Filtro {
                 if ($null -ne $cb.Tag.PSObject.Properties['nome']) { $nome = [string]$cb.Tag.nome }
                 if ($null -ne $cb.Tag.PSObject.Properties['desc']) { $desc = [string]$cb.Tag.desc }
             }
-            $ok = ($f -eq '') -or ($nome.ToLower().Contains($f)) -or ($desc.ToLower().Contains($f))
+            $ok = ($f -eq '') -or ($nome.ToLower().Contains($f)) -or ($desc.ToLower().Contains($f)) -or ([string]$cb.Content).ToLower().Contains($f) -or ([string]$cb.ToolTip).ToLower().Contains($f)
             if ($ok) {
                 $cb.Visibility = 'Visible'
                 $algumVisivel = $true
@@ -211,11 +256,7 @@ function Verificar-EstadoAjustes {
         $t = $cb.Tag
         $estado = Verificar-Tweak $t
         $contagens[$estado]++
-        switch ($estado) {
-            'aplicado' { $cb.Foreground = (Cor-Tema '#86efac'); $cb.Content = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (ja aplicado)' }
-            'parcial'  { $cb.Foreground = (Cor-Tema '#fde047'); $cb.Content = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (parcial)' }
-            default    { $cb.Foreground = (Cor-Tema '#e5e7eb'); $cb.Content = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + ']' }
-        }
+        Atualizar-RotuloAjuste $cb $estado
         Atualizar-UI
     }
     Ocupado $false
@@ -226,20 +267,8 @@ function Verificar-EstadoAjustes {
 function Verificar-EstadoUwp {
     Status 'verificando apps pre-instalados...'
     Ocupado $true
-    foreach ($cb in (Get-Checkboxes $global:UI.ListaUwp)) {
-        $p = $cb.Tag
-        if (Appx-Instalado $p.pacote) {
-            $cb.Foreground = (Cor-Tema '#e5e7eb')
-            $cb.Content = $p.nome
-        } else {
-            $cb.Foreground = (Cor-Tema '#6b7280')
-            $cb.Content = $p.nome + '  (nao instalado)'
-            $cb.IsChecked = $false
-        }
-        Atualizar-UI
-    }
-    Ocupado $false
-    Status 'apps verificados.'
+    try { Montar-PaginaDebloat } finally { Ocupado $false }
+    Status 'apps verificados; nenhuma remocao preselecionada.'
 }
 
 # ---- navegacao ----
@@ -309,7 +338,7 @@ function Clique-AplicarAjustes {
         Status 'simulacao concluida (nada foi alterado).'
         return
     }
-    $manuais = @($selecionados | Where-Object { $_.Tag.apenasManual })
+    $manuais = @($selecionados | Where-Object { $_.Tag.apenasManual -or (Classificar-RiscoAjuste $_.Tag) -eq 'cautela alta' })
     if ($manuais.Count -gt 0 -and -not (Perguntar 'Ajustes de cautela' ('Ajustes manuais podem reduzir funcionalidades ou ter reversao aproximada: ' + (($manuais | ForEach-Object { $_.Tag.nome }) -join ', ') + '. Continuar?'))) { return }
     $nomes = ($selecionados | ForEach-Object { $_.Tag.nome }) -join ', '
     $conf = Perguntar 'Aplicar ajustes' ("Aplicar {0} ajuste(s):`n`n{1}`n`nContinuar?" -f $selecionados.Count, $nomes)
@@ -349,11 +378,17 @@ function Clique-AplicarAjustes {
 }
 
 function Clique-RemoverUwp {
-    $selecionados = @(Get-Checkboxes $global:UI.ListaUwp | Where-Object { $_.IsChecked })
+    $selecionados = @(Get-Checkboxes $global:UI.ListaUwp | Where-Object { $_.IsChecked -and $_.IsEnabled })
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os aplicativos que quer remover.'
         return
     }
+    try {
+        $pacotes=@(Get-AppxPackage -ErrorAction Stop)
+        foreach ($cb in $selecionados) {
+            if (-not (Obter-GuiaUwp $cb.Tag $pacotes).permitido) { throw ('Pacote indisponivel ou protegido: ' + $cb.Tag.nome) }
+        }
+    } catch { Avisar 'Remocao bloqueada' $_.Exception.Message; return }
     $nomes = ($selecionados | ForEach-Object { $_.Tag.nome }) -join ', '
     $conf = Perguntar 'Remover aplicativos' ("Remover {0} aplicativo(s) pre-instalado(s):`n`n{1}`n`nRemocao apenas do usuario atual. Dados locais e reinstalacao nao sao garantidos. Outros usuarios nao serao alterados. Continuar?" -f $selecionados.Count, $nomes)
     if (-not $conf) { return }
@@ -420,7 +455,14 @@ function Clique-Preset {
         Avisar 'Preset invalido' $_.Exception.Message
         return
     }
-    foreach ($cb in $cbs) { $cb.IsChecked = ($ids -contains $cb.Tag.id) }
+    foreach ($cb in $cbs) {
+        $cb.IsChecked = ($ids -contains $cb.Tag.id -and (Verificar-Tweak $cb.Tag) -ne 'aplicado')
+    }
+    if ($Nivel -eq 'recomendado') {
+        $perfil=Obter-PerfilRecomendado
+        $motivo=switch ($perfil) {'corporativo' {'Possivel ambiente gerenciado; apenas extensoes de arquivos.'} 'notebook' {'Bateria detectada; ajustes leves sem forcar energia.'} default {'Sem evidencia para ajustes agressivos; selecao essencial.'}}
+        Avisar 'Recomendacao explicada' ($motivo + ' A selecao nao aplica nada e ignora ajustes ja aplicados.')
+    }
     Log ('preset marcado: ' + $Nivel + ' (' + @(($cbs | Where-Object { $_.IsChecked })).Count + ' ajustes). confira a lista e clique em aplicar.')
 }
 
