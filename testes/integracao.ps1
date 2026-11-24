@@ -186,5 +186,26 @@ try {
     $global:UI = @{}
 }
 
+# ---- 9. conflito com alteracao posterior nao deve sobrescrever dados ----
+$nomeConflito = 'Software\OtimizadorPC-CI-Conflito-' + [guid]::NewGuid().ToString('N')
+$caminhoConflito = 'HKCU:\' + $nomeConflito
+try {
+    $chave = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($nomeConflito)
+    try { $chave.SetValue('teste','original') } finally { $chave.Dispose() }
+    Iniciar-Sessao 'ci-conflito'
+    Executar-Acao ([pscustomobject]@{ tipo='registro'; caminho=$caminhoConflito; nome='teste'; tipoValor='String'; dados='aplicado' }) 'teste conflito'
+    $journalConflito = Salvar-Sessao
+    Set-ItemProperty -LiteralPath $caminhoConflito -Name teste -Value 'mudanca posterior' -ErrorAction Stop
+    if (Reverter-Sessao $journalConflito) { throw 'Conflito foi tratado como sucesso.' }
+    if ((Get-ItemProperty -LiteralPath $caminhoConflito -Name teste).teste -ne 'mudanca posterior') { throw 'Mudanca posterior sobrescrita.' }
+    if ((Ler-JSON $journalConflito).itens[0].estadoReversao -ne 'em_andamento') { throw 'Journal de conflito nao preservado.' }
+    Log 'CI ok: conflito no registro preserva mudanca posterior'
+} catch {
+    Log ('FALHOU: conflito no registro: ' + $_.Exception.Message) -Erro
+    exit 1
+} finally {
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeConflito, $false)
+}
+
 Log 'CI INTEGRACAO: todos os testes passaram'
 exit 0

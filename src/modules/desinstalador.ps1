@@ -563,6 +563,8 @@ function Apagar-Rastro {
             existia = $true; tipoAnterior = $leitura.tipo
             valorAnterior = (ConvertTo-Json -InputObject $leitura.valor -Compress)
             valorAnteriorEstruturado = [pscustomobject]@{ valor = $leitura.valor }
+            existiaDepois = $false; tipoDepois = $leitura.tipo
+            valorDepoisEstruturado = [pscustomobject]@{ valor = $null }
         })
         Remove-ItemProperty -LiteralPath $Rastro.chave -Name $Rastro.valor -ErrorAction Stop
         Log ('entrada de inicializacao removida com journal: ' + $Rastro.caminho)
@@ -575,8 +577,8 @@ function Apagar-Rastro {
         if ($null -eq $bruto -or $null -eq $bruto.valor) { Log ('nao consegui ler o PATH ' + $Rastro.escopo); return }
         $lista = @($bruto.valor -split ';')
         if ($lista -notcontains $Rastro.entrada) { Log ('ja saiu do PATH: ' + $Rastro.entrada); return }
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'path-entrada'; escopo = $Rastro.escopo; entrada = $Rastro.entrada; valorAnterior = $bruto.valor })
         $nova = @(($bruto.valor -split ';') | Where-Object { $_ -ne $Rastro.entrada }) -join ';'
+        Registrar-Jornal ([pscustomobject]@{ tipo = 'path-entrada'; escopo = $Rastro.escopo; entrada = $Rastro.entrada; valorAnterior = $bruto.valor; valorDepois = $nova; tipoAnterior = [string]$bruto.tipo })
         $ck = $null
         if ($Rastro.escopo -eq 'Machine') {
             $ck = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment', $true)

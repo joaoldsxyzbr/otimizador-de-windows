@@ -76,6 +76,23 @@ function Ler-ValorRegistro {
     } finally { $chave.Dispose() }
 }
 
+# Compara o tipo e o conteudo sem expandir variaveis nem confundir arrays.
+function Registro-Corresponde {
+    param($Leitura, [bool]$Existe, [string]$Tipo, $Valor)
+    if ([bool]$Leitura.existia -ne $Existe) { return $false }
+    if (-not $Existe) { return $true }
+    if ($Leitura.tipo -ne $Tipo) { return $false }
+    if ($Tipo -eq 'DWord') { return ([int]$Leitura.valor -eq [int]$Valor) }
+    if ($Tipo -eq 'QWord') { return ([long]$Leitura.valor -eq [long]$Valor) }
+    if ($Tipo -in @('Binary','MultiString')) {
+        $a = @($Leitura.valor); $b = @($Valor)
+        if ($a.Count -ne $b.Count) { return $false }
+        for ($i=0; $i -lt $a.Count; $i++) { if ([string]$a[$i] -cne [string]$b[$i]) { return $false } }
+        return $true
+    }
+    return ([string]$Leitura.valor -ceq [string]$Valor)
+}
+
 # ---- journal da sessao ----
 
 function Iniciar-Sessao {
@@ -202,6 +219,14 @@ function Executar-Acao {
                     Executar-RegNativo -Operacao export -Alvo $leitura.rede -Arquivo $arqBackup
                     if (-not (Test-Path $arqBackup)) { $arqBackup = $null }
                 } catch { $arqBackup = $null }
+                $kind = Converter-Kind $Acao.tipoValor
+                $dados = $Acao.dados
+                if (-not $Acao.remover) {
+                    if ($kind -eq [Microsoft.Win32.RegistryValueKind]::DWord) { $dados = [int]$Acao.dados }
+                    if ($kind -eq [Microsoft.Win32.RegistryValueKind]::QWord) { $dados = [long]$Acao.dados }
+                    if ($kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) { $dados = [byte[]]@($Acao.dados) }
+                    if ($kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) { $dados = [string[]]@($Acao.dados) }
+                }
                 Registrar-Jornal ([pscustomobject]@{
                     tipo         = 'registro'
                     caminho      = $Acao.caminho
@@ -210,6 +235,9 @@ function Executar-Acao {
                     valorAnterior = (ConvertTo-Json -InputObject $leitura.valor -Compress)
                     valorAnteriorEstruturado = [pscustomobject]@{ valor = $leitura.valor }
                     tipoAnterior = $leitura.tipo
+                    existiaDepois = (-not [bool]$Acao.remover)
+                    tipoDepois = $kind.ToString()
+                    valorDepoisEstruturado = [pscustomobject]@{ valor = $dados }
                     backupReg    = $arqBackup
                 })
                 if ($Acao.remover) {
@@ -217,12 +245,6 @@ function Executar-Acao {
                     Log ('valor de registro removido: ' + $Acao.nome)
                     return
                 }
-                $kind = Converter-Kind $Acao.tipoValor
-                $dados = $Acao.dados
-                if ($kind -eq [Microsoft.Win32.RegistryValueKind]::DWord) { $dados = [int]$Acao.dados }
-                if ($kind -eq [Microsoft.Win32.RegistryValueKind]::QWord) { $dados = [long]$Acao.dados }
-                if ($kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) { $dados = [byte[]]@($Acao.dados) }
-                if ($kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) { $dados = [string[]]@($Acao.dados) }
                 [Microsoft.Win32.Registry]::SetValue($leitura.rede, $Acao.nome, $dados, $kind) | Out-Null
                 Log ("registro: {0} -> {1} = {2}" -f $Acao.caminho, $Acao.nome, $Acao.dados)
             }
@@ -383,6 +405,16 @@ function Desfazer-Item {
 
             'registro' {
                 $rede = Converter-Hive $Item.caminho
+                if ($Item.PSObject.Properties['existiaDepois']) {
+                    $atual = Ler-ValorRegistro -CaminhoPS $Item.caminho -Nome $Item.nome
+                    if (Registro-Corresponde $atual ([bool]$Item.existia) $Item.tipoAnterior $Item.valorAnteriorEstruturado.valor) {
+                        Log ('registro ja esta no estado anterior: ' + $Item.nome)
+                        return $true
+                    }
+                    if (-not (Registro-Corresponde $atual ([bool]$Item.existiaDepois) $Item.tipoDepois $Item.valorDepoisEstruturado.valor)) {
+                        throw ('Conflito: valor mudou desde a aplicacao. Preservado: ' + $Item.caminho + '\\' + $Item.nome)
+                    }
+                }
                 if ($Item.existia) {
                     $kind = Converter-Kind $Item.tipoAnterior
                     if ($null -ne $Item.valorAnteriorEstruturado) { $valor = $Item.valorAnteriorEstruturado.valor }
@@ -527,9 +559,15 @@ function Desfazer-Item {
                 if ($null -eq $ck2) {
                     throw ("Chave do PATH ausente: " + [string]$Item.escopo)
                 } else {
-                    $kind = $ck2.GetValueKind('Path')
-                    $ck2.SetValue('Path', [string]$Item.valorAnterior, $kind)
-                    $ck2.Close()
+                    try {
+                        $kind = $ck2.GetValueKind('Path')
+                        if ($Item.PSObject.Properties['valorDepois']) {
+                            $atual = [string]$ck2.GetValue('Path',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+                            if ($atual -ceq [string]$Item.valorAnterior) { return $true }
+                            if ($atual -cne [string]$Item.valorDepois -or $kind.ToString() -ne $Item.tipoAnterior) { throw 'PATH mudou desde a limpeza; nao sobrescrevendo.' }
+                        }
+                        $ck2.SetValue('Path', [string]$Item.valorAnterior, $kind)
+                    } finally { $ck2.Dispose() }
                     Log ("entrada restaurada no PATH {0}: {1}" -f [string]$Item.escopo, [string]$Item.entrada)
                 }
             }

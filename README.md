@@ -61,6 +61,7 @@ nao quer janela? modo cli:
 ## desenvolvimento v2 (pre-release)
 
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- recuperacao de valores de registro e PATH: compara o estado atual com o aplicado e o anterior; interrompe se houver mudanca posterior em vez de sobrescrever. Conflitos exigem revisao manual.
 - estado administrativo: a nova pasta ProgramData\otimizadorpc-v2 exige ACL restrita a administradores/SYSTEM, sem confiar automaticamente no estado antigo. Os arquivos anteriores em ProgramData\otimizadorpc permanecem intactos, mas precisam de recuperacao manual/revisao; nao copie journals antigos para a pasta nova.
 - manutencao: erros nativos e PowerShell propagados ao console; reset de Windows Update preserva caches com nomes unicos e tenta reiniciar somente os servicos que estavam ativos. Limpeza rapida de temporarios limitada a arquivos na raiz, sem seguir links. Reset de rede exige confirmacao.
 - operacoes mutaveis da interface passam por um controlador que evita reentrada; codigos de saida de desinstaladores e comandos sao verificados.
