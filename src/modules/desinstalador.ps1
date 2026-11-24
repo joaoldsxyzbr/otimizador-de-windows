@@ -52,6 +52,7 @@ function Converter-EntradaPrograma {
         instaladoEm=[string]$Entrada.InstallLocation; tamanhoKB=$kb; dataInstalacao=$data
         componenteSistema=([string]$Entrada.SystemComponent -eq '1'); naoRemover=([string]$Entrada.NoRemove -eq '1')
         pai=[string]$Entrada.ParentKeyName; tipoRelease=[string]$Entrada.ReleaseType
+        msi=([string]$Entrada.WindowsInstaller -eq '1'); codigoMsi=$(if ([string]$Entrada.WindowsInstaller -eq '1' -and [string]$Entrada.PSChildName -match '^\{[A-Fa-f0-9-]{36}\}$') {[string]$Entrada.PSChildName} else {''})
     }
 }
 
@@ -162,6 +163,56 @@ function Atualizar-DetalhePrograma {
     else { $global:UI.DetalhePrograma.Text='Selecione uma entrada para ver a finalidade e o risco.' }
 }
 
+# Consulta MSI via automacao oficial; abre o MSI em cache somente leitura.
+# ComponentClients indica compartilhamento registrado, nao dependencias reais.
+function Obter-ResumoMsi {
+    param([string]$Codigo)
+    $id=[guid]::Empty
+    if (-not [guid]::TryParse($Codigo,[ref]$id)) {return 'Identificador MSI indisponivel.'}
+    $codigo=$id.ToString('B')
+    $installer=$null; $db=$null; $view=$null; $rec=$null; $clients=$null
+    $linhas=@()
+    try {
+        $installer=New-Object -ComObject WindowsInstaller.Installer -ErrorAction Stop
+        $nome=$installer.GetType().InvokeMember('ProductInfo','GetProperty',$null,$installer,@($codigo,'ProductName'))
+        $local=[string]$installer.GetType().InvokeMember('ProductInfo','GetProperty',$null,$installer,@($codigo,'LocalPackage'))
+        $linhas+=('Produto MSI consultado no contexto atual: '+$nome)
+        $root=[IO.Path]::GetFullPath((Join-Path $env:SystemRoot 'Installer')).TrimEnd('\')+'\'
+        if (-not $local -or -not [IO.Path]::GetFullPath($local).StartsWith($root,[StringComparison]::OrdinalIgnoreCase) -or [IO.Path]::GetExtension($local) -ine '.msi') {throw 'Cache local nao confirmado.'}
+        $file=Get-Item -LiteralPath $local -Force -ErrorAction Stop
+        $dir=Get-Item -LiteralPath $root.TrimEnd('\') -Force -ErrorAction Stop
+        if ($file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) -or ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Cache redirecionado.'}
+        $db=$installer.GetType().InvokeMember('OpenDatabase','InvokeMethod',$null,$installer,@($local,0))
+        $view=$db.GetType().InvokeMember('OpenView','InvokeMethod',$null,$db,@('SELECT `ComponentId` FROM `Component`'))
+        [void]$view.GetType().InvokeMember('Execute','InvokeMethod',$null,$view,$null)
+        $sw=[Diagnostics.Stopwatch]::StartNew()
+        $n=0;$compartilhados=0;$falhas=0;$limite=$false
+        while ($true) {
+            if ($n -ge 100 -or $sw.Elapsed.TotalSeconds -ge 8) {$limite=$true;break}
+            $rec=$view.GetType().InvokeMember('Fetch','InvokeMethod',$null,$view,$null)
+            if ($null -eq $rec) {break}
+            try {
+                $comp=[string]$rec.GetType().InvokeMember('StringData','GetProperty',$null,$rec,@(1))
+                $n++
+                if (-not $comp) {continue}
+                try {
+                    $clients=$installer.GetType().InvokeMember('ComponentClients','GetProperty',$null,$installer,@($comp))
+                    $count=$clients.GetType().InvokeMember('Count','GetProperty',$null,$clients,$null)
+                    if ([int]$count -gt 1) {$compartilhados++}
+                } catch {$falhas++}
+                finally {if ($null -ne $clients -and [Runtime.InteropServices.Marshal]::IsComObject($clients)) {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($clients)};$clients=$null}
+            } finally {if ([Runtime.InteropServices.Marshal]::IsComObject($rec)) {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($rec)};$rec=$null}
+        }
+        $linhas+=('Componentes examinados: '+$n+' | com mais de um cliente registrado: '+$compartilhados+' | consultas falhas: '+$falhas)
+        if ($limite) {$linhas+='Consulta parcial (limite de 100 componentes ou 8 segundos).'}
+        $linhas+='Compartilhamento registrado nao comprova dependencia real, nem ausencia significa seguro remover. Nao usa Win32_Product.'
+    } catch {$linhas+='Metadados MSI ou clientes compartilhados indisponiveis; nao conclua que nao ha dependencias.'}
+    finally {
+        foreach ($obj in @($rec,$clients,$view,$db,$installer)) {if ($null -ne $obj -and [Runtime.InteropServices.Marshal]::IsComObject($obj)) {[void][Runtime.InteropServices.Marshal]::ReleaseComObject($obj)}}
+    }
+    return ($linhas -join [Environment]::NewLine)
+}
+
 function Clique-DetalhesPrograma {
     $sel=@(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     if ($sel.Count -ne 1) { return }
@@ -170,6 +221,12 @@ function Clique-DetalhesPrograma {
     $local=if ($pr.instaladoEm) {$pr.instaladoEm} else {'Nao informado'}
     $nl=[Environment]::NewLine
     $msg=@("Nome: $($pr.nome)","Fabricante declarado: $($pr.editor)","Versao: $($pr.versao)","Categoria: $($info.categoria)","Risco: $($info.risco)","Finalidade: $($info.finalidade)","Motivo: $($info.motivo)","Tamanho: $(Formatar-TamanhoPrograma $pr.tamanhoKB)","Data: $data","Local: $local","Desinstalacao disponivel: $($info.podeDesinstalar)","","Dependencias reais nao foram inventariadas. Metadados podem estar incompletos ou incorretos.") -join $nl
+    if ($pr.msi -and $pr.codigoMsi) {
+        try {
+            $msi=@(Executar-ConsultaLocal -Titulo 'Consultando componentes MSI' -Codigo ${function:Obter-ResumoMsi} -Parametros @{Codigo=$pr.codigoMsi})
+            if ($msi.Count -eq 1 -and $msi[0]) {$msg+=$nl+$nl+[string]$msi[0]}
+        } catch {$msg+=$nl+'Consulta MSI indisponivel.'}
+    }
     Avisar 'Detalhes do programa' $msg
 }
 

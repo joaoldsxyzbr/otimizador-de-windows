@@ -187,6 +187,8 @@ function Inicializar-ModoOtimizador {
     param([switch]$Diagnostico,[switch]$Pessoal)
     $global:ModoProtegido=$true
     $global:AmbienteTrabalho=@(Detectar-AmbienteTrabalho)
+    $ctx=Obter-ContextoAjustes
+    if (-not $ctx -or -not $ctx.cliente -or $ctx.build -lt 10240) { $global:AmbienteTrabalho+= 'Windows cliente compativel nao confirmado; modo protegido.' }
     $id=[Security.Principal.WindowsIdentity]::GetCurrent()
     try {
         $principal=New-Object Security.Principal.WindowsPrincipal($id)

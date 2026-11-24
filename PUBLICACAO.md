@@ -82,3 +82,5 @@ RC.7 adicional: diagnostico por padrao mesmo elevado; -Pessoal e explicito e nao
 - Corrigir caminhos de artefatos nos workflows para ProgramData\\otimizadorpc-v2 e manter todos os gates; alteracao depende do mantenedor quando a ferramenta de edicao de workflow estiver bloqueada.
 - Evolucao posterior: matriz de compatibilidade por build/edicao para cada tweak documentado, APIs MSI de componentes compartilhados, medicao de gargalos com contadores e ETW, inventario PnP mais completo, relatorios de bateria e otimizacao de volumes apropriada a midia. Nao executar remocao automatica de drivers nem ajustes corporativos. Traducao EN e mudancas visuais nao bloqueiam a estavel PT-BR.
 - Merge na main e release estavel somente apos aceite e verificacao dos artefatos.
+
+RC.8: validar capacidade da bateria em notebook, contadores ausentes, Otimizar Unidades nativo (modo pessoal), matriz de builds e edicoes, consulta MSI de produto real em cache e ausencia de reparos MSI. A consulta MSI e parcial e nao mapeia todas as dependencias. Validar Windows cliente e ambiente corporativo autorizado; nenhuma coleta ETW automatica.

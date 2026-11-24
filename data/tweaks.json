@@ -72,7 +72,9 @@
       "apenasManual": true,
       "impacto": "Pode afetar personalizacao, reconhecimento de fala e sugestoes. Nao garante reduzir todos os dados coletados.",
       "reinicio": "Pode exigir relogon ou reinicio dos aplicativos.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "historico-atividades",
@@ -111,7 +113,9 @@
       "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "apps-sugeridos",
@@ -150,7 +154,9 @@
       "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "delivery-optimization",
@@ -175,7 +181,9 @@
       "impacto": "Pode aumentar downloads individuais e perder compartilhamento local de atualizacoes.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "wpbt",
@@ -200,7 +208,9 @@
       "apenasManual": true,
       "impacto": "Pode impedir software legitimo fornecido pelo fabricante.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "device-metadata",
@@ -225,7 +235,9 @@
       "impacto": "Pode impedir a obtencao automatica de informacoes e aplicativos de dispositivos.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "bing-no-menu-iniciar",
@@ -257,7 +269,9 @@
       "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "localizacao",
@@ -300,7 +314,9 @@
       "apenasManual": true,
       "impacto": "Clima, mapas, localizacao e outros aplicativos podem perder funcionalidades.",
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "servicos-para-manual",
@@ -352,7 +368,9 @@
       "apenasManual": true,
       "impacto": "Pode afetar compartilhamento de internet, arquivos offline, fax e outros recursos. Nao e uma recomendacao geral.",
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "sysmain",
@@ -373,7 +391,9 @@
       "apenasManual": true,
       "impacto": "So considere apos investigar atividade persistente de disco atribuida ao SysMain. Pode piorar carregamento de aplicativos.",
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "pesquisa-indexacao",
@@ -394,7 +414,9 @@
       "apenasManual": true,
       "impacto": "Pode tornar pesquisas de arquivos e Outlook mais lentas. Nao e recomendado somente por usar SSD.",
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "aplicativos-em-segundo-plano",
@@ -417,7 +439,9 @@
       ],
       "impacto": "Pode atrasar sincronizacao e notificacoes dos aplicativos da Store.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "efeitos-visuais",
@@ -504,7 +528,9 @@
       ],
       "impacto": "Altera a aparencia e animacoes; ganho de desempenho nao medido.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "energia-alto-desempenho",
@@ -525,7 +551,9 @@
       "apenasManual": true,
       "impacto": "Pode aumentar consumo, temperatura e ruido. Nao garante FPS.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "widgets",
@@ -548,7 +576,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "limpar-barra-tarefas",
@@ -585,7 +615,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "menu-contexto-classico",
@@ -609,7 +641,9 @@
       "apenasManual": true,
       "impacto": "Pode nao funcionar em builds recentes.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "finalizar-tarefa-barra",
@@ -634,7 +668,9 @@
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 22631,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "extensoes-de-arquivo",
@@ -658,7 +694,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "explorer-este-pc",
@@ -682,7 +720,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "pastas-automaticas",
@@ -705,7 +745,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "caminhos-longos",
@@ -728,7 +770,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito. Windows 10 1607 ou posterior; aplicativos precisam suportar caminhos longos.",
+      "buildMinima": 14393,
+      "compatNivel": "requisito-base"
     },
     {
       "id": "modo-escuro",
@@ -757,7 +801,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "numlock-inicializacao",
@@ -786,7 +832,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "bsod-detalhado",
@@ -815,7 +863,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "notificacoes",
@@ -845,7 +895,9 @@
       "apenasManual": true,
       "impacto": "Pode ocultar alertas importantes, lembretes e notificacoes de aplicativos.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "hora-utc-dualboot",
@@ -868,7 +920,9 @@
       "apenasManual": true,
       "impacto": "Somente para dual boot que usa RTC em UTC; nao recomendado para instalacao comum.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "edge-debloat",
@@ -976,7 +1030,9 @@
       "impacto": "Pode desabilitar funcionalidades ou integracoes desejadas do navegador.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "bateria-porcentagem",
@@ -1000,7 +1056,9 @@
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 26100,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "barra-esquerda",
@@ -1023,7 +1081,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "remover-home-galeria",
@@ -1052,7 +1112,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "arquivos-ocultos",
@@ -1074,7 +1136,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "verboso-logon",
@@ -1097,7 +1161,9 @@
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "tela-bloqueio-off",
@@ -1121,7 +1187,9 @@
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "teclas-aderencia",
@@ -1145,7 +1213,9 @@
       "apenasManual": true,
       "impacto": "Pode interferir em preferencias de acessibilidade.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "mouse-precisao",
@@ -1181,7 +1251,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "bloquear-coinstaladores",
@@ -1211,7 +1283,9 @@
       "apenasManual": true,
       "impacto": "Pode impedir instalacao automatica de componentes e utilitarios de hardware.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "preferir-ipv4",
@@ -1234,7 +1308,9 @@
       "apenasManual": true,
       "impacto": "Pode prejudicar redes IPv6. Nao e uma otimizacao geral de latencia.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "ia-copilot",
@@ -1276,7 +1352,9 @@
       "apenasManual": true,
       "impacto": "Pode afetar funcionalidades de IA; politicas dependem da build e edicao.",
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "recomendacoes-iniciar",
@@ -1299,7 +1377,9 @@
       "impacto": "Tambem pode desativar Spotlight na tela de bloqueio.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "apenasManual": true,
-      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
+      "buildMinima": 22000,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "ocultar-busca-barra",
@@ -1321,7 +1401,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     },
     {
       "id": "ocultar-visao-tarefas",
@@ -1344,7 +1426,9 @@
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
-      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
+      "buildMinima": 10240,
+      "compatNivel": "nao-certificada"
     }
   ]
 }

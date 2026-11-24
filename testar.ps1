@@ -914,6 +914,7 @@ try {
         function Get-ComputerRestorePoint { [CmdletBinding()] param() [pscustomobject]@{SequenceNumber=1;Description='anterior'} }
         function Enable-ComputerRestore { throw 'Nao deve ativar protecao.' }
         function Checkpoint-Computer { [CmdletBinding()] param($Description,$RestorePointType) }
+        function Obter-ContextoAjustes {[pscustomobject]@{build=26100;edicao='Professional';cliente=$true}}
         if (Criar-PontoRestauracao) { throw 'Ponto inexistente foi aceito.' }
         $script:sessaoIniciada=$false
         function Iniciar-Sessao { $script:sessaoIniciada=$true }
@@ -1008,6 +1009,7 @@ try {
             $global:CatalogoTweaks=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             $global:CatalogoApps=Get-Content -LiteralPath (Join-Path $raiz 'data\aplicativos.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             function Preencher-PaginaInicio { }
+            function Obter-ContextoAjustes {[pscustomobject]@{build=26100;edicao='Professional';cliente=$true}}
             $global:Janela=[Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Join-Path $raiz 'src\ui\principal.xaml') -Raw -Encoding UTF8))
             $global:UI=@{}
             foreach ($nome in $nomesCtrl) {
@@ -1069,6 +1071,30 @@ try {
     }
     Passou 'bateria correlacionada e gargalos com contadores ausentes preservados'
 } catch { Falhou 'diagnosticos locais RC.8' $_.Exception.Message }
+
+# ---- matriz conservadora e identificacao MSI ----
+Secao 'compatibilidade minima'
+try {
+    $cat=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($a in $cat.tweaks) {if (-not $a.buildMinima -or -not $a.compatNivel) {throw ('Metadado ausente: '+$a.id)}}
+    $a=$cat.tweaks | Where-Object {$_.id -eq 'caminhos-longos'}
+    $ctx=[pscustomobject]@{build=10240;edicao='Professional';cliente=$true}
+    if (Testar-CompatibilidadeAjuste $a $ctx) {throw 'Build antiga aceita.'}
+    $ctx.build=14393
+    if (-not (Testar-CompatibilidadeAjuste $a $ctx)) {throw 'Build minima recusada.'}
+    $ctx.cliente=$false
+    if (Testar-CompatibilidadeAjuste $a $ctx) {throw 'Servidor aceito.'}
+    if (Testar-CompatibilidadeAjuste $a $null) {throw 'Contexto ausente aceito.'}
+    $a=[pscustomobject]@{so='ambos';buildMinima=10240;edicoes=@('Enterprise')}
+    $ctx.cliente=$true
+    if (Testar-CompatibilidadeAjuste $a $ctx) {throw 'Edicao nao permitida aceita.'}
+    $ctx.edicao='Enterprise'
+    if (-not (Testar-CompatibilidadeAjuste $a $ctx)) {throw 'Edicao permitida recusada.'}
+    Passou 'matriz recusa build/edicao/contexto incompativeis'
+    $pr=Converter-EntradaPrograma ([pscustomobject]@{DisplayName='Teste';WindowsInstaller=1;PSChildName='{11111111-1111-1111-1111-111111111111}'})
+    if (-not $pr.msi -or -not $pr.codigoMsi -or (Obter-ResumoMsi 'invalido') -notmatch 'indisponivel') {throw 'Identificacao MSI incorreta.'}
+    Passou 'metadados MSI sem usar Win32_Product'
+} catch { Falhou 'compatibilidade minima/MSI' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

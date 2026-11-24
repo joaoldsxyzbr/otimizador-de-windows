@@ -70,6 +70,7 @@ function Obter-GuiaAjuste {
     $compat=switch ($Tweak.so) {'win11' {'Windows 11'} 'win10' {'Windows 10'} default {'Windows 10/11'}}
     $impacto=if ($Tweak.impacto) {$Tweak.impacto} else {'Revise o efeito dos valores; impacto nao medido.'}
     $notaCompat=if ($Tweak.compatibilidade) {$Tweak.compatibilidade} else {'Compatibilidade especifica nao confirmada.'}
+    if ($Tweak.buildMinima) {$notaCompat+=' Build minima conservadora: '+$Tweak.buildMinima+'.'}
     $reinicio=if ($Tweak.reinicio) {$Tweak.reinicio} else {'Pode exigir relogon ou reinicio.'}
     return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat. $notaCompat","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio) -join "`n") }
 }
@@ -81,12 +82,14 @@ function Atualizar-RotuloAjuste {
     $Cb.Content=$t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (' + $rotulo + ')'
     if ($t.apenasManual) { $Cb.Content += ' [manual]' }
     $Cb.ToolTip=(Obter-GuiaAjuste $t).texto
+    if (-not $Cb.IsEnabled) { $Cb.Content+=' [indisponivel nesta instalacao]'; $Cb.IsChecked=$false }
     $Cb.Foreground=switch ($Estado) {'aplicado' {Cor-Tema '#86efac'} 'parcial' {Cor-Tema '#fde047'} default {Cor-Tema '#e5e7eb'}}
     if ($Estado -eq 'aplicado') { $Cb.IsChecked=$false }
 }
 
 function Montar-PaginaAjustes {
     $win11 = Eh-Win11
+    $ctx=Obter-ContextoAjustes
     $painel = $global:UI.ListaAjustes
     $painel.Children.Clear()
     $grupos = @{}
@@ -99,6 +102,7 @@ function Montar-PaginaAjustes {
         }
         $cb=Nova-Checkbox -Texto $t.nome -Tag $t -Dica (Obter-GuiaAjuste $t).texto
         Atualizar-RotuloAjuste $cb 'desconhecido'
+        $cb.IsEnabled=(Testar-CompatibilidadeAjuste $t $ctx)
         [void]$grupos[$t.categoria].Content.Children.Add($cb)
     }
 }
@@ -334,6 +338,8 @@ function Trocar-Pagina {
 
 function Clique-AplicarAjustes {
     $selecionados = @(Get-Checkboxes $global:UI.ListaAjustes | Where-Object { $_.IsChecked })
+    $ctx=Obter-ContextoAjustes
+    foreach ($cb in $selecionados) {if (-not (Testar-CompatibilidadeAjuste $cb.Tag $ctx)) {Avisar 'Ajuste indisponivel' ('Compatibilidade minima nao atendida: '+$cb.Tag.nome); return}}
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os ajustes desejados ou use um dos presets.'
         return
@@ -476,7 +482,7 @@ function Clique-Preset {
         return
     }
     foreach ($cb in $cbs) {
-        $cb.IsChecked = ($ids -contains $cb.Tag.id -and (Verificar-Tweak $cb.Tag) -ne 'aplicado')
+        $cb.IsChecked = ($cb.IsEnabled -and $ids -contains $cb.Tag.id -and (Verificar-Tweak $cb.Tag) -ne 'aplicado')
     }
     if ($Nivel -eq 'recomendado') {
         $motivo=switch ($perfil) {'corporativo' {'Possivel ambiente gerenciado; apenas extensoes de arquivos.'} 'notebook' {'Bateria detectada; ajustes leves sem forcar energia.'} default {'Sem evidencia para ajustes agressivos; selecao essencial.'}}
@@ -532,7 +538,7 @@ function Clique-ImportarPlano {
     }
     $marcados = 0
     foreach ($cb in (Get-Checkboxes $global:UI.ListaAjustes)) {
-        $cb.IsChecked = ($ids -contains [string]$cb.Tag.id)
+        $cb.IsChecked = ($cb.IsEnabled -and $ids -contains [string]$cb.Tag.id)
         if ($cb.IsChecked) { $marcados++ }
     }
     Log ('plano importado: marquei ' + $marcados + ' ajuste(s) na lista. confira e clique em aplicar (ou em simular primeiro).')

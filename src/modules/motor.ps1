@@ -875,8 +875,28 @@ function Obter-PerfilRecomendado {
     return 'essencial'
 }
 
+# A matriz e um limite minimo, nao uma garantia de efetividade.
+function Obter-ContextoAjustes {
+    try {
+        $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        $cv=Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -ErrorAction Stop
+        if (-not $os.BuildNumber -or -not $cv.EditionID -or -not $os.ProductType) {throw 'Dados incompletos.'}
+        return [pscustomobject]@{build=[int]$os.BuildNumber;edicao=[string]$cv.EditionID;cliente=($os.ProductType -eq 1)}
+    } catch {return $null}
+}
+
+function Testar-CompatibilidadeAjuste {
+    param($Ajuste,$Contexto)
+    if (-not $Contexto -or $Contexto.build -lt 10240 -or -not $Contexto.cliente) {return $false}
+    if ($Ajuste.so -eq 'win11' -and $Contexto.build -lt 22000) {return $false}
+    if ($Ajuste.so -eq 'win10' -and $Contexto.build -ge 22000) {return $false}
+    if ($Ajuste.buildMinima -and $Contexto.build -lt [int]$Ajuste.buildMinima) {return $false}
+    if ($Ajuste.edicoes -and $Contexto.edicao -notin @($Ajuste.edicoes)) {return $false}
+    return $true
+}
+
 function Selecionar-TweaksPreset {
-    param([string]$Nivel, $Catalogo, [bool]$Win11)
+    param([string]$Nivel, $Catalogo, [bool]$Win11, $Contexto)
     if ($Nivel -eq 'recomendado') { $Nivel = Obter-PerfilRecomendado }
     $perfis = @{
         essencial   = @('extensoes-de-arquivo')
@@ -889,6 +909,7 @@ function Selecionar-TweaksPreset {
     if (-not $legado -and -not $perfis.ContainsKey($Nivel)) { throw ('Preset desconhecido: ' + $Nivel) }
     foreach ($t in $Catalogo.tweaks) {
         if ($t.id -like 'custom-*' -or $t.apenasManual) { continue }
+        if ($PSBoundParameters.ContainsKey('Contexto') -and -not (Testar-CompatibilidadeAjuste $t $Contexto)) {continue}
         if (($t.so -eq 'win11' -and -not $Win11) -or ($t.so -eq 'win10' -and $Win11)) { continue }
         if (($legado -and ($t.niveis -contains $Nivel)) -or (-not $legado -and ($perfis[$Nivel] -contains $t.id))) {
             $t
@@ -900,7 +921,9 @@ function Aplicar-Preset {
     param([string]$Nivel, [switch]$Simular)
 
     try {
-        $selecionados = @(Selecionar-TweaksPreset -Nivel $Nivel -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11))
+        $ctx=Obter-ContextoAjustes
+        if ($Simular) { $selecionados=@(Selecionar-TweaksPreset -Nivel $Nivel -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11)) }
+        else { $selecionados=@(Selecionar-TweaksPreset -Nivel $Nivel -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11) -Contexto $ctx) }
     } catch {
         Log $_.Exception.Message -Erro
         return $false
@@ -915,6 +938,7 @@ function Aplicar-Preset {
         Log '==== SIMULACAO: nada sera alterado ===='
         foreach ($t in $selecionados) {
             Log ('== ajuste: ' + $t.nome + ' (simulado)')
+            if (-not (Testar-CompatibilidadeAjuste $t $ctx)) { Log 'Simulacao hipotetica: compatibilidade minima nao confirmada neste ambiente.' }
             foreach ($acao in $t.acoes) { Executar-Acao $acao $t.nome -Simular }
         }
         Log 'SIMULACAO concluida: o pc NAO foi alterado.'

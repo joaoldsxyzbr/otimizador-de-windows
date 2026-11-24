@@ -67,6 +67,7 @@ Log 'CI: aplicando preset seguro DE VERDADE...'
 # a este teste descartavel; o produto continua exigindo ponto confirmado.
 $ok = & {
     function Criar-PontoRestauracao { Log 'CI: stub de ponto de restauracao; teste apenas do motor e journal.'; return $true }
+    function Obter-ContextoAjustes {[pscustomobject]@{build=26100;edicao='Professional';cliente=$true}}
     Aplicar-Preset -Nivel 'seguro'
 }
 if (-not $ok) { throw 'Preset do teste descartavel terminou com falhas.' }
