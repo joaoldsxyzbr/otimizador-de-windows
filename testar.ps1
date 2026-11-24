@@ -1027,6 +1027,23 @@ try {
     }
 } catch { Falhou 'interface pessoal' $_.Exception.Message }
 
+# ---- politicas e diagnostico preservados no catalogo ----
+Secao 'catalogo conservador'
+try {
+    $cat=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($ajuste in $cat.tweaks) {
+        if (-not $ajuste.compatibilidade) {throw ('Compatibilidade sem nota: '+$ajuste.id)}
+        foreach ($acao in $ajuste.acoes) {
+            if ($acao.caminho -match '\\PolicyManager\\' -or $acao.nome -in @('AllowTelemetry','DiagTrack','WerSvc')) {throw ('Acao de diagnostico/politica interna: '+$ajuste.id)}
+            if ($acao.caminho -match '\\Policies\\' -and -not $ajuste.apenasManual) {throw ('Politica incluida em preset: '+$ajuste.id)}
+        }
+    }
+    foreach ($perfil in @('essencial','gamer','notebook','privacidade','corporativo')) {
+        if (@(Selecionar-TweaksPreset $perfil $cat $true).Count -lt 1) {throw ('Perfil vazio: '+$perfil)}
+    }
+    Passou 'presets sem politicas administrativas; diagnostico preservado'
+} catch { Falhou 'catalogo conservador' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

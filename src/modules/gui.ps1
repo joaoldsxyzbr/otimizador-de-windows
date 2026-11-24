@@ -69,8 +69,9 @@ function Obter-GuiaAjuste {
     if (@($Tweak.acoes | Where-Object { $_.tipo -eq 'appx' }).Count -gt 0) { $recuperacao='Reinstalacao e dados do aplicativo nao garantidos.' }
     $compat=switch ($Tweak.so) {'win11' {'Windows 11'} 'win10' {'Windows 10'} default {'Windows 10/11'}}
     $impacto=if ($Tweak.impacto) {$Tweak.impacto} else {'Revise o efeito dos valores; impacto nao medido.'}
+    $notaCompat=if ($Tweak.compatibilidade) {$Tweak.compatibilidade} else {'Compatibilidade especifica nao confirmada.'}
     $reinicio=if ($Tweak.reinicio) {$Tweak.reinicio} else {'Pode exigir relogon ou reinicio.'}
-    return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat; disponibilidade varia por build/edicao.","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio) -join "`n") }
+    return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat. $notaCompat","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio) -join "`n") }
 }
 
 function Atualizar-RotuloAjuste {

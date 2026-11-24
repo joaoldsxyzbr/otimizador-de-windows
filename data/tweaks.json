@@ -2,8 +2,8 @@
   "tweaks": [
     {
       "id": "telemetria",
-      "nome": "Reduzir telemetria e diagnosticos",
-      "desc": "Configura politicas de privacidade e desativa DiagTrack e WerSvc quando presentes; alguns dados podem continuar sendo coletados. Nao desativa Defender.",
+      "nome": "Preferencias locais de privacidade",
+      "desc": "Configura preferencias locais de publicidade, sugestoes e personalizacao. Preserva servicos de diagnostico e nao altera o nivel de dados de diagnostico do Windows; use Configuracoes do Windows para isso.",
       "categoria": "Privacidade",
       "niveis": [
         "seguro",
@@ -12,30 +12,6 @@
       ],
       "so": "ambos",
       "acoes": [
-        {
-          "tipo": "servico",
-          "nome": "DiagTrack",
-          "inicio": "Disabled"
-        },
-        {
-          "tipo": "servico",
-          "nome": "WerSvc",
-          "inicio": "Disabled"
-        },
-        {
-          "tipo": "registro",
-          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection",
-          "nome": "AllowTelemetry",
-          "tipoValor": "DWord",
-          "dados": "0"
-        },
-        {
-          "tipo": "registro",
-          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\DataCollection",
-          "nome": "AllowTelemetry",
-          "tipoValor": "DWord",
-          "dados": "0"
-        },
         {
           "tipo": "registro",
           "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\AdvertisingInfo",
@@ -87,13 +63,6 @@
         },
         {
           "tipo": "registro",
-          "caminho": "HKCU:\\Software\\Microsoft\\Siuf\\Rules",
-          "nome": "NumberOfSIUFInPeriod",
-          "tipoValor": "DWord",
-          "dados": "0"
-        },
-        {
-          "tipo": "registro",
           "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
           "nome": "POWERSHELL_TELEMETRY_OPTOUT",
           "tipoValor": "String",
@@ -101,8 +70,9 @@
         }
       ],
       "apenasManual": true,
-      "impacto": "Pode reduzir diagnosticos e relatorios de falhas; politicas variam por edicao. Nao garante eliminar toda telemetria.",
-      "reinicio": "Pode exigir reinicio ou reativacao de servico."
+      "impacto": "Pode afetar personalizacao, reconhecimento de fala e sugestoes. Nao garante reduzir todos os dados coletados.",
+      "reinicio": "Pode exigir relogon ou reinicio dos aplicativos.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "historico-atividades",
@@ -139,12 +109,14 @@
         }
       ],
       "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "apps-sugeridos",
-      "nome": "Bloquear instalacao automatica de apps sugeridos",
-      "desc": "Impede o Windows de instalar automaticamente apps promocionados da Microsoft Store (Candy Crush, TikTok e afins) e reduz sugestoes de conteudo.",
+      "nome": "Reduzir sugestoes e conteudo promocional",
+      "desc": "Configura preferencias de sugestoes e experiencias personalizadas. A disponibilidade de cada politica depende da edicao/build; nao garante impedir toda instalacao promocional.",
       "categoria": "Privacidade",
       "niveis": [
         "seguro",
@@ -176,12 +148,14 @@
         }
       ],
       "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "delivery-optimization",
-      "nome": "Desativar Delivery Optimization (P2P)",
-      "desc": "Impede o Windows de usar sua banda de internet para enviar atualizacoes a outros PCs na internet ou na rede local.",
+      "nome": "Desativar compartilhamento P2P de atualizacoes",
+      "desc": "Configura o modo de download sem compartilhamento P2P. O Windows continua atualizando.",
       "categoria": "Privacidade",
       "niveis": [
         "seguro",
@@ -199,7 +173,9 @@
         }
       ],
       "impacto": "Pode aumentar downloads individuais e perder compartilhamento local de atualizacoes.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "wpbt",
@@ -223,7 +199,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode impedir software legitimo fornecido pelo fabricante.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "device-metadata",
@@ -246,7 +223,9 @@
         }
       ],
       "impacto": "Pode impedir a obtencao automatica de informacoes e aplicativos de dispositivos.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "bing-no-menu-iniciar",
@@ -276,7 +255,9 @@
         }
       ],
       "impacto": "Altera privacidade ou sugestoes. Nao implica ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "localizacao",
@@ -318,7 +299,8 @@
       ],
       "apenasManual": true,
       "impacto": "Clima, mapas, localizacao e outros aplicativos podem perder funcionalidades.",
-      "reinicio": "Pode exigir reinicio ou reativacao de servico."
+      "reinicio": "Pode exigir reinicio ou reativacao de servico.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "servicos-para-manual",
@@ -369,7 +351,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode afetar compartilhamento de internet, arquivos offline, fax e outros recursos. Nao e uma recomendacao geral.",
-      "reinicio": "Pode exigir reinicio ou reativacao de servico."
+      "reinicio": "Pode exigir reinicio ou reativacao de servico.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "sysmain",
@@ -389,7 +372,8 @@
       ],
       "apenasManual": true,
       "impacto": "So considere apos investigar atividade persistente de disco atribuida ao SysMain. Pode piorar carregamento de aplicativos.",
-      "reinicio": "Pode exigir reinicio ou reativacao de servico."
+      "reinicio": "Pode exigir reinicio ou reativacao de servico.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "pesquisa-indexacao",
@@ -409,7 +393,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode tornar pesquisas de arquivos e Outlook mais lentas. Nao e recomendado somente por usar SSD.",
-      "reinicio": "Pode exigir reinicio ou reativacao de servico."
+      "reinicio": "Pode exigir reinicio ou reativacao de servico.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "aplicativos-em-segundo-plano",
@@ -431,7 +416,8 @@
         }
       ],
       "impacto": "Pode atrasar sincronizacao e notificacoes dos aplicativos da Store.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "efeitos-visuais",
@@ -517,7 +503,8 @@
         }
       ],
       "impacto": "Altera a aparencia e animacoes; ganho de desempenho nao medido.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "energia-alto-desempenho",
@@ -537,7 +524,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode aumentar consumo, temperatura e ruido. Nao garante FPS.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "widgets",
@@ -559,7 +547,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "limpar-barra-tarefas",
@@ -595,7 +584,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "menu-contexto-classico",
@@ -618,12 +608,13 @@
       ],
       "apenasManual": true,
       "impacto": "Pode nao funcionar em builds recentes.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "finalizar-tarefa-barra",
       "nome": "Finalizar tarefa pelo clique-direito na barra",
-      "desc": "Adiciona a opcao 'Finalizar tarefa' ao clicar com o botao direito em um app na barra de tarefas. Windows 11.",
+      "desc": "Tenta habilitar a opcao Finalizar tarefa em builds do Windows 11 que oferecem o recurso. Disponibilidade depende da versao e liberacao gradual.",
       "categoria": "Explorador de arquivos",
       "niveis": [
         "seguro",
@@ -641,7 +632,9 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "extensoes-de-arquivo",
@@ -664,7 +657,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "explorer-este-pc",
@@ -687,7 +681,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "pastas-automaticas",
@@ -709,7 +704,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "caminhos-longos",
@@ -731,7 +727,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "modo-escuro",
@@ -759,7 +756,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "numlock-inicializacao",
@@ -787,7 +785,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "bsod-detalhado",
@@ -815,7 +814,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "notificacoes",
@@ -844,7 +844,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode ocultar alertas importantes, lembretes e notificacoes de aplicativos.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "hora-utc-dualboot",
@@ -866,7 +867,8 @@
       ],
       "apenasManual": true,
       "impacto": "Somente para dual boot que usa RTC em UTC; nao recomendado para instalacao comum.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "edge-debloat",
@@ -972,18 +974,20 @@
         }
       ],
       "impacto": "Pode desabilitar funcionalidades ou integracoes desejadas do navegador.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "bateria-porcentagem",
       "nome": "Porcentagem de bateria na bandeja",
-      "desc": "Mostra o numero da porcentagem ao lado do icone de bateria. Util em notebooks.",
+      "desc": "Tenta habilitar a porcentagem no icone de bateria em Windows 11; depende da build e liberacao do recurso. Nao confirma disponibilidade.",
       "categoria": "Barra de tarefas e menu Iniciar",
       "niveis": [
         "seguro",
         "balanceado"
       ],
-      "so": "ambos",
+      "so": "win11",
       "acoes": [
         {
           "tipo": "registro",
@@ -994,7 +998,9 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "barra-esquerda",
@@ -1016,7 +1022,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "remover-home-galeria",
@@ -1044,7 +1051,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "arquivos-ocultos",
@@ -1065,7 +1073,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "verboso-logon",
@@ -1086,12 +1095,14 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "tela-bloqueio-off",
       "nome": "Pular a tela de bloqueio",
-      "desc": "Ao ligar ou acordar o pc vai direto pra tela de login, sem a tela de bloqueio com relogio e fundo. Politicas corporativas podem ignorar isso.",
+      "desc": "Tenta ocultar a tela visual de bloqueio em edicoes que aceitam a politica. Nao remove autenticacao.",
       "categoria": "Preferencias",
       "niveis": [
         "balanceado",
@@ -1108,7 +1119,9 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "teclas-aderencia",
@@ -1131,7 +1144,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode interferir em preferencias de acessibilidade.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "mouse-precisao",
@@ -1166,7 +1180,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "bloquear-coinstaladores",
@@ -1195,7 +1210,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode impedir instalacao automatica de componentes e utilitarios de hardware.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "preferir-ipv4",
@@ -1217,7 +1233,8 @@
       ],
       "apenasManual": true,
       "impacto": "Pode prejudicar redes IPv6. Nao e uma otimizacao geral de latencia.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "ia-copilot",
@@ -1258,25 +1275,19 @@
       ],
       "apenasManual": true,
       "impacto": "Pode afetar funcionalidades de IA; politicas dependem da build e edicao.",
-      "reinicio": "Pode exigir reinicio ou reativacao de servico."
+      "reinicio": "Pode exigir reinicio ou reativacao de servico.",
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "recomendacoes-iniciar",
       "nome": "Esconder recomendacoes do menu Iniciar",
-      "desc": "Some a secao de recomendacoes do menu Iniciar (apps sugeridos e arquivos recentes). Efeito colateral conhecido: tambem desliga o Spotlight da tela de bloqueio. So Windows 11.",
+      "desc": "Configura a politica HideRecommendedSection sem escrever na area interna PolicyManager. Efeito depende da edicao e versao; nao confirmado em todas as builds.",
       "categoria": "Barra de tarefas e menu Iniciar",
       "niveis": [
         "balanceado"
       ],
       "so": "win11",
       "acoes": [
-        {
-          "tipo": "registro",
-          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\PolicyManager\\current\\device\\Start",
-          "nome": "HideRecommendedSection",
-          "tipoValor": "DWord",
-          "dados": "1"
-        },
         {
           "tipo": "registro",
           "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Explorer",
@@ -1286,7 +1297,9 @@
         }
       ],
       "impacto": "Tambem pode desativar Spotlight na tela de bloqueio.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "apenasManual": true,
+      "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas."
     },
     {
       "id": "ocultar-busca-barra",
@@ -1307,7 +1320,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     },
     {
       "id": "ocultar-visao-tarefas",
@@ -1329,7 +1343,8 @@
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
-      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado."
+      "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
+      "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito."
     }
   ]
 }

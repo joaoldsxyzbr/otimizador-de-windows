@@ -879,10 +879,10 @@ function Selecionar-TweaksPreset {
     param([string]$Nivel, $Catalogo, [bool]$Win11)
     if ($Nivel -eq 'recomendado') { $Nivel = Obter-PerfilRecomendado }
     $perfis = @{
-        essencial   = @('extensoes-de-arquivo', 'apps-sugeridos')
-        gamer       = @('extensoes-de-arquivo', 'mouse-precisao', 'finalizar-tarefa-barra')
-        notebook    = @('extensoes-de-arquivo', 'bateria-porcentagem', 'apps-sugeridos')
-        privacidade = @('extensoes-de-arquivo', 'historico-atividades', 'apps-sugeridos', 'bing-no-menu-iniciar')
+        essencial   = @('extensoes-de-arquivo')
+        gamer       = @('extensoes-de-arquivo')
+        notebook    = @('extensoes-de-arquivo')
+        privacidade = @('extensoes-de-arquivo')
         corporativo = @('extensoes-de-arquivo')
     }
     $legado = @('seguro', 'balanceado', 'agressivo') -contains $Nivel
