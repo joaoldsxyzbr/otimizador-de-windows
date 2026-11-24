@@ -513,8 +513,8 @@
                                 <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#f3f4f6" Text="Correcoes comuns"/>
                                 <Button x:Name="BotaoTema" Content="Alternar tema claro/escuro (ao reabrir)" Margin="0,6,0,6"/>
                                 <StackPanel Margin="0,8,0,0">
-                                    <Button x:Name="BotaoFixUpdate" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Resetar o Windows Update (corrige instalacao de updates)"/>
-                                    <Button x:Name="BotaoFixRede" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Resetar a rede (winsock, tcp/ip, dns)"/>
+                                    <Button x:Name="BotaoFixUpdate" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Diagnosticar Windows Update nas Configuracoes"/>
+                                    <Button x:Name="BotaoFixRede" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Diagnosticar rede nas Configuracoes"/>
                                     <Button x:Name="BotaoFixIntegridade" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Verificar integridade do sistema (DISM + SFC)"/>
                                     <Button x:Name="BotaoFixWinget" HorizontalAlignment="Stretch" Content="Instalar/reparar o winget"/>
                                 </StackPanel>
@@ -539,7 +539,7 @@
                             <WrapPanel Margin="0,14,0,0">
                                 <Button x:Name="BotaoAplicarAtualizacoes" Style="{StaticResource BotaoAzul}" Content="Consultar historico" Margin="0,0,10,0" MinWidth="120"/>
                                 <Button x:Name="BotaoBuscarAtualizacoes" Content="Abrir Windows Update" Margin="0,0,10,0" MinWidth="150"/>
-                                <Button x:Name="BotaoResetUpdate2" Content="Resetar Windows Update" MinWidth="170" ToolTip="Se os updates travam ou dao erro, isso limpa o cache e reconstroi o servico." Margin="0,0,8,4"/>
+                                <Button x:Name="BotaoResetUpdate2" Content="Diagnosticar Windows Update" MinWidth="170" ToolTip="Abre o Windows Update sem alterar servicos, caches ou politicas." Margin="0,0,8,4"/>
                             </WrapPanel>
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="As caixas apenas exibem valores registrados, nao a politica efetiva. Historico nao realiza busca online nem instala atualizacoes."/>
                         </StackPanel>
@@ -553,7 +553,7 @@
                             <TextBlock Style="{StaticResource TituloPagina}" Text="Manutencao"/>
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,2,0,12" Text="Rotinas de limpeza e diagnostico. As marcadas com (janela) rodam numa janela separada do powershell para voce acompanhar tudo em tempo real."/>
                             <UniformGrid Columns="2" Margin="0,4,0,0">
-                                <Button x:Name="BotaoLimparTemp" Content="Analisar e limpar temporarios" Margin="4" Padding="10,14" ToolTip="Mostra estimativa e pede confirmacao. Arquivos antigos na raiz Temp; exclusao definitiva."/>
+                                <Button x:Name="BotaoLimparTemp" Content="Analisar e limpar temporarios" Margin="4" Padding="10,14" ToolTip="Mostra estimativa e pede confirmacao. Arquivos antigos na raiz Temp do usuario; exclusao definitiva. Nao limpa Temp do Windows."/>
                                 <Button x:Name="BotaoLimpezaDisco" Content="Revisar limpeza de disco (Windows)" Margin="4" Padding="10,14" ToolTip="Abre limpeza nativa do Windows. Revise as categorias; exclusao pode ser definitiva."/>
                                 <Button x:Name="BotaoAnalisarComponentes" Content="Analisar componentes do Windows" Margin="4" Padding="10,14" ToolTip="DISM AnalyzeComponentStore: avalia armazenamento antes da limpeza."/>
                                 <Button x:Name="BotaoDiagnosticarIntegridade" Content="Diagnosticar integridade (sem reparo)" Margin="4" Padding="10,14" ToolTip="DISM ScanHealth e SFC verifyonly; consulta pode gravar logs do Windows."/>
@@ -561,10 +561,10 @@
                                 <Button x:Name="BotaoConsultarEnergia" Content="Diagnosticar energia e suspensao" Margin="4" Padding="10,14" ToolTip="Consulta plano, solicitacoes, ultima ativacao e temporizadores."/>
                                 <Button x:Name="BotaoLimpezaDism" Content="Limpeza de componentes do Windows (janela)" Margin="4" Padding="10,14" ToolTip="Remove componentes substituidos do Windows. Pode demorar; nao use como rotina de ganho de FPS."/>
                                 <Button x:Name="BotaoVerificarIntegridade" Content="Reparar arquivos do sistema (DISM + SFC)" Margin="4" Padding="10,14" ToolTip="DISM e SFC tentam reparar arquivos do sistema; use quando houver corrupcao ou falhas."/>
-                                <Button x:Name="BotaoVerificarDisco" Content="Verificar disco C: sem interromper (janela)" Margin="4" Padding="10,14" ToolTip="Consulta o volume do sistema; pode consumir recursos."/>
+                                <Button x:Name="BotaoVerificarDisco" Content="Verificar volume do sistema (sem reparo)" Margin="4" Padding="10,14" ToolTip="Consulta o volume do sistema; pode consumir recursos."/>
                                 <Button x:Name="BotaoRecuperarIcones" Content="Reconstruir cache de icones" Margin="4" Padding="10,14" ToolTip="Use quando icones estiverem incorretos; reinicia o Explorer."/>
                                 <Button x:Name="BotaoLimparDns" Content="Limpar cache do DNS" Margin="4" Padding="10,14" ToolTip="Use em problemas de resolucao de nomes; nao acelera a internet permanentemente."/>
-                                <Button x:Name="BotaoSincronizarHora" Content="Sincronizar hora com a internet" Margin="4" Padding="10,14" ToolTip="Use se a hora estiver incorreta. Depende do servico de hora."/>
+                                <Button x:Name="BotaoSincronizarHora" Content="Sincronizar hora pela fonte configurada" Margin="4" Padding="10,14" ToolTip="Use se a hora estiver incorreta. Depende do servico de hora."/>
                                 <Button x:Name="BotaoAnalisarArmazenamento" Content="Analisar arquivos grandes" Margin="4" Padding="10,14" ToolTip="Analise somente leitura. Arquivos grandes nao sao necessariamente descartaveis."/>
                                 <Button x:Name="BotaoBackupDrivers" Content="Exportar backup de drivers" Margin="4" Padding="10,14" ToolTip="Exporta drivers de terceiros para uma pasta escolhida, sem instalar nem remover drivers."/>
                             </UniformGrid>

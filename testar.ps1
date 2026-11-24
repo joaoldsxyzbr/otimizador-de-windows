@@ -1285,6 +1285,37 @@ try {
     Passou 'produto MSI vinculado ao registro e redirecionamento de executavel recusado'
 } catch {Falhou 'identidade de desinstalacao' $_.Exception.Message}
 
+# ---- F7: maintenance uses native routes and no generic resets ----
+Secao 'manutencao conservadora'
+try {
+    & {
+        $script:rotas=@()
+        function Perguntar {return $true}
+        function Log {param($Mensagem,[switch]$Erro)}
+        function Start-Process {[CmdletBinding()]param([string]$FilePath) $script:rotas+= $FilePath}
+        function Stop-Service {throw 'Nao deve parar servicos.'}
+        function Rename-Item {throw 'Nao deve renomear caches.'}
+        function Executar-NoConsole {throw 'Nao deve executar reset.'}
+        Resetar-WindowsUpdate
+        Resetar-Rede
+        if (($script:rotas -join '|') -ne 'ms-settings:windowsupdate|ms-settings:network-status') {throw 'Rotas de diagnostico incorretas.'}
+        function Perguntar {return $false}
+        Resetar-WindowsUpdate
+        Resetar-Rede
+        if ($script:rotas.Count -ne 2) {throw 'Cancelamento ignorado.'}
+    }
+    & {
+        function Perguntar {return $true}
+        function Executar-NoConsole {
+            param($Titulo,$Bloco)
+            if ($Bloco -notmatch 'System32\\chkdsk\.exe' -or $Bloco -match "'/(f|r|x|scan)'") {throw 'Verificacao solicitou reparo ou caminho ambiguo.'}
+            return 0
+        }
+        if ((Verificar-Disco) -ne 0) {throw 'Verificacao nao executada.'}
+    }
+    Passou 'manutencao abre diagnosticos nativos e verifica disco sem reparo automatico'
+} catch {Falhou 'manutencao conservadora' $_.Exception.Message}
+
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
 try {

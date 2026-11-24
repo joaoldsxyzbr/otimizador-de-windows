@@ -43,7 +43,7 @@ function Executar-NoConsole {
         $bytes = [Text.Encoding]::Unicode.GetBytes($cmd)
         $enc = [Convert]::ToBase64String($bytes)
         $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $proc = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -ErrorAction Stop
+        $proc = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -ErrorAction Stop
         try {
             while (-not $proc.WaitForExit(100)) { Atualizar-UI }
             $codigo = $proc.ExitCode
@@ -55,61 +55,23 @@ function Executar-NoConsole {
     return $codigo
 }
 
+# Compatibility entrypoint: route troubleshooting to Windows, never reset services.
 function Resetar-WindowsUpdate {
     Confirmar-PermissaoAlteracao
-    if (-not (Perguntar 'Reset do Windows Update' 'Recriar os caches do Windows Update? Os caches anteriores serao preservados com nome unico. Pode exigir reinicializacao e novo download.')) { return }
-    $bloco = @'
-Write-Host '== Resetando o Windows Update ==' -ForegroundColor Cyan
-$servicos = @()
-foreach ($nome in @('wuauserv','bits','cryptsvc','dosvc')) {
-    $svc = Get-Service -Name $nome -ErrorAction SilentlyContinue
-    if ($svc -and $svc.Status -eq 'Running') { $servicos += $nome }
-}
-$parados = @()
-try {
-    foreach ($nome in $servicos) {
-        Stop-Service -Name $nome -ErrorAction Stop
-        $parados += $nome
-    }
-    $sufixo = '.otimizadorpc-' + [guid]::NewGuid().ToString('N')
-    foreach ($pasta in @("$env:SystemRoot\SoftwareDistribution","$env:SystemRoot\System32\catroot2")) {
-        if (Test-Path -LiteralPath $pasta) {
-            $novo = (Split-Path -Leaf $pasta) + $sufixo
-            Rename-Item -LiteralPath $pasta -NewName $novo -ErrorAction Stop
-            Write-Host ('Cache preservado: ' + (Join-Path (Split-Path -Parent $pasta) $novo))
-        }
-    }
-} finally {
-    $falhas = @()
-    foreach ($nome in $parados) {
-        try { Start-Service -Name $nome -ErrorAction Stop }
-        catch { $falhas += $nome; Write-Host $_.Exception.Message -ForegroundColor Red }
-    }
-    if ($falhas.Count -gt 0) { throw ('Servicos nao reiniciados: ' + ($falhas -join ', ')) }
-}
-Write-Host 'Caches antigos preservados. Verifique o Windows Update.'
-'@
-    Executar-NoConsole -Titulo 'Reset do Windows Update' -Bloco $bloco
+    if (-not (Perguntar 'Diagnosticar Windows Update' 'Abrir Windows Update para revisar erros, historico e opcoes permitidas? O OtimizadorPC nao vai parar servicos nem renomear caches.')) {return}
+    Start-Process -FilePath 'ms-settings:windowsupdate' -ErrorAction Stop | Out-Null
+    Log 'Windows Update aberto; nenhuma politica ou cache alterado pelo aplicativo.'
 }
 
+
+# Network reset can break VPN, static IP and remote access. Do not run a generic reset.
 function Resetar-Rede {
     Confirmar-PermissaoAlteracao
-    if (-not (Perguntar 'Reset de rede' 'Esta operacao pode interromper a conexao e exigir reinicio. Nao use em acesso remoto ou sem saber a configuracao de rede. Continuar?')) { return }
-    $bloco = @'
-Write-Host '== Resetando a rede ==' -ForegroundColor Cyan
-Executar-Nativo ipconfig.exe @('/flushdns')
-Write-Host 'Resetando winsock...'
-Executar-Nativo netsh.exe @('winsock','reset')
-Write-Host 'Resetando pilha TCP/IP...'
-Executar-Nativo netsh.exe @('int','ip','reset')
-Write-Host 'Liberando e renovando IP...'
-Executar-Nativo ipconfig.exe @('/release')
-Executar-Nativo ipconfig.exe @('/renew')
-Write-Host ''
-Write-Host 'REINICIE O PC para completar a correcao.' -ForegroundColor Yellow
-'@
-    Executar-NoConsole -Titulo 'Reset da rede' -Bloco $bloco
+    if (-not (Perguntar 'Diagnosticar rede' 'Abrir configuracoes de rede para revisar conexao e solucionar problemas? O OtimizadorPC nao vai resetar Winsock, TCP/IP, VPN ou liberar enderecos IP.')) {return}
+    Start-Process -FilePath 'ms-settings:network-status' -ErrorAction Stop | Out-Null
+    Log 'Configuracoes de rede abertas; nenhuma configuracao de rede alterada pelo aplicativo.'
 }
+
 
 function Diagnosticar-Integridade {
     Confirmar-PermissaoAlteracao
@@ -155,9 +117,9 @@ function Verificar-Integridade {
     $bloco = @'
 Write-Host '== Verificacao de integridade do sistema ==' -ForegroundColor Cyan
 Write-Host '1/2 - DISM (pode demorar varios minutos)...' -ForegroundColor Cyan
-Executar-Nativo Dism.exe @('/Online','/Cleanup-Image','/RestoreHealth') @(0,3010)
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/RestoreHealth') @(0,3010)
 Write-Host '2/2 - SFC (varredura de arquivos de sistema)...' -ForegroundColor Cyan
-Executar-Nativo sfc.exe @('/scannow')
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\sfc.exe') @('/scannow')
 '@
     Executar-NoConsole -Titulo 'Verificacao de integridade (DISM + SFC)' -Bloco $bloco
 }
@@ -168,19 +130,21 @@ function Manutencao-DISM {
     $bloco = @'
 Write-Host '== Limpeza do armazenamento de componentes ==' -ForegroundColor Cyan
 Write-Host 'Isso apaga versoes antigas de atualizacoes do Windows. Pode demorar.'
-Executar-Nativo Dism.exe @('/Online','/Cleanup-Image','/StartComponentCleanup') @(0,3010)
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/StartComponentCleanup') @(0,3010)
 '@
     Executar-NoConsole -Titulo 'Limpeza DISM de componentes' -Bloco $bloco
 }
 
 function Verificar-Disco {
     Confirmar-PermissaoAlteracao
-    $bloco = @'
-Write-Host '== Verificacao do disco C: (online, sem interromper o uso) ==' -ForegroundColor Cyan
-Executar-Nativo chkdsk.exe @($env:SystemDrive,'/scan')
+    if (-not (Perguntar 'Verificar volume do sistema' 'Executar CHKDSK sem parametros de reparo? Pode demorar. Em um volume em uso, resultados podem exigir nova verificacao; nenhuma correcao sera solicitada.')) {return}
+    $bloco=@'
+Write-Host ('== Verificacao sem reparo solicitado: '+$env:SystemDrive+' ==') -ForegroundColor Cyan
+Executar-Nativo (Join-Path $env:SystemRoot 'System32\chkdsk.exe') @($env:SystemDrive)
 '@
-    Executar-NoConsole -Titulo 'Verificacao de disco (chkdsk /scan)' -Bloco $bloco
+    Executar-NoConsole -Titulo 'Verificacao de disco sem reparo solicitado' -Bloco $bloco
 }
+
 
 function Limpeza-Disco {
     Confirmar-PermissaoAlteracao
@@ -231,10 +195,10 @@ function Obter-PlanoTemporarios {
 
 function Limpar-Temporarios {
     Confirmar-PermissaoAlteracao
-    $pastas=@((Join-Path $env:LOCALAPPDATA 'Temp'),(Join-Path $env:SystemRoot 'Temp'))
+    $pastas=@((Join-Path $env:LOCALAPPDATA 'Temp'))
     $plano=Obter-PlanoTemporarios $pastas
     if ($plano.itens.Count -eq 0) { Avisar 'Limpeza de temporarios' ('Nenhum arquivo elegivel nas pastas consultadas. '+($plano.avisos -join ' | ')); return }
-    $msg=('Encontrados {0} arquivo(s), {1:N2} MB estimados. Somente arquivos na raiz das pastas Temp, modificados ha mais de 7 dias. Nao inclui subpastas, documentos ou links.' -f $plano.itens.Count,($plano.bytes/1MB))
+    $msg=('Encontrados {0} arquivo(s), {1:N2} MB estimados. Somente arquivos na raiz do Temp do usuario atual, modificados ha mais de 7 dias. O Temp do Windows nao sera limpo por esta rotina. Nao inclui subpastas, documentos ou links.' -f $plano.itens.Count,($plano.bytes/1MB))
     if ($plano.limitado) { $msg += ' Lista limitada; outros arquivos podem existir.' }
     $msg += "`n" + ($plano.avisos -join "`n") + "`nAmostra:`n" + (($plano.itens | Select-Object -First 8 | ForEach-Object {$_.caminho}) -join "`n")
     $msg += "`n`nExclusao definitiva, sem journal de recuperacao. Arquivos em uso ou alterados serao ignorados. Continuar?"
@@ -262,20 +226,28 @@ function Limpar-Temporarios {
 
 function Limpar-DNS {
     Confirmar-PermissaoAlteracao
-    ipconfig /flushdns | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Falha ao limpar DNS.' }
-    Log 'cache do DNS limpo.'
+    if (-not (Perguntar 'Limpar cache DNS' 'Limpar apenas o cache local de resolucao de nomes? Nao altera servidores DNS, VPN ou configuracao de rede. Use somente em problema de resolucao.')) {return}
+    & (Join-Path $env:SystemRoot 'System32\ipconfig.exe') /flushdns | Out-Null
+    if ($LASTEXITCODE -ne 0) {throw 'Falha ao limpar DNS.'}
+    Log 'cache local do DNS limpo.'
 }
+
 
 function Sincronizar-Hora {
     Confirmar-PermissaoAlteracao
-    Status 'sincronizando hora com a internet...'
+    if (-not (Perguntar 'Sincronizar hora' 'Solicitar sincronizacao pela fonte de hora ja configurada no Windows? Nao altera servidor, servico ou politicas de hora.')) {return}
+    Status 'solicitando sincronizacao de hora...'
     Ocupado $true
-    W32tm /resync 2>&1 | ForEach-Object { Log ("  " + $_) }
-    Ocupado $false
-    Log 'comando de resync concluido (se falhar, veja a mensagem acima; da servico de hora).'
-    Status 'pronto.'
+    try {
+        $saida=& (Join-Path $env:SystemRoot 'System32\w32tm.exe') /resync 2>&1
+        $codigo=$LASTEXITCODE
+        foreach ($linha in $saida) {Log ('  '+$linha)}
+        if ($codigo -ne 0) {throw ('Sincronizacao nao confirmada; codigo '+$codigo)}
+        Log 'Solicitacao de sincronizacao aceita; confira a hora do Windows.'
+        Status 'solicitacao concluida.'
+    } finally {Ocupado $false}
 }
+
 
 function Recuperar-CacheIcones {
     Confirmar-PermissaoAlteracao
