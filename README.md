@@ -2,15 +2,17 @@
 
 ## Abrir sem instalar
 
-Abra o **Windows PowerShell 5.1 como administrador** e cole:
+Em computador autorizado, abra o **Windows PowerShell 5.1 normal (sem administrador)**:
 
 ```powershell
-irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.5/otimizadorpc.ps1 | iex
+irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.7/otimizadorpc.ps1 | iex
 ```
 
-O OtimizadorPC abre diretamente em memoria, sem instalacao. Requer Windows 10/11 e conexao com a internet.
+A RC.7 inicia em modo diagnostico, inclusive em console elevado. Para uso pessoal autorizado, revise o codigo e o SHA256 da release e execute o script com `-Pessoal` em PowerShell elevado. Sinais de gerenciamento impedem alteracoes. Em computador empresarial, solicite autorizacao do TI; nao execute codigo externo sem aprovacao. O comando direto nao verifica o hash automaticamente.
 
-**Versao candidata v2.0.0-rc.5:** testes automatizados aprovados; validacao manual ainda pendente. O comando executa codigo remoto com privilegios administrativos. Revise a origem e use inicialmente o modo de simulacao. [Release e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.5).
+[RC.7 e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.7) | [Codigo V2 em desenvolvimento](https://github.com/joaoldsxyzbr/otimizador-de-windows/tree/desenvolvimento-v2)
+
+**Atenção:** a descricao e as instrucoes de clone abaixo referem-se ao codigo legado desta branch main. As protecoes corporativas da RC.7 estao na release e na branch desenvolvimento-v2, nao no script legado desta branch. Validacao manual da candidata ainda pendente.
 
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
