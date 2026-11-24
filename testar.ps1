@@ -369,6 +369,35 @@ if ($env:GITHUB_ACTIONS -eq 'true') {
     } catch { Falhou 'launcher via github' $_.Exception.Message }
 }
 
+# ---- script online: execucao real em memoria, sem abrir a janela ----
+Secao 'distribuicao online'
+$saidaOnline = 'dist-teste-' + [guid]::NewGuid().ToString('N')
+$pastaOnline = Join-Path $raiz $saidaOnline
+try {
+    $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    & $psExe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $raiz 'montar-portatil.ps1') -PastaSaida $saidaOnline
+    if ($LASTEXITCODE -ne 0) { throw 'Falha na montagem.' }
+    $arquivoOnline = Join-Path $pastaOnline 'otimizadorpc.ps1'
+    $codigoOnline = [IO.File]::ReadAllText($arquivoOnline)
+    $null = [scriptblock]::Create($codigoOnline)
+    $esperado = ((Get-Content -LiteralPath ($arquivoOnline + '.sha256') -Raw).Trim() -split '\s+')[0]
+    if ((Get-FileHash -LiteralPath $arquivoOnline -Algorithm SHA256).Hash -ne $esperado) { throw 'SHA256 divergente.' }
+    Passou 'script online compilado e SHA256 valido'
+    $identidadeTeste = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $adminTeste = New-Object Security.Principal.WindowsPrincipal($identidadeTeste)
+    if ($adminTeste.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        & {
+            $ErrorActionPreference = 'Stop'
+            & ([scriptblock]::Create($codigoOnline)) -Cli essencial -Simular
+            & ([scriptblock]::Create($codigoOnline)) -ValidarInterface
+        }
+        Passou 'script em memoria simula perfil e carrega controles WPF'
+    } else {
+        Write-Host '  [info]   teste de execucao em memoria requer administrador.'
+    }
+} catch { Falhou 'distribuicao online' $_.Exception.Message }
+finally { if (Test-Path -LiteralPath $pastaOnline) { Remove-Item -LiteralPath $pastaOnline -Recurse -Force } }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
