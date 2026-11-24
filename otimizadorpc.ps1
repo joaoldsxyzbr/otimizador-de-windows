@@ -122,7 +122,7 @@ $controles = @(
     'BotaoNavInicio', 'BotaoNavAjustes', 'BotaoNavDebloat', 'BotaoNavDesinstalar', 'BotaoNavInstalar',
     'BotaoNavConfig', 'BotaoNavAtualizacoes', 'BotaoNavManutencao', 'BotaoNavDesfazer',
     'InfoHost', 'InfoSo', 'InfoCpu', 'InfoGpu', 'InfoRam', 'InfoDisco', 'InfoUptime', 'InfoRestore', 'InfoAmbiente', 'InfoDiagnostico',
-    'BotaoCriarRestore', 'BotaoInventario', 'BotaoMedicoes',
+    'BotaoCriarRestore', 'BotaoInventario', 'BotaoMedicoes', 'BotaoVerificarRelease',
     'ListaAjustes', 'ChkPontoRestore', 'ChkSimularAjustes', 'BotaoPresetSeguro', 'BotaoPresetBalanceado', 'BotaoPresetAgressivo', 'BotaoPerfilEssencial', 'BotaoPerfilGamer', 'BotaoPerfilNotebook', 'BotaoPerfilPrivacidade', 'BotaoPerfilCorporativo', 'BotaoPerfilRecomendado', 'BotaoAplicarAjustes', 'FiltroAjustes', 'BotaoExportarPlano', 'BotaoImportarPlano',
     'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp',
     'ListaProgramas', 'FiltroDesinstalar', 'BotaoAtualizarProgramas', 'ChkPontoRestoreDesinstalar', 'BotaoDesinstalarProg', 'BotaoVarrerRastros', 'RotuloRastros', 'BotaoMarcarRastros', 'BotaoApagarRastros', 'ListaRastros',
@@ -161,5 +161,5 @@ if ($global:AmbienteTrabalho.Count -gt 0) {
     Log 'ambiente: pc pessoal (sem dominio, sem antivirus corporativo).'
 }
 
-$global:Janela.Title = ('OtimizadorPC - ' + (Nome-Windows) + ' - modo administrador')
+$global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - modo administrador')
 [void]$global:Janela.ShowDialog()

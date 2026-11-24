@@ -812,6 +812,23 @@ function Clique-Medicoes {
     }
 }
 
+function Clique-VerificarRelease {
+    try {
+        $dados = @(Executar-ConsultaLocal -Titulo 'Consultando versao oficial' -Codigo ${function:Consultar-ReleaseOficial})
+        if ($dados.Count -ne 1 -or $null -eq $dados[0]) { return }
+        $info = $dados[0]
+        $url = 'https://github.com/joaoldsxyzbr/otimizador-de-windows/releases'
+        $msg = 'Versao atual: ' + $global:VersaoOtimizador + [Environment]::NewLine
+        if ($info.publicada) {
+            $msg += 'Ultima release estavel: ' + $info.tag
+            if (-not $info.scriptOnline) { $msg += ' (sem script online)' }
+        } else { $msg += 'Ainda nao existe release estavel publicada.' }
+        if (Perguntar 'Versao oficial' ($msg + [Environment]::NewLine + 'Abrir a pagina oficial de releases? Nenhum codigo sera executado.')) {
+            Start-Process $url -ErrorAction Stop
+        }
+    } catch { Avisar 'Falha na consulta' $_.Exception.Message }
+}
+
 function Ligar-Tudo {
 
     # navegacao da barra lateral
@@ -898,6 +915,7 @@ function Ligar-Tudo {
     # pagina inicio
     $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
     $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
+    $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
         Ocupado $true
         [void](Criar-PontoRestauracao)

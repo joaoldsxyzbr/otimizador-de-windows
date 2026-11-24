@@ -208,7 +208,7 @@ $memoria = $memoria.Replace('$global:PastaApp = if ($PSScriptRoot) { $PSScriptRo
 $memoria = $memoria -replace '(\[switch\]\$Simular)\s*\r?\n\)', ('$1,' + [Environment]::NewLine + '    [switch]$ValidarInterface' + [Environment]::NewLine + ')')
 $memoria = $memoria.Replace('if ($ok) { exit 0 } else { exit 1 }', 'if (-not $ok) { throw ''Preset terminou com erros.'' }; return')
 $memoria = $memoria.Replace('exit 1', 'throw ''Falha na inicializacao do OtimizadorPC.''')
-$memoria = $memoria.Replace('# ---- monta a interface e mostra ----', 'if ($ValidarInterface) { $global:Janela.Close(); Write-Host ''Interface WPF validada.''; return }' + [Environment]::NewLine + '# ---- monta a interface e mostra ----')
+$memoria = $memoria.Replace('# ---- monta a interface e mostra ----', 'if ($ValidarInterface) { Ligar-Tudo; $global:Janela.Close(); Write-Host ''Interface WPF e ligacoes validadas.''; return }' + [Environment]::NewLine + '# ---- monta a interface e mostra ----')
 # O modo remoto nao carrega arquivos .reg locais; use o portatil para custom.
 $memoria = $memoria.Replace('$tweaksCustom = @(Carregar-TweaksCustom)', '$tweaksCustom = @()')
 $arquivoOnline = Join-Path $destino 'otimizadorpc.ps1'

@@ -249,3 +249,27 @@ function Comparar-Medicoes {
     }
     return $linhas
 }
+
+# Consulta apenas metadados publicos do proprio repositorio.
+# Nunca baixa, instala ou executa uma atualizacao automaticamente.
+function Consultar-ReleaseOficial {
+    $tls = [Net.ServicePointManager]::SecurityProtocol
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = $tls -bor [Net.SecurityProtocolType]::Tls12
+        $headers = @{ 'User-Agent' = 'OtimizadorPC'; Accept = 'application/vnd.github+json' }
+        try {
+            $release = Invoke-RestMethod -Uri 'https://api.github.com/repos/joaoldsxyzbr/otimizador-de-windows/releases/latest' -Headers $headers -TimeoutSec 20 -ErrorAction Stop
+        } catch {
+            if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) {
+                return [pscustomobject]@{ publicada=$false; tag=''; scriptOnline=$false }
+            }
+            throw
+        }
+        if ($release.draft -or $release.prerelease -or [string]$release.tag_name -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+$') { throw 'Release estavel invalida.' }
+        return [pscustomobject]@{
+            publicada=$true
+            tag=[string]$release.tag_name
+            scriptOnline=(@($release.assets | Where-Object { $_.name -eq 'otimizadorpc.ps1' }).Count -eq 1)
+        }
+    } finally { [Net.ServicePointManager]::SecurityProtocol = $tls }
+}

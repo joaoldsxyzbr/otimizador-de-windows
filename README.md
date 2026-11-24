@@ -21,6 +21,8 @@ O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimiz
 
 O launcher `iniciar.ps1` permanece como alternativa baseada na montagem do codigo-fonte: confere os blobs Git antes de montar em pasta temporaria. Essa alternativa nao e execucao exclusivamente em memoria.
 
+O botao Consultar versao oficial verifica os metadados da ultima release estavel e oferece abrir a pagina do GitHub, sem instalar ou executar atualizacoes. Procedimento de entrega: [PUBLICACAO.md](PUBLICACAO.md).
+
 ## como usar
 
 1. baixe/clone o repo e abra a pasta
