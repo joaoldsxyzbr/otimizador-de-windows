@@ -418,6 +418,7 @@
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
                             <TextBox x:Name="FiltroDesinstalar" Width="280" Height="30" Background="#22222a" Foreground="#e5e7eb" BorderBrush="#374151" Padding="6,4" VerticalContentAlignment="Center" ToolTip="filtra pelo nome, editor ou versao"/>
                             <Button x:Name="BotaoAtualizarProgramas" Content="Atualizar lista" Margin="8,0,0,0" MinWidth="120"/>
+                            <Button x:Name="BotaoCancelarProgramas" Content="Cancelar consulta" IsEnabled="False" Margin="8,0,0,0"/>
                         </WrapPanel>
                         <WrapPanel Margin="0,4,0,4">
                             <ComboBox x:Name="CategoriaDesinstalar" Width="150" SelectedIndex="0" Margin="0,0,8,4" ToolTip="Categoria">
@@ -436,7 +437,7 @@
                                 <ComboBoxItem Content="Instalacao recente" Tag="Data"/>
                             </ComboBox>
                             <Button x:Name="BotaoDetalhesPrograma" Content="Detalhes" IsEnabled="False" Margin="0,0,8,4"/>
-                            <TextBlock x:Name="InfoProgramas" Foreground="#9ca3af" VerticalAlignment="Center" Text="0 entradas" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="InfoProgramas" Foreground="#9ca3af" VerticalAlignment="Center" Text="Inventario ainda nao consultado" TextWrapping="Wrap"/>
                         </WrapPanel>
                         <WrapPanel Margin="0,4,0,0">
                             <CheckBox x:Name="ChkPontoRestoreDesinstalar" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" VerticalAlignment="Center" Content="Criar ponto de restauracao antes"/>

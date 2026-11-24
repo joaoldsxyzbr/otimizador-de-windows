@@ -433,8 +433,7 @@ function Trocar-Pagina {
         } else { Atualizar-ListaDesfazer }
     }
     if ($Nome -eq 'PaginaDesinstalar') {
-        if ($null -eq $global:ProgramasInstalados) { Carregar-Programas }
-        Atualizar-ListaProgramas
+        Carregar-Programas
     }
     if ($Nome -eq 'PaginaAtualizacoes') {
         try {
@@ -1268,6 +1267,10 @@ function Executar-OperacaoUI {
     } finally {
         $janela.IsEnabled = $antes
         $global:OperacaoUIAtiva = $false
+        if ($global:ConsultaProgramas) {
+            Cancelar-ConsultaProgramas 'Inventario desatualizado apos operacao.'
+            if ($global:PaginaAtual -eq 'PaginaDesinstalar') { Carregar-Programas -Forcar }
+        }
         if ($global:ConsultaInicio) {
             Cancelar-ConsultaInicio 'Analise desatualizada apos operacao.'
             if ($global:PaginaAtual -eq 'PaginaInicio') { Preencher-PaginaInicio -Forcar }
@@ -1382,11 +1385,115 @@ function Solicitar-SnapshotInicio {
     }
 }
 
+# Read-only installed-program inventory.
+function Inicializar-ConsultaProgramas {
+    if ($null -eq $global:ConsultasProgramasAtivas) {$global:ConsultasProgramasAtivas=@{}}
+    $global:ConsultaProgramas=@{ui=$global:UI;fase='inicial';data=$null;trabalho=$null;fechada=$false;motivo=''}
+    $global:ProgramasInstalados=$null
+    $global:ProgramasExibidos=@()
+    $global:UI.BotaoCancelarProgramas.IsEnabled=$false
+}
+
+function Mostrar-EstadoProgramas {
+    param($s,[string]$Fase,[string]$Mensagem)
+    $s.fase=$Fase
+    if ($s.fechada) {return}
+    $s.ui.BotaoAtualizarProgramas.IsEnabled=($null -eq $s.trabalho)
+    $s.ui.BotaoCancelarProgramas.IsEnabled=($Fase -eq 'carregando')
+    if ($Fase -ne 'atualizado') {
+        $global:ProgramasInstalados=$null
+        $global:ProgramasExibidos=@()
+        $s.ui.ListaProgramas.Items.Clear()
+        $s.ui.InfoProgramas.Text=$Mensagem
+        foreach ($nome in @('BotaoDesinstalarProg','BotaoVarrerRastros','BotaoDetalhesPrograma')) {$s.ui[$nome].IsEnabled=$false}
+    }
+}
+
+function Cancelar-ConsultaProgramas {
+    param([string]$Motivo='Consulta cancelada.',[switch]$Fechar)
+    $s=$global:ConsultaProgramas
+    if (-not $s) {return}
+    if ($Fechar) {$s.fechada=$true}
+    $s.data=$null; $s.motivo=$Motivo
+    $j=$s.trabalho
+    if ($j) {
+        Mostrar-EstadoProgramas $s 'cancelando' ($Motivo+' Aguardando encerramento.')
+        if (-not $j.cancelado) {
+            $j.cancelado=$true
+            if (-not $j.async.IsCompleted) {try {$j.parada=$j.ps.BeginStop($null,$null)} catch {}}
+        }
+    } else {Mostrar-EstadoProgramas $s 'indisponivel' $Motivo}
+}
+
+function Concluir-ConsultaProgramas {
+    param($Timer)
+    $s=$global:ConsultasProgramasAtivas[$Timer]
+    if (-not $s) {$Timer.Stop();return}
+    $j=$s.trabalho
+    if (-not $j.async.IsCompleted) {
+        if (-not $j.cancelado -and $j.relogio.Elapsed.TotalSeconds -ge $j.limite -and [object]::ReferenceEquals($s,$global:ConsultaProgramas)) {Cancelar-ConsultaProgramas 'Tempo limite do inventario atingido.'}
+        return
+    }
+    if ($j.parada -and -not $j.parada.IsCompleted) {return}
+    $Timer.Stop()
+    $global:ConsultasProgramasAtivas.Remove($Timer)
+    $dados=@();$falha=$false
+    try {
+        if ($j.parada) {try {$j.ps.EndStop($j.parada)} catch {}}
+        $dados=@($j.ps.EndInvoke($j.async))
+        if ($j.ps.Streams.Error.Count -gt 0 -or $dados.Count -ne 1 -or -not $dados[0].data -or -not $dados[0].PSObject.Properties['itens']) {$falha=$true}
+    } catch {$falha=$true}
+    finally {$j.ps.Dispose();$s.trabalho=$null}
+    if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultaProgramas)) {return}
+    if ($j.cancelado) {Mostrar-EstadoProgramas $s 'indisponivel' ($s.motivo+' Use Atualizar lista.');return}
+    if ($falha -or $global:OperacaoUIAtiva) {Mostrar-EstadoProgramas $s 'indisponivel' 'Inventario indisponivel ou desatualizado. Use Atualizar lista.';return}
+    try {
+        $global:ProgramasInstalados=@($dados[0].itens | Where-Object {$_})
+        Atualizar-ListaProgramas
+        $s.data=Get-Date
+        Mostrar-EstadoProgramas $s 'atualizado' ''
+    } catch {Mostrar-EstadoProgramas $s 'indisponivel' 'Nao foi possivel apresentar a lista. Tente novamente.'}
+}
+
+function Solicitar-SnapshotProgramas {
+    param([switch]$Forcar,[scriptblock]$Codigo=$null,[int]$LimiteSegundos=30)
+    $s=$global:ConsultaProgramas
+    if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
+    if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
+    $s.data=$null
+    $ps=$null;$timer=$null
+    try {
+        $ps=[PowerShell]::Create()
+        if ($Codigo) {[void]$ps.AddScript($Codigo.ToString())}
+        else {
+            $fonte='param([string]$CatalogoJson)'+"`n"+'$ErrorActionPreference="Stop"; $global:CatalogoApps=ConvertFrom-Json $CatalogoJson'+"`n"
+            foreach ($fn in @('Converter-EntradaPrograma','Classificar-Programa','Obter-SnapshotProgramas')) {
+                $corpo=(Get-Command $fn -CommandType Function).ScriptBlock.ToString()
+                $fonte+=("function "+$fn+" {"+$corpo+"}"+[Environment]::NewLine)
+            }
+            $fonte+='Obter-SnapshotProgramas'
+            [void]$ps.AddScript($fonte).AddArgument((ConvertTo-Json -InputObject $global:CatalogoApps -Depth 12 -Compress))
+        }
+        $timer=New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval=[TimeSpan]::FromMilliseconds(100)
+        $timer.Add_Tick({param($sender,$eventArgs) Concluir-ConsultaProgramas $sender})
+        $s.trabalho=@{ps=$ps;async=$ps.BeginInvoke();parada=$null;cancelado=$false;relogio=[Diagnostics.Stopwatch]::StartNew();limite=$LimiteSegundos}
+        $global:ConsultasProgramasAtivas[$timer]=$s
+        Mostrar-EstadoProgramas $s 'carregando' 'Consultando programas em segundo plano. Voce pode trocar de aba.'
+        $timer.Start()
+    } catch {
+        if ($s.trabalho) {Cancelar-ConsultaProgramas 'Falha ao iniciar inventario.';$timer.Start()}
+        else {if ($timer) {$timer.Stop()};if ($ps) {$ps.Dispose()};Mostrar-EstadoProgramas $s 'indisponivel' 'Nao foi possivel iniciar o inventario.'}
+    }
+}
+
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
     Inicializar-ConsultaUwp
     Inicializar-ConsultaInicio
-    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar })
+    Inicializar-ConsultaProgramas
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar })
+    $global:UI.BotaoCancelarProgramas.Add_Click({ Cancelar-ConsultaProgramas })
     $global:UI.BotaoAtualizarInicio.Add_Click({ Solicitar-SnapshotInicio -Forcar })
     $global:UI.BotaoCancelarInicio.Add_Click({ Cancelar-ConsultaInicio })
     $global:UI.BotaoAtualizarUwp.Add_Click({ Verificar-EstadoUwp -Forcar })
@@ -1406,7 +1513,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio')
+        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
@@ -1429,7 +1536,7 @@ function Ligar-Tudo {
         $global:UI.OrdemDesinstalar.Add_SelectionChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
         $global:UI.ListaProgramas.Add_SelectionChanged({ Atualizar-DetalhePrograma })
         $global:UI.BotaoDetalhesPrograma.Add_Click({ Clique-DetalhesPrograma })
-        $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas; Atualizar-ListaProgramas })
+        $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas -Forcar })
         Atualizar-DetalhePrograma
         Montar-PaginaAjustes
         Montar-PaginaInstalar
@@ -1467,7 +1574,7 @@ function Ligar-Tudo {
     $global:UI.ListaProgramas.Add_SelectionChanged({ Atualizar-DetalhePrograma })
     $global:UI.BotaoDetalhesPrograma.Add_Click({ Clique-DetalhesPrograma })
     Atualizar-DetalhePrograma
-    $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas; Atualizar-ListaProgramas })
+    $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas -Forcar })
     $global:UI.BotaoDesinstalarProg.Add_Click({ Executar-OperacaoUI { Clique-DesinstalarProg } })
     $global:UI.BotaoVarrerRastros.Add_Click({ Executar-OperacaoUI { Clique-VarrerRastros } })
     $global:UI.BotaoMarcarRastros.Add_Click({ Marcar-Rastros $true })

@@ -1095,6 +1095,35 @@ try {
             Esperar-ConsultaUwp
             if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.InfoConsultaUwp.Text -notmatch 'Tempo limite') {throw 'Timeout nao sinalizado.'}
             Passou 'Debloat assincrono: navegacao, deduplicacao, cache, erro, cancelamento e timeout'
+            # Synthetic installed-program inventory: actual worker, no registry writes.
+            function Esperar-ConsultaProgramas {
+                $sw=[Diagnostics.Stopwatch]::StartNew()
+                while ($global:ConsultaProgramas.trabalho -and $sw.Elapsed.TotalSeconds -lt 15) {
+                    Start-Sleep -Milliseconds 50
+                    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+                }
+                if ($global:ConsultaProgramas.trabalho) {throw 'Inventario nao encerrou.'}
+            }
+            Solicitar-SnapshotProgramas -Codigo {Start-Sleep -Seconds 3; [pscustomobject]@{data=(Get-Date);itens=@([pscustomobject]@{nome='Teste';editor='Teste';versao='1';classificacao=[pscustomobject]@{categoria='Aplicativo';risco='Normal';podeDesinstalar=$true;finalidade='Teste';motivo='Teste'}})}}
+            $trabProg=$global:ConsultaProgramas.trabalho
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            Trocar-Pagina 'PaginaDesinstalar'
+            Trocar-Pagina 'PaginaInstalar'
+            Trocar-Pagina 'PaginaDesinstalar'
+            if (-not $trabProg -or $sw.Elapsed.TotalSeconds -ge 2 -or -not [object]::ReferenceEquals($trabProg,$global:ConsultaProgramas.trabalho) -or $global:UI.BotaoDesinstalarProg.IsEnabled) {throw 'Inventario bloqueou navegacao, duplicou ou habilitou remocao.'}
+            Esperar-ConsultaProgramas
+            if ($global:ConsultaProgramas.fase -ne 'atualizado' -or $global:ProgramasInstalados.Count -ne 1) {throw 'Inventario sintetico nao exibido.'}
+            Solicitar-SnapshotProgramas -Codigo {throw 'Cache ignorado'}
+            if ($global:ConsultaProgramas.trabalho) {throw 'Cache ignorado.'}
+            Solicitar-SnapshotProgramas -Forcar -Codigo {throw 'Falha simulada'}
+            Esperar-ConsultaProgramas
+            if ($global:ConsultaProgramas.fase -ne 'indisponivel' -or $null -ne $global:ProgramasInstalados -or $global:UI.BotaoDesinstalarProg.IsEnabled) {throw 'Falha interpretada como lista valida.'}
+            Solicitar-SnapshotProgramas -Forcar -Codigo {Start-Sleep -Seconds 10}
+            Cancelar-ConsultaProgramas
+            Esperar-ConsultaProgramas
+            if ($global:ConsultaProgramas.fase -ne 'indisponivel') {throw 'Cancelamento nao confirmado.'}
+            Passou 'Desinstalar assincrono: navegacao, cache, falha e cancelamento'
+
             # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
             $global:Janela.Close()
             $global:ModoProtegido=$true

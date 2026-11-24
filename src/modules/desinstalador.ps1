@@ -75,30 +75,31 @@ function Validar-ProtecaoPrograma {
     return $info
 }
 
-function Carregar-Programas {
-    Status 'procurando programas instalados...'
-    Ocupado $true
-    $chaves = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+# Worker inventory. Missing optional roots are normal; a failed read is not.
+function Obter-SnapshotProgramas {
+    $chaves=@(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
     )
-    $vistos=@{}; $lista=@()
-    try {
-        foreach ($c in $chaves) {
-            foreach ($p in @(Get-ItemProperty -Path $c -ErrorAction SilentlyContinue)) {
-                if ([string]::IsNullOrWhiteSpace([string]$p.DisplayName) -or -not $p.PSPath -or $vistos.ContainsKey([string]$p.PSPath)) { continue }
-                $vistos[[string]$p.PSPath]=$true
-                $pr=Converter-EntradaPrograma $p
-                $pr | Add-Member -NotePropertyName classificacao -NotePropertyValue (Classificar-Programa $pr)
-                $lista += $pr
-            }
+    $vistos=@{}; $lista=New-Object 'System.Collections.Generic.List[object]'
+    foreach ($c in $chaves) {
+        if (-not (Test-Path -LiteralPath $c -ErrorAction Stop)) {continue}
+        foreach ($chave in @(Get-ChildItem -LiteralPath $c -ErrorAction Stop)) {
+            $p=Get-ItemProperty -LiteralPath $chave.PSPath -ErrorAction Stop
+            if ([string]::IsNullOrWhiteSpace([string]$p.DisplayName) -or -not $p.PSPath -or $vistos.ContainsKey([string]$p.PSPath)) {continue}
+            $vistos[[string]$p.PSPath]=$true
+            $pr=Converter-EntradaPrograma $p
+            $pr | Add-Member -NotePropertyName classificacao -NotePropertyValue (Classificar-Programa $pr)
+            $lista.Add($pr)
         }
-        $global:ProgramasInstalados=@($lista | Sort-Object nome,versao)
-        $global:ProgramasExibidos=@()
-    } finally { Ocupado $false }
-    Log ('aba desinstalar: {0} entradas nomeadas no registro; componentes protegidos ficam visiveis.' -f $global:ProgramasInstalados.Count)
-    Status ('{0} entradas na lista.' -f $global:ProgramasInstalados.Count)
+    }
+    [pscustomobject]@{itens=@($lista.ToArray() | Sort-Object nome,versao);data=(Get-Date)}
+}
+
+function Carregar-Programas {
+    param([switch]$Forcar)
+    Solicitar-SnapshotProgramas -Forcar:$Forcar
 }
 
 function Filtrar-Programas {
@@ -357,7 +358,8 @@ function Clique-DesinstalarProg {
         Registrar-Jornal ([pscustomobject]@{ tipo = 'desinstalado-app'; nome = $pr.nome })
         try {
             Desinstalar-Programa $pr
-            $concluidos += $pr
+            try { [void](Confirmar-ProgramaAusenteParaLimpeza $pr); $concluidos += $pr }
+            catch { Log ('Remocao ainda nao confirmada; rastros preservados: '+$pr.nome) }
         } catch {
             Log ('falha ao desinstalar {0}: {1}' -f $pr.nome, $_.Exception.Message) -Erro
         }
@@ -369,8 +371,7 @@ function Clique-DesinstalarProg {
     if ($arq) { $resumo = $resumo + ' journal: ' + (Split-Path -Leaf $arq) }
     Log $resumo
     Status $resumo
-    Carregar-Programas
-    Atualizar-ListaProgramas
+    # The UI wrapper invalidates and refreshes the inventory after the operation.
     foreach ($pr in $concluidos) {
         if (Perguntar 'Varrer rastros' ('Procurar agora os rastros que sobraram de "{0}" (pastas, registro, atalhos)?' -f $pr.nome)) {
             Executar-Varredura $pr
