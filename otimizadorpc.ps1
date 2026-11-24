@@ -121,7 +121,7 @@ $controles = @(
     'PontoStatus', 'StatusTexto', 'BarraProgresso', 'LogBox',
     'BotaoNavInicio', 'BotaoNavAjustes', 'BotaoNavDebloat', 'BotaoNavDesinstalar', 'BotaoNavInstalar',
     'BotaoNavConfig', 'BotaoNavAtualizacoes', 'BotaoNavManutencao', 'BotaoNavDesfazer',
-    'InfoHost', 'InfoSo', 'InfoCpu', 'InfoGpu', 'InfoRam', 'InfoDisco', 'InfoUptime', 'InfoRestore', 'InfoAmbiente',
+    'InfoHost', 'InfoSo', 'InfoCpu', 'InfoGpu', 'InfoRam', 'InfoDisco', 'InfoUptime', 'InfoRestore', 'InfoAmbiente', 'InfoDiagnostico',
     'BotaoCriarRestore',
     'ListaAjustes', 'ChkPontoRestore', 'ChkSimularAjustes', 'BotaoPresetSeguro', 'BotaoPresetBalanceado', 'BotaoPresetAgressivo', 'BotaoAplicarAjustes', 'FiltroAjustes', 'BotaoExportarPlano', 'BotaoImportarPlano',
     'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp',
