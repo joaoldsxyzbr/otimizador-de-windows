@@ -1,10 +1,22 @@
 # otimizador-de-windows (OtimizadorPC)
 
+## Abrir sem instalar
+
+Abra o **Windows PowerShell 5.1 como administrador** e cole:
+
+```powershell
+irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.1/otimizadorpc.ps1 | iex
+```
+
+O OtimizadorPC abre diretamente em memoria, sem instalacao. Requer Windows 10/11 e conexao com a internet.
+
+**Versao candidata v2.0.0-rc.1:** testes automatizados aprovados; validacao manual ainda pendente. O comando executa codigo remoto com privilegios administrativos. Revise a origem e use inicialmente o modo de simulacao. [Release e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.1).
+
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
 App de otimizacao do Windows 10 e 11 em PowerShell + janela nativa WPF (estilo Winutil do Chris Titus, MIT), 100% PT-BR, com journal de desfazer por acao e quarantena. Feito pra uso geral/pessoal: visual, privacidade, desempenho, debloat, desinstalacao limpa e manutencao, tudo num so lugar.
 
-## abrir sem instalar (previa v2)
+## Compilacao local e distribuicao
 
 O montador gera duas variantes: `dist/otimizadorpc-portatil.ps1` (arquivo local) e `dist/otimizadorpc.ps1` (execucao em memoria), com modulos, catalogos e XAML embutidos. O segundo vem acompanhado de um arquivo SHA256.
 
@@ -17,7 +29,7 @@ Para testar a variante em memoria em uma copia local, abra Windows PowerShell 5.
 
 Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O modo remoto nao carrega tweaks customizados locais; os logs, journals e backups permanecem no ProgramData.
 
-O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/latest/download/otimizadorpc.ps1 | iex` **somente depois de uma release estavel contendo esse asset ser publicada**. A publicacao automatica ainda precisa ser configurada. O comando direto executa codigo remoto sem conferir o hash automaticamente: revise a origem e a versao antes de executar como administrador.
+O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/latest/download/otimizadorpc.ps1 | iex` **somente depois de uma release estavel contendo esse asset ser publicada**. A publicacao automatica esta configurada e a primeira pre-release foi publicada. O comando direto executa codigo remoto sem conferir o hash automaticamente: revise a origem e a versao antes de executar como administrador.
 
 O launcher `iniciar.ps1` permanece como alternativa baseada na montagem do codigo-fonte: confere os blobs Git antes de montar em pasta temporaria. Essa alternativa nao e execucao exclusivamente em memoria.
 
