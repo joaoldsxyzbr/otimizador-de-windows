@@ -66,3 +66,5 @@ Use VMs com snapshot e uma conta administrativa. Nao execute testes destrutivos 
 ## Ajustes pendentes nos workflows
 
 Nos arquivos `.github/workflows/ci.yml` e `.github/workflows/publicar.yml`, substitua as referencias de journal/log em `ProgramData\otimizadorpc\desfazer` e `ProgramData\otimizadorpc\logs` pelas equivalentes em `ProgramData\otimizadorpc-v2\desfazer` e `ProgramData\otimizadorpc-v2\logs`. Inclua os dois assets online e SHA256 na coleta do CI, alem dos arquivos portateis. Preserve as validacoes de simulacao, compilacao, integracao e integridade. Nao remova o gate de testes manuais para publicacao estavel.
+
+RC.6: conferir categorias e filtros, detalhes e ordenacao com metadados ausentes; selecionar componente protegido e selecao mista (botoes bloqueados), verificar aviso de desconhecido e driver sem executar desinstalacao, e testar uma aplicacao descartavel normal. Confirmar que uma entrada alterada apos listagem nao e usada para desinstalar/limpar.

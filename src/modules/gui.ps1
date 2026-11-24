@@ -1039,6 +1039,11 @@ function Ligar-Tudo {
 
     # pagina desinstalar
     $global:UI.FiltroDesinstalar.Add_TextChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
+    $global:UI.CategoriaDesinstalar.Add_SelectionChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
+    $global:UI.OrdemDesinstalar.Add_SelectionChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
+    $global:UI.ListaProgramas.Add_SelectionChanged({ Atualizar-DetalhePrograma })
+    $global:UI.BotaoDetalhesPrograma.Add_Click({ Clique-DetalhesPrograma })
+    Atualizar-DetalhePrograma
     $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas; Atualizar-ListaProgramas })
     $global:UI.BotaoDesinstalarProg.Add_Click({ Executar-OperacaoUI { Clique-DesinstalarProg } })
     $global:UI.BotaoVarrerRastros.Add_Click({ Executar-OperacaoUI { Clique-VarrerRastros } })

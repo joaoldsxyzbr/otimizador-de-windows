@@ -104,3 +104,7 @@ documentacao completa: [leia-me.md](leia-me.md)
 MIT - veja [LICENSE](LICENSE)
 
 uso por sua conta e risco: e um app que mexe no sistema, leia o que cada ajuste faz antes de aplicar.
+
+### RC.6: desinstalador informado
+
+A lista de entradas nomeadas do registro inclui itens antes ocultados. Categorias: aplicativos do catalogo, opcionais, sistema protegido, drivers, dependencias, seguranca e desconhecidos. Filtre por categoria, nome/fabricante/versao e ordene por tamanho estimado ou data declarada. Detalhes explicam a finalidade, motivo e risco. SistemaComponent/NoRemove, entradas de atualizacao e componentes protegidos conhecidos bloqueiam desinstalacao e limpeza de rastros pelo app. Drivers, dependencias, seguranca e desconhecidos exigem cautela. O nome e fabricante declarados nao autenticam o software; regras locais nao identificam todos os componentes nem mapeiam dependentes reais. A lista nao e inventario completo de componentes Windows/AppX; debloat permanece separado.

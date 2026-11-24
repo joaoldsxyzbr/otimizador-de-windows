@@ -7,6 +7,71 @@ $global:PastaQuarantena = Join-Path $global:RaizEstado 'quarentena'
 
 # ---- listagem dos programas instalados ----
 
+# Classificacao local, conservadora. Metadados do registro nao sao prova de origem.
+function Classificar-Programa {
+    param($Prog)
+    $n = ([string]$Prog.nome).Trim()
+    $editor = ([string]$Prog.editor).Trim()
+    $ms = $editor -match '^Microsoft(?: Corporation| Corp\.?| Inc\.?)?$'
+    $grupo='Desconhecido'; $risco='Revisar'; $finalidade='Finalidade nao identificada'; $motivo='Nao ha regra local suficiente para identificar este programa.'
+    if ($Prog.componenteSistema -or $Prog.naoRemover -or $Prog.pai -or $Prog.tipoRelease -match '^(Security Update|Critical Update|Update|Hotfix|Service Pack)$' -or
+        $n -match '^(KB[0-9]+\b|(?:Security |Critical )?Update for |Hotfix\b|Language (Pack|Interface)\b|Windows (Security|Defender|Update Health Tools|Setup|Servicing Stack)\b|Microsoft (Windows Defender|Defender Antivirus|Edge(?: WebView2 Runtime| Update)?(?:\s*\(.*\))?)$)' -or
+        ($ms -and $n -match '^Microsoft (Windows (?:10|11|Operating System|Update)|Edge WebView2 Runtime|Edge Update|Update Health Tools)\b')) {
+        $grupo='Sistema'; $risco='Bloqueado'; $finalidade='Componente, atualizacao ou entrada protegida'; $motivo='Indicador de sistema/nao remocao no registro ou nome de componente protegido conhecido.'
+    } elseif ($n -match '\b(driver|drivers|driver package|chipset|graphics driver|audio driver|display driver|wireless driver)\b' -or $n -match '^(Realtek (?:High Definition Audio|Audio|Ethernet|PCIe)|NVIDIA Graphics Driver|AMD (?:Chipset|Software: Adrenalin Edition))\b') {
+        $grupo='Driver'; $risco='Cautela'; $finalidade='Hardware, video, audio ou rede'; $motivo='Nome sugere driver ou pacote de hardware; remover pode prejudicar dispositivos.'
+    } elseif ($n -match '\b(visual c\+\+|redistributable|runtime|directx|xna|physx|openal)\b' -or $n -match '^(Microsoft )?\.NET\b|^Microsoft ASP\.NET\b|^Java \d|^Microsoft Windows Desktop Runtime\b') {
+        $grupo='Dependencia'; $risco='Cautela'; $finalidade='Biblioteca, runtime ou plataforma compartilhada'; $motivo='Outros programas ou jogos podem depender deste componente; dependentes reais nao foram verificados.'
+    } elseif ($n -match '\b(antivirus|endpoint protection|internet security|firewall|security agent|antimalware)\b' -or $n -match '^(McAfee|Norton|Kaspersky|Avast|Bitdefender|ESET|Malwarebytes)\b') {
+        $grupo='Seguranca'; $risco='Cautela'; $finalidade='Protecao ou seguranca'; $motivo='Nome sugere software de protecao; remover pode reduzir a seguranca.'
+    } elseif ($ms -and $n -match '^(Microsoft )?(Clipchamp|OneDrive|PowerToys|Teams|Office|Microsoft 365)(?:\b|$)') {
+        $grupo='Opcional'; $risco='Normal'; $finalidade='Aplicativo de uso pessoal ou produtividade'; $motivo='Nome e fabricante declarados correspondem a aplicativo opcional conhecido; dados e integracoes podem ser afetados.'
+    } else {
+        $conhecido=@($global:CatalogoApps.aplicativos | Where-Object { $_.nome -eq $n })
+        if ($conhecido.Count -eq 1 -and $editor) {
+            $grupo='Aplicativo'; $risco='Normal'; $finalidade=[string]$conhecido[0].desc; $motivo='Nome exato no catalogo local de aplicativos; fabricante declarado, nao autenticado.'
+        }
+    }
+    $temComando = -not ([string]::IsNullOrWhiteSpace([string]$Prog.comando) -and [string]::IsNullOrWhiteSpace([string]$Prog.quiet))
+    if (-not $temComando -and $risco -ne 'Bloqueado') { $motivo += ' Nenhum desinstalador registrado.' }
+    return [pscustomobject]@{ categoria=$grupo; risco=$risco; finalidade=$finalidade; motivo=$motivo; podeDesinstalar=($risco -ne 'Bloqueado' -and $temComando) }
+}
+
+function Converter-EntradaPrograma {
+    param($Entrada)
+    $kb=$null; $data=$null
+    $num=0L
+    if ([long]::TryParse([string]$Entrada.EstimatedSize,[ref]$num) -and $num -gt 0) { $kb=$num }
+    $dt=[datetime]::MinValue
+    if ([datetime]::TryParseExact([string]$Entrada.InstallDate,'yyyyMMdd',[Globalization.CultureInfo]::InvariantCulture,[Globalization.DateTimeStyles]::None,[ref]$dt)) { $data=$dt }
+    return [pscustomobject]@{
+        nome=[string]$Entrada.DisplayName; versao=[string]$Entrada.DisplayVersion; editor=[string]$Entrada.Publisher
+        comando=[string]$Entrada.UninstallString; quiet=[string]$Entrada.QuietUninstallString; chavePs=[string]$Entrada.PSPath
+        instaladoEm=[string]$Entrada.InstallLocation; tamanhoKB=$kb; dataInstalacao=$data
+        componenteSistema=([string]$Entrada.SystemComponent -eq '1'); naoRemover=([string]$Entrada.NoRemove -eq '1')
+        pai=[string]$Entrada.ParentKeyName; tipoRelease=[string]$Entrada.ReleaseType
+    }
+}
+
+# Bloqueio no ponto de execucao, inclusive quando chamado sem a interface.
+# Releia metadados existentes; nao execute um comando que mudou apos a listagem.
+function Validar-ProtecaoPrograma {
+    param($Prog,[switch]$Desinstalar)
+    if ($null -eq $Prog -or [string]::IsNullOrWhiteSpace([string]$Prog.nome)) { throw 'Programa nao identificado.' }
+    $info=Classificar-Programa $Prog
+    if ($info.risco -eq 'Bloqueado') { throw ('Componente protegido: ' + $Prog.nome + '. ' + $info.motivo) }
+    if ($Prog.chavePs) {
+        if (Test-Path -LiteralPath $Prog.chavePs -ErrorAction Stop) {
+            $atual=Converter-EntradaPrograma (Get-ItemProperty -LiteralPath $Prog.chavePs -ErrorAction Stop)
+            $novo=Classificar-Programa $atual
+            if ($novo.risco -eq 'Bloqueado') { throw ('Entrada agora protegida: ' + $atual.nome) }
+            if ($atual.nome -cne $Prog.nome -or $atual.editor -cne $Prog.editor -or $atual.comando -cne $Prog.comando -or $atual.quiet -cne $Prog.quiet -or $novo.risco -ne $info.risco -or $novo.categoria -ne $info.categoria) { throw 'Entrada mudou desde a listagem; atualize a lista e refaca a selecao.' }
+        } elseif ($Desinstalar) { throw 'Entrada nao existe mais; atualize a lista.' }
+    } elseif ($Desinstalar) { throw 'Entrada de registro nao identificada.' }
+    if ($Desinstalar -and -not $info.podeDesinstalar) { throw 'Nenhum desinstalador registrado.' }
+    return $info
+}
+
 function Carregar-Programas {
     Status 'procurando programas instalados...'
     Ocupado $true
@@ -15,62 +80,95 @@ function Carregar-Programas {
         'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
         'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
     )
-    $vistos = @{}
-    $lista = New-Object System.Collections.ArrayList
-    foreach ($c in $chaves) {
-        foreach ($p in @(Get-ItemProperty -Path $c -ErrorAction SilentlyContinue)) {
-            $nome = [string]$p.DisplayName
-            $comando = [string]$p.UninstallString
-            if ([string]::IsNullOrWhiteSpace($nome)) { continue }
-            if ([string]::IsNullOrWhiteSpace($comando)) { continue }
-            if ($p.SystemComponent -eq 1) { continue }
-            if ($nome -match '^(KB[0-9]+|(Security |Critical )?Update for|Hotfix|Language (Pack|Interface)|Windows Driver Package)') { continue }
-            if ($nome -like 'Microsoft Edge*') { continue }
-            $id = $nome.ToLower()
-            if ($vistos.ContainsKey($id)) { continue }
-            $vistos[$id] = $true
-            [void]$lista.Add([pscustomobject]@{
-                nome        = $nome
-                versao      = [string]$p.DisplayVersion
-                editor      = [string]$p.Publisher
-                comando     = $comando
-                quiet       = [string]$p.QuietUninstallString
-                chavePs     = [string]$p.PSPath
-                instaladoEm = [string]$p.InstallLocation
-            })
+    $vistos=@{}; $lista=@()
+    try {
+        foreach ($c in $chaves) {
+            foreach ($p in @(Get-ItemProperty -Path $c -ErrorAction SilentlyContinue)) {
+                if ([string]::IsNullOrWhiteSpace([string]$p.DisplayName) -or -not $p.PSPath -or $vistos.ContainsKey([string]$p.PSPath)) { continue }
+                $vistos[[string]$p.PSPath]=$true
+                $pr=Converter-EntradaPrograma $p
+                $pr | Add-Member -NotePropertyName classificacao -NotePropertyValue (Classificar-Programa $pr)
+                $lista += $pr
+            }
         }
+        $global:ProgramasInstalados=@($lista | Sort-Object nome,versao)
+        $global:ProgramasExibidos=@()
+    } finally { Ocupado $false }
+    Log ('aba desinstalar: {0} entradas nomeadas no registro; componentes protegidos ficam visiveis.' -f $global:ProgramasInstalados.Count)
+    Status ('{0} entradas na lista.' -f $global:ProgramasInstalados.Count)
+}
+
+function Filtrar-Programas {
+    param($Programas,[string]$Texto,[string]$Categoria='Todos',[string]$Ordem='Nome')
+    $filtrados=@($Programas | Where-Object {
+        $info=$_.classificacao
+        if (-not $info) { $info=Classificar-Programa $_ }
+        ($Categoria -eq 'Todos' -or $info.categoria -eq $Categoria) -and
+        (($_.nome + ' ' + $_.editor + ' ' + $_.versao + ' ' + $info.categoria + ' ' + $info.finalidade).IndexOf($Texto.Trim(),[StringComparison]::OrdinalIgnoreCase) -ge 0)
+    })
+    switch ($Ordem) {
+        'Tamanho' { $filtrados | Sort-Object @{Expression={if ($null -eq $_.tamanhoKB) {-1} else {$_.tamanhoKB}};Descending=$true},nome }
+        'Data' { $filtrados | Sort-Object @{Expression={if ($null -eq $_.dataInstalacao) {[datetime]::MinValue} else {$_.dataInstalacao}};Descending=$true},nome }
+        default { $filtrados | Sort-Object nome,versao }
     }
-    $global:ProgramasInstalados = @($lista | Sort-Object -Property nome)
-    $global:ProgramasExibidos = @()
-    Ocupado $false
-    Log ('aba desinstalar: {0} programa(s) encontrados no registro (updates do windows e edge ficam de fora).' -f $global:ProgramasInstalados.Count)
-    Status ('{0} programa(s) na lista.' -f $global:ProgramasInstalados.Count)
+}
+
+function Formatar-TamanhoPrograma {
+    param($KB)
+    if ($null -eq $KB) { return 'Nao informado' }
+    if ($KB -ge 1048576) { return ('{0:N2} GB (estimado)' -f ($KB/1048576)) }
+    return ('{0:N1} MB (estimado)' -f ($KB/1024))
 }
 
 function Atualizar-ListaProgramas {
-    $lb = $global:UI.ListaProgramas
-    $filtro = ''
-    if ($null -ne $global:UI.FiltroDesinstalar.Text) { $filtro = $global:UI.FiltroDesinstalar.Text.Trim().ToLower() }
+    $lb=$global:UI.ListaProgramas
+    $filtro=[string]$global:UI.FiltroDesinstalar.Text
+    $cat='Todos'; $ordem='Nome'
+    if ($global:UI.CategoriaDesinstalar.SelectedItem) { $cat=[string]$global:UI.CategoriaDesinstalar.SelectedItem.Tag }
+    if ($global:UI.OrdemDesinstalar.SelectedItem) { $ordem=[string]$global:UI.OrdemDesinstalar.SelectedItem.Tag }
     $lb.Items.Clear()
-    $global:ProgramasExibidos = @()
+    $global:ProgramasExibidos=@()
     if ($null -eq $global:ProgramasInstalados) { return }
-    foreach ($pr in $global:ProgramasInstalados) {
-        $versao = ''
-        if (-not [string]::IsNullOrWhiteSpace($pr.versao)) { $versao = ' v' + $pr.versao }
-        $linha = ('{0}  |  {1}{2}' -f $pr.nome, $pr.editor, $versao)
-        if ($filtro -ne '' -and -not $linha.ToLower().Contains($filtro)) { continue }
-        $item = New-Object System.Windows.Controls.ListBoxItem
-        $item.Content = $linha
-        $item.Tag = $pr
+    foreach ($pr in @(Filtrar-Programas $global:ProgramasInstalados $filtro $cat $ordem)) {
+        $info=$pr.classificacao
+        $linha=('[{0} | {1}] {2}  |  {3} {4}  |  {5}' -f $info.categoria,$info.risco,$pr.nome,$pr.editor,$pr.versao,(Formatar-TamanhoPrograma $pr.tamanhoKB))
+        $item=New-Object System.Windows.Controls.ListBoxItem
+        $item.Content=$linha; $item.Tag=$pr
+        $item.ToolTip=$info.finalidade + ' - ' + $info.motivo
         [void]$lb.Items.Add($item)
         $global:ProgramasExibidos += $pr
     }
     if ($lb.Items.Count -eq 0) {
-        $vazio = New-Object System.Windows.Controls.ListBoxItem
-        $vazio.Content = '(nenhum programa casa com esse filtro)'
-        $vazio.IsEnabled = $false
+        $vazio=New-Object System.Windows.Controls.ListBoxItem
+        $vazio.Content='(nenhuma entrada neste filtro)'; $vazio.IsEnabled=$false
         [void]$lb.Items.Add($vazio)
     }
+    $global:UI.InfoProgramas.Text=('{0} de {1} entradas | classificacao indicativa, nao certificada' -f $global:ProgramasExibidos.Count,$global:ProgramasInstalados.Count)
+    Atualizar-DetalhePrograma
+}
+
+function Atualizar-DetalhePrograma {
+    $selecionados=@(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
+    $global:UI.BotaoDetalhesPrograma.IsEnabled=($selecionados.Count -eq 1)
+    $bloqueados=@($selecionados | Where-Object { -not $_.classificacao.podeDesinstalar })
+    $global:UI.BotaoDesinstalarProg.IsEnabled=($selecionados.Count -gt 0 -and $bloqueados.Count -eq 0)
+    $global:UI.BotaoVarrerRastros.IsEnabled=($selecionados.Count -eq 1 -and $selecionados[0].classificacao.risco -ne 'Bloqueado')
+    if ($selecionados.Count -eq 1) {
+        $pr=$selecionados[0]; $info=$pr.classificacao
+        $global:UI.DetalhePrograma.Text=('{0}: {1}. {2}' -f $info.categoria,$info.finalidade,$info.motivo)
+    } elseif ($selecionados.Count -gt 1) { $global:UI.DetalhePrograma.Text=('{0} selecionados; {1} com remocao indisponivel.' -f $selecionados.Count,$bloqueados.Count) }
+    else { $global:UI.DetalhePrograma.Text='Selecione uma entrada para ver a finalidade e o risco.' }
+}
+
+function Clique-DetalhesPrograma {
+    $sel=@(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
+    if ($sel.Count -ne 1) { return }
+    $pr=$sel[0]; $info=$pr.classificacao
+    $data=if ($pr.dataInstalacao) { $pr.dataInstalacao.ToString('dd/MM/yyyy') } else {'Nao informada'}
+    $local=if ($pr.instaladoEm) {$pr.instaladoEm} else {'Nao informado'}
+    $nl=[Environment]::NewLine
+    $msg=@("Nome: $($pr.nome)","Fabricante declarado: $($pr.editor)","Versao: $($pr.versao)","Categoria: $($info.categoria)","Risco: $($info.risco)","Finalidade: $($info.finalidade)","Motivo: $($info.motivo)","Tamanho: $(Formatar-TamanhoPrograma $pr.tamanhoKB)","Data: $data","Local: $local","Desinstalacao disponivel: $($info.podeDesinstalar)","","Dependencias reais nao foram inventariadas. Metadados podem estar incompletos ou incorretos.") -join $nl
+    Avisar 'Detalhes do programa' $msg
 }
 
 # devolve os objetos por tras das linhas selecionadas de uma listbox
@@ -98,7 +196,9 @@ function Analisar-LinhaComando {
 
 function Desinstalar-Programa {
     param($Prog)
+    $info = Validar-ProtecaoPrograma $Prog -Desinstalar
     $nome = [string]$Prog.nome
+    if ($info.risco -ne 'Normal' -and -not (Perguntar 'Cautela na desinstalacao' ($info.motivo + ' Continuar com ' + $nome + '?'))) { throw 'Desinstalacao cancelada pelo usuario.' }
     # Preferir o desinstalador normal; nao inventar flags silenciosas pelo nome.
     $linha = [string]$Prog.comando
     if ([string]::IsNullOrWhiteSpace($linha)) { $linha = [string]$Prog.quiet }
@@ -132,60 +232,17 @@ function Desinstalar-Programa {
     } finally { $proc.Dispose() }
 }
 
-# apps que pedem confirmacao extra antes de desinstalar: drivers, runtimes
-# e seguranca. remover errado quebra video, audio, jogos ou a protecao do pc.
-# devolve o motivo quando o nome parece arriscado, ou $null quando e seguro.
-function Eh-AppArriscado {
-    param([string]$Nome)
-    $n = $Nome.ToLower()
-    $padroes = @(
-        @('visual c++',      'runtime exigido por jogos e programas'),
-        @('redistributable', 'runtime exigido por jogos e programas'),
-        @('directx',         'componente de video/jogos do windows'),
-        @('xna',             'runtime de jogos'),
-        @('physx',           'fisica de jogos'),
-        @('openal',          'audio de jogos'),
-        @('.net',            'plataforma usada por varios programas'),
-        @('driver',          'driver de hardware'),
-        @('nvidia',          'driver de video'),
-        @('geforce',         'driver de video'),
-        @('radeon',          'driver de video'),
-        @('realtek',         'driver de audio/rede'),
-        @('conexant',        'driver de audio'),
-        @('graphics driver', 'driver de video'),
-        @('antivirus',       'protecao do pc'),
-        @('internet security', 'protecao do pc'),
-        @('firewall',        'protecao do pc'),
-        @('mcafee',          'antivirus'),
-        @('norton',          'antivirus'),
-        @('kaspersky',       'antivirus'),
-        @('avast',           'antivirus'),
-        @('avg antivirus',   'antivirus'),
-        @('windows defender', 'antivirus do proprio windows')
-    )
-    foreach ($p in $padroes) {
-        if ($n.Contains($p[0])) { return ('{0} -> {1}' -f $Nome, $p[1]) }
-    }
-    return $null
-}
-
 function Clique-DesinstalarProg {
     $selecionados = @(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Escolha na lista o(s) programa(s) que quer desinstalar.'
         return
     }
+    try { foreach ($pr in $selecionados) { [void](Validar-ProtecaoPrograma $pr -Desinstalar) } }
+    catch { Avisar 'Remocao bloqueada' $_.Exception.Message; return }
     $nomes = ($selecionados | ForEach-Object { $_.nome }) -join "`n"
     $msg = ("Desinstalar {0} programa(s):`n`n{1}`n`nAlguns desinstaladores abrem janelas proprias; siga as telas se aparecerem. Continuar?" -f $selecionados.Count, $nomes)
     if (-not (Perguntar 'Desinstalar programas' $msg)) { return }
-
-    # confirmacao extra pra driver, runtime ou seguranca (estilo win11debloat)
-    $arriscados = @($selecionados | ForEach-Object { Eh-AppArriscado $_.nome } | Where-Object { $_ })
-    if ($arriscados.Count -gt 0) {
-        $msgRisco = ("ATENCAO: estes itens parecem criticos:`n`n{0}`n`nDesinstalar pode quebrar video, audio, jogos ou a protecao do pc. Se nao tiver certeza, cancele e pergunte antes. Confirmar mesmo assim?" -f ($arriscados -join "`n"))
-        if (-not (Perguntar 'Programas de risco' $msgRisco)) { return }
-        Log ('confirmado com aviso: ' + $arriscados.Count + ' programa(s) de risco na lista.')
-    }
 
     Status 'desinstalando...'
     Ocupado $true
@@ -341,7 +398,7 @@ function Varrer-Rastros {
 
     # 1. entrada de desinstalacao que sobrou no registro
     try {
-        if (-not [string]::IsNullOrWhiteSpace($Prog.chavePs) -and (Test-Path $Prog.chavePs)) {
+        if (-not [string]::IsNullOrWhiteSpace($Prog.chavePs) -and (Test-Path -LiteralPath $Prog.chavePs)) {
             [void]$achados.Add([pscustomobject]@{ tipo = 'chave'; caminho = $Prog.chavePs; extra = 'entrada de desinstalacao - confirme que o app foi desinstalado' })
         }
     } catch { }
@@ -502,6 +559,12 @@ function Varrer-Rastros {
 
 function Executar-Varredura {
     param($Prog)
+    $global:ProgVarredura=$null
+    $global:RastrosExibidos=@()
+    $global:UI.ListaRastros.Items.Clear()
+    Atualizar-ContagemRastros
+    try { $info=Validar-ProtecaoPrograma $Prog }
+    catch { Avisar 'Varredura bloqueada' $_.Exception.Message; return }
     Status ('varrendo rastros de ' + $Prog.nome + '...')
     Ocupado $true
     # PowerShell 5.1 desembrulha a saida de um unico item; preserve o array.
@@ -688,6 +751,8 @@ function Clique-ApagarRastros {
         Avisar 'Nada selecionado' 'Marque a caixa ao lado de cada rastro ou use "Marcar todos". Apenas o realce azul nao marca a caixa.'
         return
     }
+    try { $info=Validar-ProtecaoPrograma $global:ProgVarredura }
+    catch { Avisar 'Limpeza bloqueada' $_.Exception.Message; return }
     $resumo = ''
     if ($selecionados.Count -le 12) {
         $resumo = ($selecionados | ForEach-Object { ($_.tipo + ': ' + ($_.caminho -replace '^.*::', '')) }) -join "`n"
@@ -699,6 +764,7 @@ function Clique-ApagarRastros {
     if ($null -ne $global:ProgVarredura) { $nomeProg = [string]$global:ProgVarredura.nome }
     $msg = ('Apagar {0} rastro(s)' -f $selecionados.Count)
     if ($nomeProg -ne '') { $msg = $msg + (' de "{0}"' -f $nomeProg) }
+    if ($info.risco -ne 'Normal') { $msg += (' - CAUTELA: ' + $info.motivo) }
     $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
 

@@ -723,6 +723,55 @@ try {
     Passou 'download aceita bytes corretos e recusa SHA256 divergente'
 } catch { Falhou 'integridade de atualizacao' $_.Exception.Message }
 
+# ---- classificacao de programas e bloqueio de operacoes ----
+Secao 'classificacao do desinstalador'
+try {
+    & {
+        . (Join-Path $raiz 'src\modules\desinstalador.ps1')
+        $catalogoAnterior=$global:CatalogoApps
+        try {
+            $global:CatalogoApps=[pscustomobject]@{ aplicativos=@([pscustomobject]@{nome='Google Chrome';desc='Navegador'}) }
+            $casos=@(
+                @{nome='Google Chrome';editor='Google LLC';cat='Aplicativo';risco='Normal'},
+                @{nome='Microsoft Edge';editor='Microsoft Corporation';cat='Sistema';risco='Bloqueado'},
+                @{nome='Microsoft Edge WebView2 Runtime';editor='Microsoft Corporation';cat='Sistema';risco='Bloqueado'},
+                @{nome='Microsoft Visual C++ 2015-2022 Redistributable (x64)';editor='Microsoft Corporation';cat='Dependencia';risco='Cautela'},
+                @{nome='NVIDIA Graphics Driver';editor='NVIDIA';cat='Driver';risco='Cautela'},
+                @{nome='Microsoft PowerToys';editor='Microsoft Corporation';cat='Opcional';risco='Normal'},
+                @{nome='Norton Antivirus';editor='Norton';cat='Seguranca';risco='Cautela'},
+                @{nome='Desconhecido';editor='Microsoft Corporation';cat='Desconhecido';risco='Revisar'}
+            )
+            $lista=@()
+            foreach ($caso in $casos) {
+                $pr=[pscustomobject]@{nome=$caso.nome;editor=$caso.editor;comando='teste.exe';quiet='';tamanhoKB=$null;dataInstalacao=$null}
+                $info=Classificar-Programa $pr
+                if ($info.categoria -ne $caso.cat -or $info.risco -ne $caso.risco) { throw ('Classificacao incorreta: ' + $pr.nome + ' -> ' + $info.categoria) }
+                $pr | Add-Member -NotePropertyName classificacao -NotePropertyValue $info
+                $lista += $pr
+            }
+            $oculto=[pscustomobject]@{nome='Componente oculto';componenteSistema=$true;comando='teste.exe'}
+            $protegido=[pscustomobject]@{nome='Programa';naoRemover=$true;comando='teste.exe'}
+            foreach ($pr in @($oculto,$protegido,$lista[1],$lista[2])) {
+                if ((Classificar-Programa $pr).risco -ne 'Bloqueado') { throw 'Protecao nao aplicada.' }
+                $recusou=$false
+                try { Desinstalar-Programa $pr } catch { $recusou=$_.Exception.Message -match 'Componente protegido' }
+                if (-not $recusou) { throw 'Desinstalador direto nao recusou componente.' }
+                $recusou=$false
+                try { $null=Validar-ProtecaoPrograma $pr } catch { $recusou=$true }
+                if (-not $recusou) { throw 'Limpeza de componente protegido aceita.' }
+            }
+            if (@(Filtrar-Programas $lista 'runtime' 'Sistema' 'Nome').Count -ne 1 -or @(Filtrar-Programas $lista '[' 'Todos' 'Nome').Count -ne 0) { throw 'Filtro incorreto.' }
+            $lista[0].tamanhoKB=200; $lista[3].tamanhoKB=500
+            if (@(Filtrar-Programas $lista '' 'Todos' 'Tamanho')[0].nome -ne $lista[3].nome) { throw 'Ordenacao de tamanho incorreta.' }
+            $lista[0].dataInstalacao=[datetime]'2025-01-01'; $lista[3].dataInstalacao=[datetime]'2026-01-01'
+            if (@(Filtrar-Programas $lista '' 'Todos' 'Data')[0].nome -ne $lista[3].nome) { throw 'Ordenacao de data incorreta.' }
+            $convertido=Converter-EntradaPrograma ([pscustomobject]@{DisplayName='Teste';EstimatedSize='1024';InstallDate='20260102';SystemComponent=1;NoRemove=1})
+            if ($convertido.tamanhoKB -ne 1024 -or $convertido.dataInstalacao.Day -ne 2 -or -not $convertido.componenteSistema -or -not $convertido.naoRemover) { throw 'Metadados incorretos.' }
+            Passou 'classificacao, protecao direta, filtros, ordenacao e metadados'
+        } finally { $global:CatalogoApps=$catalogoAnterior }
+    }
+} catch { Falhou 'classificacao do desinstalador' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
