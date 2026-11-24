@@ -593,8 +593,8 @@ function Apagar-Rastro {
         $folha = ($folha -replace '[^a-zA-Z0-9_.{}-]', '')
         if ($folha.Length -gt 70) { $folha = $folha.Substring($folha.Length - 70) }
         $arqReg = Join-Path $PastaSessao ('{0:00}_registro_{1}.reg' -f $Num, $folha)
-        reg.exe export $nativa $arqReg /y | Out-Null
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $arqReg -PathType Leaf)) { throw 'Backup do registro falhou; chave preservada.' }
+        Executar-RegNativo -Operacao export -Alvo $nativa -Arquivo $arqReg
+        if (-not (Test-Path -LiteralPath $arqReg -PathType Leaf)) { throw 'Backup do registro falhou; chave preservada.' }
         Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg })
         Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
         Log ('chave apagada (backup .reg na quarantena): ' + $nativa)

@@ -93,9 +93,11 @@
           "dados": "0"
         },
         {
-          "tipo": "comando",
-          "executar": "[Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', '1', 'Machine')",
-          "reverter": "[Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', $null, 'Machine')"
+          "tipo": "registro",
+          "caminho": "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment",
+          "nome": "POWERSHELL_TELEMETRY_OPTOUT",
+          "tipoValor": "String",
+          "dados": "1"
         }
       ]
     },
@@ -404,7 +406,7 @@
     {
       "id": "svchost-splitting",
       "nome": "Desativar divisao do svchost.exe",
-      "desc": "Reduz o numero de processos svchost e o uso de memoria. Recomendado em PCs com 12 GB de RAM ou menos. Pode interferir em servicos Xbox. Precisa reiniciar.",
+      "desc": "Reduz o numero de processos svchost e o uso de memoria. Recomendado em PCs com 12 GB de RAM ou menos. Pode interferir em servicos Xbox. Precisa reiniciar. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
       "verificar": "$v = (Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -ErrorAction SilentlyContinue).SvcHostSplitThresholdInKB; ($null -ne $v) -and ($v -ne 3670016)",
       "categoria": "Desempenho",
       "niveis": [
@@ -417,7 +419,8 @@
           "executar": "$mem = (Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1KB; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -Value $mem -Type DWord",
           "reverter": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -Value 3670016 -Type DWord -Force"
         }
-      ]
+      ],
+      "apenasManual": true
     },
     {
       "id": "efeitos-visuais",
@@ -486,9 +489,20 @@
           "dados": "0"
         },
         {
-          "tipo": "comando",
-          "executar": "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name 'UserPreferencesMask' -Type Binary -Value ([byte[]](144,18,3,128,16,0,0,0))",
-          "reverter": "Remove-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name 'UserPreferencesMask' -ErrorAction SilentlyContinue"
+          "tipo": "registro",
+          "caminho": "HKCU:\\Control Panel\\Desktop",
+          "nome": "UserPreferencesMask",
+          "tipoValor": "Binary",
+          "dados": [
+            144,
+            18,
+            3,
+            128,
+            16,
+            0,
+            0,
+            0
+          ]
         }
       ]
     },
@@ -584,16 +598,19 @@
       "so": "win11",
       "acoes": [
         {
-          "tipo": "comando",
-          "executar": "$k = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'); $k.SetValue($null, '', [Microsoft.Win32.RegistryValueKind]::String); $k.Close()",
-          "reverter": "Remove-Item -Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}' -Recurse -Force -ErrorAction SilentlyContinue"
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32",
+          "nome": "",
+          "tipoValor": "String",
+          "dados": ""
         }
-      ]
+      ],
+      "apenasManual": true
     },
     {
       "id": "f8-menu-inicial",
       "nome": "Habilitar menu de boot F8 (modo de seguranca)",
-      "desc": "Reativa a tecla F8 no boot para entrar em modo de seguranca, como no Windows 7.",
+      "desc": "Reativa a tecla F8 no boot para entrar em modo de seguranca, como no Windows 7. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
       "verificar": "(bcdedit /enum `{current`} 2>&1 | Out-String) -match 'bootmenupolicy\\s+Legacy'",
       "categoria": "Barra de tarefas e menu Iniciar",
       "niveis": [
@@ -607,7 +624,8 @@
           "executar": "bcdedit /set `{current`} bootmenupolicy legacy",
           "reverter": "bcdedit /set `{current`} bootmenupolicy standard"
         }
-      ]
+      ],
+      "apenasManual": true
     },
     {
       "id": "finalizar-tarefa-barra",
@@ -675,7 +693,7 @@
     {
       "id": "pastas-automaticas",
       "nome": "Desativar deteccao automatica de pastas",
-      "desc": "O Explorer deixa de adivinhar o tipo de pasta (musicas, fotos) por conteudo, acelerando a navegacao. AVISO: desativa o agrupamento por tipo. Precisa relogar no Windows.",
+      "desc": "Define o tipo padrao de pasta sem apagar as configuracoes existentes do Explorer. Pode exigir relogar.",
       "verificar": "Test-Path 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell'",
       "categoria": "Explorador de arquivos",
       "niveis": [
@@ -685,9 +703,11 @@
       "so": "ambos",
       "acoes": [
         {
-          "tipo": "comando",
-          "executar": "$bags = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags'; if (Test-Path $bags) { Remove-Item -Path $bags -Recurse -Force -ErrorAction SilentlyContinue }; $bagMRU = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\BagMRU'; if (Test-Path $bagMRU) { Remove-Item -Path $bagMRU -Recurse -Force -ErrorAction SilentlyContinue }; $all = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell'; New-Item -Path $all -Force | Out-Null; New-ItemProperty -Path $all -Name 'FolderType' -Value 'NotSpecified' -PropertyType String -Force | Out-Null",
-          "reverter": "$bags = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags'; if (Test-Path $bags) { Remove-Item -Path $bags -Recurse -Force -ErrorAction SilentlyContinue }; $bagMRU = 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\BagMRU'; if (Test-Path $bagMRU) { Remove-Item -Path $bagMRU -Recurse -Force -ErrorAction SilentlyContinue }"
+          "tipo": "registro",
+          "caminho": "HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell",
+          "nome": "FolderType",
+          "tipoValor": "String",
+          "dados": "NotSpecified"
         }
       ]
     },
@@ -792,7 +812,7 @@
     {
       "id": "hibernacao",
       "nome": "Desativar hibernacao (libera GBs no disco)",
-      "desc": "AVISO: tambem desativa a inicializacao rapida. Recomendado para desktops; em notebook a hibernacao pode ser util. O arquivo hiberfil.sys e apagado, liberando espaco.",
+      "desc": "AVISO: tambem desativa a inicializacao rapida. Recomendado para desktops; em notebook a hibernacao pode ser util. O arquivo hiberfil.sys e apagado, liberando espaco. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
       "categoria": "Sistema",
       "niveis": [
         "agressivo"
@@ -818,7 +838,8 @@
           "executar": "powercfg.exe /hibernate off",
           "reverter": "powercfg.exe /hibernate on"
         }
-      ]
+      ],
+      "apenasManual": true
     },
     {
       "id": "notificacoes",
@@ -1222,7 +1243,7 @@
     {
       "id": "armazenamento-reservado-off",
       "nome": "Desativar armazenamento reservado do Windows",
-      "desc": "O Windows guarda de 7 a 10 GB so para updates e temporarios; isso devolve o espaco pra voce. Demora alguns segundos (DISM) e convem religar antes de grandes atualizacoes de versao.",
+      "desc": "O Windows guarda de 7 a 10 GB so para updates e temporarios; isso devolve o espaco pra voce. Demora alguns segundos (DISM) e convem religar antes de grandes atualizacoes de versao. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
       "categoria": "Sistema",
       "niveis": [
         "agressivo"
@@ -1234,7 +1255,8 @@
           "executar": "DISM /Online /Set-ReservedStorageState /State:Disabled",
           "reverter": "DISM /Online /Set-ReservedStorageState /State:Enabled"
         }
-      ]
+      ],
+      "apenasManual": true
     },
     {
       "id": "ia-copilot",

@@ -175,6 +175,7 @@ try {
     if (-not (Reverter-Sessao $journalQuar)) { throw 'Nao reverteu a quarentena.' }
     if ((Get-ItemProperty -LiteralPath $caminhoQuar -Name teste -ErrorAction Stop).teste -ne 'preservar') { throw 'Dado restaurado incorreto.' }
     Log 'CI ok: caixa marcada, exportacao, remocao real, journal e restauracao de chave'
+    if ((Get-ItemProperty -LiteralPath $caminhoQuar -Name teste -ErrorAction Stop).teste -ne 'preservar') { throw 'Falha de verificacao apos importacao.' }
 } catch {
     Log ('FALHOU: quarentena real: ' + $_.Exception.Message) -Erro
     exit 1

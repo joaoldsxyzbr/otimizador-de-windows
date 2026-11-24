@@ -100,3 +100,20 @@ function Reiniciar-Explorer {
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Log 'Explorador reiniciado.'
 }
+
+# Windows PowerShell 5.1 transforma stderr nativo em ErrorRecord mesmo com exit 0.
+# Executa somente utilitarios nativos conhecidos e decide pelo codigo de saida.
+function Executar-RegNativo {
+    param([ValidateSet('export','import','delete')][string]$Operacao, [string]$Alvo, [string]$Arquivo)
+    foreach ($valor in @($Alvo,$Arquivo)) {
+        if ($valor -match '["\r\n]') { throw 'Argumento de registro invalido.' }
+    }
+    $argsReg = @($Operacao, ('"{0}"' -f $Alvo))
+    if ($Operacao -eq 'export') { $argsReg += @(('"{0}"' -f $Arquivo), '/y') }
+    if ($Operacao -eq 'delete') { $argsReg += '/f' }
+    $exe = Join-Path $env:SystemRoot 'System32\reg.exe'
+    $proc = Start-Process -FilePath $exe -ArgumentList $argsReg -NoNewWindow -Wait -PassThru -ErrorAction Stop
+    try {
+        if ($proc.ExitCode -ne 0) { throw ('reg.exe {0} falhou (codigo {1}): {2}' -f $Operacao,$proc.ExitCode,$Alvo) }
+    } finally { $proc.Dispose() }
+}

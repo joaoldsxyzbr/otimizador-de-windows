@@ -196,7 +196,7 @@ function Executar-Acao {
                     $folha = ($leitura.rede -replace '\\', '_')
                     if ($folha.Length -gt 60) { $folha = $folha.Substring($folha.Length - 60) }
                     $arqBackup = Join-Path $global:PastaDesfazer ('{0}_reg_{1:00}_{2}.reg' -f $global:CarimboSessao, $global:BackupN, $folha)
-                    reg.exe export $leitura.rede $arqBackup /y 2>$null | Out-Null
+                    Executar-RegNativo -Operacao export -Alvo $leitura.rede -Arquivo $arqBackup
                     if (-not (Test-Path $arqBackup)) { $arqBackup = $null }
                 } catch { $arqBackup = $null }
                 Registrar-Jornal ([pscustomobject]@{
@@ -241,8 +241,12 @@ function Executar-Acao {
                     $folha = ($chave -replace '[\\/:*?"<>|]', '_')
                     if ($folha.Length -gt 60) { $folha = $folha.Substring($folha.Length - 60) }
                     $arqBackup = Join-Path $global:PastaDesfazer ('{0}_regimp_{1:00}_{2}.reg' -f $global:CarimboSessao, $global:BackupN, $folha)
-                    reg.exe export $chave $arqBackup /y 2>$null | Out-Null
-                    if (Test-Path $arqBackup) { $backups += $arqBackup } else { $novas += $chave }
+                    $caminhoReg = 'Registry::' + $chave
+                    if (Test-Path -LiteralPath $caminhoReg -ErrorAction Stop) {
+                        Executar-RegNativo -Operacao export -Alvo $chave -Arquivo $arqBackup
+                        if (-not (Test-Path -LiteralPath $arqBackup -PathType Leaf)) { throw 'Backup custom ausente; importacao cancelada.' }
+                        $backups += $arqBackup
+                    } else { $novas += $chave }
                 }
                 Registrar-Jornal ([pscustomobject]@{
                     tipo        = 'reg-import'
@@ -251,8 +255,7 @@ function Executar-Acao {
                     chavesNovas = @($novas)
                     contexto    = $desc
                 })
-                $saidaImp = reg.exe import $Acao.arquivo 2>&1 | Out-String
-                if ($LASTEXITCODE -ne 0) { throw ('reg import falhou (codigo {0}): {1}' -f $LASTEXITCODE, $saidaImp.Trim()) }
+                Executar-RegNativo -Operacao import -Alvo $Acao.arquivo
                 Log ("registro: .reg importado ({0} chave(s), {1} com backup): {2}" -f $chaves.Count, @($backups).Count, $Acao.arquivo)
             }
 
@@ -270,7 +273,7 @@ function Executar-Acao {
                 })
                 Set-Service -Name $Acao.nome -StartupType $Acao.inicio -ErrorAction Stop
                 if ($Acao.inicio -eq 'Disabled' -and $svc.Status -eq 'Running') {
-                    Stop-Service -Name $Acao.nome -Force -ErrorAction SilentlyContinue
+                    Stop-Service -Name $Acao.nome -ErrorAction Stop
                 }
                 Log ("servico: {0} -> {1}" -f $Acao.nome, $Acao.inicio)
             }
@@ -345,7 +348,9 @@ function Executar-Acao {
                     tipo         = 'energia'
                     guidAnterior = $guidAnterior
                 })
+                if (-not $guidAnterior) { throw 'Plano de energia original indisponivel.' }
                 powercfg /setactive $Acao.guid | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw 'Falha ao alterar plano de energia.' }
                 Log ("plano de energia alterado (anterior: {0})" -f $guidAnterior)
             }
 
@@ -395,15 +400,13 @@ function Desfazer-Item {
             'reg-import' {
                 foreach ($arq in @($Item.backups)) {
                     if (-not [string]::IsNullOrWhiteSpace($arq) -and (Test-Path $arq)) {
-                        reg.exe import $arq 2>$null | Out-Null
-                        if ($LASTEXITCODE -ne 0) { throw 'Falha ao importar backup do registro.' }
+                        Executar-RegNativo -Operacao import -Alvo $arq
                         Log ('registro restaurado do backup: ' + (Split-Path -Leaf $arq))
                     } else { throw 'Backup custom ausente.' }
                 }
                 foreach ($chave in @($Item.chavesNovas)) {
                     if (-not [string]::IsNullOrWhiteSpace($chave)) {
-                        reg.exe delete $chave /f 2>$null | Out-Null
-                        if ($LASTEXITCODE -ne 0) { throw 'Falha ao remover chave custom.' }
+                        if (Test-Path -LiteralPath ('Registry::' + $chave)) { Executar-RegNativo -Operacao delete -Alvo $chave }
                         Log ('chave que nao existia antes foi removida: ' + $chave)
                     }
                 }
@@ -532,8 +535,9 @@ function Desfazer-Item {
 
             'quarantena-registro' {
                 if (Test-Path $Item.arquivoReg) {
-                    reg.exe import $Item.arquivoReg 2>&1 | Out-Null
-                    if ($LASTEXITCODE -ne 0) { throw 'Falha ao importar registro da quarentena.' }
+                    if (Test-Path -LiteralPath ('Registry::' + $Item.chave)) { throw 'Chave recriada desde a limpeza; nao sobrescrevendo.' }
+                    Executar-RegNativo -Operacao import -Alvo $Item.arquivoReg
+                    if (-not (Test-Path -LiteralPath ('Registry::' + $Item.chave))) { throw 'Importacao terminou sem restaurar a chave.' }
                     Log ("chave de registro restaurada: " + $Item.chave)
                 } else {
                     throw ("Backup do registro nao encontrado: " + $Item.arquivoReg)
@@ -657,9 +661,16 @@ function Verificar-Acao {
             'registro' {
                 $leitura = Ler-ValorRegistro -CaminhoPS $Acao.caminho -Nome $Acao.nome
                 if (-not $leitura.existia) { return $false }
+                if ($leitura.tipo -ne (Converter-Kind $Acao.tipoValor).ToString()) { return $false }
                 if ($leitura.tipo -eq 'DWord') { return ([int]$leitura.valor -eq [int]$Acao.dados) }
                 if ($leitura.tipo -eq 'QWord') { return ([long]$leitura.valor -eq [long]$Acao.dados) }
-                return ([string]$leitura.valor -eq [string]$Acao.dados)
+                if ($leitura.tipo -eq 'Binary' -or $leitura.tipo -eq 'MultiString') {
+                    $a = @($leitura.valor); $b = @($Acao.dados)
+                    if ($a.Count -ne $b.Count) { return $false }
+                    for ($i=0; $i -lt $a.Count; $i++) { if ([string]$a[$i] -cne [string]$b[$i]) { return $false } }
+                    return $true
+                }
+                return ([string]$leitura.valor -ceq [string]$Acao.dados)
             }
             'servico' {
                 $svc = Get-Service -Name $Acao.nome -ErrorAction SilentlyContinue
