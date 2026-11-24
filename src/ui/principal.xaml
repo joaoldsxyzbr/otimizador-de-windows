@@ -540,9 +540,11 @@
                             <TextBlock Style="{StaticResource TituloPagina}" Text="Atualizacoes do Windows"/>
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,2,0,12" Text="Consulte as politicas registradas e o historico local. Nao alteramos politicas de atualizacao; use as configuracoes oficiais do Windows."/>
                             <WrapPanel>
-                                <CheckBox x:Name="ChkBloquearDrivers" IsEnabled="False" Foreground="#e5e7eb" Margin="0,0,18,0" IsChecked="False" Content="Nao baixar drivers pelo Windows Update" ToolTip="Drivers de video etc. continuarao instalados apenas por voce. Util quando o wu insiste num driver ruim."/>
-                                <CheckBox x:Name="ChkAdiarRecursos" IsEnabled="False" Foreground="#e5e7eb" IsChecked="False" Content="Adiar versoes novas do Windows em 180 dias" ToolTip="Deixa o windows atualizar apenas com correcoes de seguranca enquanto a versao nova 'assenta'. Drivers e correcoes seguem normal."/>
+                                <CheckBox x:Name="ChkBloquearDrivers" IsThreeState="True" IsEnabled="False" Foreground="#e5e7eb" Margin="0,0,18,0" IsChecked="False" Content="Nao baixar drivers pelo Windows Update" ToolTip="Drivers de video etc. continuarao instalados apenas por voce. Util quando o wu insiste num driver ruim."/>
+                                <CheckBox x:Name="ChkAdiarRecursos" IsThreeState="True" IsEnabled="False" Foreground="#e5e7eb" IsChecked="False" Content="Adiar versoes novas do Windows em 180 dias" ToolTip="Deixa o windows atualizar apenas com correcoes de seguranca enquanto a versao nova 'assenta'. Drivers e correcoes seguem normal."/>
                             </WrapPanel>
+                            <WrapPanel Margin="0,8,0,0"><Button x:Name="BotaoAtualizarAtualizacoes" Content="Atualizar estado" Margin="0,0,8,4"/><Button x:Name="BotaoCancelarAtualizacoes" Content="Cancelar consulta" IsEnabled="False" Margin="0,0,8,4"/></WrapPanel>
+                            <TextBlock x:Name="InfoConsultaAtualizacoes" TextWrapping="Wrap" Foreground="#9ca3af"/>
                             <TextBlock x:Name="InfoPoliticasUpdate" Style="{StaticResource SubTitulo}" Margin="0,8,0,0" TextWrapping="Wrap"/>
                             <WrapPanel Margin="0,14,0,0">
                                 <Button x:Name="BotaoAplicarAtualizacoes" Style="{StaticResource BotaoAzul}" Content="Consultar historico" Margin="0,0,10,0" MinWidth="120"/>
@@ -596,7 +598,9 @@
                         <ListBox x:Name="ListaDesfazer" Grid.Row="1" Background="#1b1b20" Foreground="#e5e7eb" BorderBrush="#374151" Margin="0,6,0,0" FontSize="13"/>
                         <WrapPanel Grid.Row="2" Margin="0,10,0,0">
                             <Button x:Name="BotaoDesfazer" Style="{StaticResource BotaoVermelho}" Content="Desfazer sessao selecionada" Margin="0,0,10,0" MinWidth="220"/>
-                            <Button x:Name="BotaoAtualizarListaSessoes" Content="Atualizar lista" MinWidth="130" Margin="0,0,10,0"/>
+                            <Button x:Name="BotaoAtualizarHistorico" Content="Atualizar lista" MinWidth="130" Margin="0,0,10,4"/>
+                            <Button x:Name="BotaoCancelarHistorico" Content="Cancelar consulta" IsEnabled="False" Margin="0,0,10,4"/>
+                            <TextBlock x:Name="InfoConsultaHistorico" Foreground="#9ca3af" TextWrapping="Wrap" Margin="0,0,10,4"/>
                             <Button x:Name="BotaoDetalhesSessao" Content="Detalhes e quarentena" MinWidth="160" Margin="0,0,10,0"/>
                             <Button x:Name="BotaoDesfazerUma" Content="Desfazer ultima acao" MinWidth="160" Margin="0,0,10,0"/>
                             <Button x:Name="BotaoConfirmarManual" Content="Confirmar recuperacao manual" MinWidth="180"/>

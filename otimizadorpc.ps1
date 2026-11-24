@@ -120,10 +120,10 @@ $controles = @(
     'ListaProgramas', 'FiltroDesinstalar', 'CategoriaDesinstalar', 'OrdemDesinstalar', 'BotaoDetalhesPrograma', 'InfoProgramas', 'DetalhePrograma', 'BotaoAtualizarProgramas', 'BotaoCancelarProgramas', 'ChkPontoRestoreDesinstalar', 'BotaoDesinstalarProg', 'BotaoVarrerRastros', 'RotuloRastros', 'BotaoMarcarRastros', 'BotaoDesmarcarRastros', 'InfoMarcadosRastros', 'BotaoApagarRastros', 'ListaRastros',
     'ListaApps', 'BotaoInstalarApps', 'BotaoAtualizarSelecionados', 'BotaoAtualizarTudo', 'BotaoMarcarPadroes', 'FiltroApps',
     'ListaRecursos', 'InfoConsultaRecursos', 'BotaoAtualizarRecursos', 'BotaoCancelarRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'BotaoTema', 'PainelLegado',
-    'ChkBloquearDrivers', 'ChkAdiarRecursos', 'InfoPoliticasUpdate', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
+    'ChkBloquearDrivers', 'ChkAdiarRecursos', 'InfoPoliticasUpdate', 'InfoConsultaAtualizacoes', 'BotaoAtualizarAtualizacoes', 'BotaoCancelarAtualizacoes', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
     'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoAnalisarComponentes', 'BotaoDiagnosticarIntegridade', 'BotaoConsultarEnergia', 'BotaoOtimizarVolume', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',
     'BotaoRecuperarIcones', 'BotaoLimparDns', 'BotaoSincronizarHora', 'BotaoBackupDrivers', 'BotaoAnalisarArmazenamento',
-    'ListaDesfazer', 'BotaoDesfazer', 'BotaoDesfazerUma', 'BotaoConfirmarManual', 'BotaoAtualizarListaSessoes', 'BotaoDetalhesSessao'
+    'ListaDesfazer', 'BotaoDesfazer', 'BotaoDesfazerUma', 'BotaoConfirmarManual', 'BotaoAtualizarHistorico', 'BotaoCancelarHistorico', 'InfoConsultaHistorico', 'BotaoDetalhesSessao'
 )
 foreach ($nome in $controles) {
     $global:UI[$nome] = $global:Janela.FindName($nome)

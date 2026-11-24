@@ -219,24 +219,28 @@ function Montar-PaineisLegados {
 }
 
 function Atualizar-ListaDesfazer {
-    $lb = $global:UI.ListaDesfazer
+    param([switch]$Forcar)
+    Solicitar-ConsultaPainel 'Historico' -Forcar:$Forcar
+}
+
+function Mostrar-SnapshotHistorico {
+    param($Dados,$UI)
+    $lb=$UI.ListaDesfazer
     $lb.Items.Clear()
-    $lb.Tag = @{}
-    foreach ($s in (Listar-Sessoes)) {
-        $rotulo = $s.BaseName -replace '^\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_', ''
-        $datahora = ($s.BaseName -split '_')[0]
-        $extra = ''
-        try {
-            $json = Ler-JSON $s.FullName
-            $concluidos = @($json.itens | Where-Object { $_.estadoReversao -eq 'concluido' }).Count
-            $incertos = @($json.itens | Where-Object { $_.estadoReversao -eq 'em_andamento' }).Count
-            $extra = (' - {0}/{1} revertidas: {2}' -f $concluidos, @($json.itens).Count, $json.rotulo)
-            if ($incertos -gt 0) { $extra += ' [revisao manual necessaria]' }
-        } catch { $extra = ' [journal invalido]' }
-        [void]$lb.Items.Add(('{0} ({1}){2}' -f $datahora, $rotulo, $extra))
-        $lb.Tag[$lb.Items.Count - 1] = $s.FullName
+    $lb.Tag=@{}
+    foreach ($item in @($Dados.itens)) {
+        [void]$lb.Items.Add([string]$item.rotulo)
+        if ($item.valido) {$lb.Tag[$lb.Items.Count-1]=[string]$item.arquivo}
     }
-    if ($lb.Items.Count -eq 0) { [void]$lb.Items.Add('(nenhuma sessao para desfazer ainda - vazio)') }
+    if ($lb.Items.Count -eq 0) {[void]$lb.Items.Add('(nenhuma sessao encontrada)')}
+}
+
+function Mostrar-SnapshotAtualizacoes {
+    param($Dados,$UI)
+    $atual=$Dados.politica
+    $UI.ChkBloquearDrivers.IsChecked=($null -ne $atual -and $atual.ExcludeWUDriverInQualityUpdate -eq 1)
+    $UI.ChkAdiarRecursos.IsChecked=($null -ne $atual -and $atual.DeferFeatureUpdates -eq 1)
+    $UI.InfoPoliticasUpdate.Text=('Drivers: '+(Formatar-PoliticaAtualizacao $atual.ExcludeWUDriverInQualityUpdate)+[Environment]::NewLine+'Versoes: '+(Formatar-PoliticaAtualizacao $atual.DeferFeatureUpdates)+[Environment]::NewLine+'Periodo registrado: '+$atual.DeferFeatureUpdatesPeriodInDays+[Environment]::NewLine+'Valores do registro nao comprovam politica efetiva.')
 }
 
 # ---- filtro das listas ----
@@ -413,23 +417,9 @@ function Trocar-Pagina {
     if ($Nome -eq 'PaginaAjustes') { Verificar-EstadoAjustes }
     if ($Nome -eq 'PaginaDebloat') { Verificar-EstadoUwp }
     if ($Nome -eq 'PaginaConfig') { Solicitar-ConsultaPainel 'Recursos' }
-    if ($Nome -eq 'PaginaDesfazer') {
-        if ($global:ModoProtegido) {
-            $global:UI.ListaDesfazer.Items.Clear()
-            [void]$global:UI.ListaDesfazer.Items.Add('Historico indisponivel no modo protegido; nenhuma sessao sera alterada.')
-        } else { Atualizar-ListaDesfazer }
-    }
-    if ($Nome -eq 'PaginaDesinstalar') {
-        Carregar-Programas
-    }
-    if ($Nome -eq 'PaginaAtualizacoes') {
-        try {
-            $atual=Tem-Atualizacoes
-            $global:UI.ChkBloquearDrivers.IsChecked=($null -ne $atual -and $atual.ExcludeWUDriverInQualityUpdate -eq 1)
-            $global:UI.ChkAdiarRecursos.IsChecked=($null -ne $atual -and $atual.DeferFeatureUpdates -eq 1)
-            $global:UI.InfoPoliticasUpdate.Text=('Drivers: '+(Formatar-PoliticaAtualizacao $atual.ExcludeWUDriverInQualityUpdate)+"`nVersoes: "+(Formatar-PoliticaAtualizacao $atual.DeferFeatureUpdates)+"`nPeriodo registrado: "+$atual.DeferFeatureUpdatesPeriodInDays+"`nValores do registro nao comprovam politica efetiva.")
-        } catch { $global:UI.InfoPoliticasUpdate.Text='Consulta de politicas indisponivel.' }
-    }
+    if ($Nome -eq 'PaginaDesfazer') { Atualizar-ListaDesfazer }
+    if ($Nome -eq 'PaginaDesinstalar') { Carregar-Programas }
+    if ($Nome -eq 'PaginaAtualizacoes') { Solicitar-ConsultaPainel 'Atualizacoes' }
     } catch {
         Log ('falha ao carregar ' + $Nome + ': ' + $_.Exception.Message) -Erro
         Status 'Falha na consulta; tente outra aba ou reabra esta aba.'
@@ -1260,6 +1250,10 @@ function Executar-OperacaoUI {
         if ($global:ConsultasPaineis) {
             Cancelar-ConsultaPainel 'Ajustes' 'Consulta desatualizada apos operacao.'
             Cancelar-ConsultaPainel 'Recursos' 'Consulta desatualizada apos operacao.'
+            Cancelar-ConsultaPainel 'Atualizacoes' 'Consulta desatualizada apos operacao.'
+            Cancelar-ConsultaPainel 'Historico' 'Consulta desatualizada apos operacao.'
+            if ($global:PaginaAtual -eq 'PaginaDesfazer') { Atualizar-ListaDesfazer -Forcar }
+            if ($global:PaginaAtual -eq 'PaginaAtualizacoes') { Solicitar-ConsultaPainel 'Atualizacoes' -Forcar }
             if ($global:PaginaAtual -eq 'PaginaAjustes') { Verificar-EstadoAjustes -Forcar }
             if ($global:PaginaAtual -eq 'PaginaConfig') { Solicitar-ConsultaPainel 'Recursos' -Forcar }
         }
@@ -1487,7 +1481,7 @@ function Solicitar-SnapshotProgramas {
 function Inicializar-ConsultasPaineis {
     if ($null -eq $global:TimersPaineis) {$global:TimersPaineis=@{}}
     $global:ConsultasPaineis=@{}
-    foreach ($tipo in @('Ajustes','Recursos')) {
+    foreach ($tipo in @('Ajustes','Recursos','Atualizacoes','Historico')) {
         $global:ConsultasPaineis[$tipo]=@{tipo=$tipo;ui=$global:UI;fase='inicial';data=$null;trabalho=$null;fechada=$false;motivo='';resultados=@{}}
         Mostrar-EstadoPainel $global:ConsultasPaineis[$tipo] 'inicial' 'Inventario ainda nao consultado.'
     }
@@ -1502,6 +1496,19 @@ function Mostrar-EstadoPainel {
     $ui[('BotaoAtualizar'+$s.tipo)].IsEnabled=($null -eq $s.trabalho)
     $ui[('BotaoCancelar'+$s.tipo)].IsEnabled=($Fase -eq 'carregando')
     $habilitar=($Fase -eq 'atualizado' -and -not $global:ModoProtegido -and -not $global:OperacaoUIAtiva)
+    if ($s.tipo -eq 'Atualizacoes') {
+        if ($Fase -ne 'atualizado') {
+            $ui.ChkBloquearDrivers.IsChecked=$null
+            $ui.ChkAdiarRecursos.IsChecked=$null
+            $ui.InfoPoliticasUpdate.Text='Valores ainda nao confirmados.'
+        }
+        return
+    }
+    if ($s.tipo -eq 'Historico') {
+        foreach ($nome in @('BotaoDesfazer','BotaoDesfazerUma','BotaoConfirmarManual','BotaoDetalhesSessao')) {$ui[$nome].IsEnabled=$habilitar}
+        if ($Fase -ne 'atualizado') {$ui.ListaDesfazer.Items.Clear();$ui.ListaDesfazer.Tag=@{}}
+        return
+    }
     $botoes=if ($s.tipo -eq 'Ajustes') {@('BotaoAplicarAjustes','BotaoPresetSeguro','BotaoPresetBalanceado','BotaoPresetAgressivo','BotaoPerfilEssencial','BotaoPerfilGamer','BotaoPerfilNotebook','BotaoPerfilPrivacidade','BotaoPerfilCorporativo','BotaoPerfilRecomendado','BotaoImportarPlano','BotaoExportarPlano')} else {@('BotaoInstalarRecursos')}
     foreach ($nome in $botoes) {$ui[$nome].IsEnabled=$habilitar}
     if ($Fase -ne 'atualizado') {
@@ -1565,8 +1572,12 @@ function Concluir-ConsultaPainel {
                 Atualizar-RotuloAjuste $cb $estado
             }
             Aplicar-Filtro -Texto $s.ui.FiltroAjustes.Text -Painel $s.ui.ListaAjustes
-        } else {
+        } elseif ($s.tipo -eq 'Recursos') {
             Montar-PaginaRecursos -Estados @($dados[0].itens) -Consultou $true
+        } elseif ($s.tipo -eq 'Atualizacoes') {
+            Mostrar-SnapshotAtualizacoes $dados[0] $s.ui
+        } else {
+            Mostrar-SnapshotHistorico $dados[0] $s.ui
         }
         $s.data=Get-Date
         Mostrar-EstadoPainel $s 'atualizado' ('Consulta concluida as '+$s.data.ToString('HH:mm:ss')+'. Revise antes de alterar.')
@@ -1574,10 +1585,10 @@ function Concluir-ConsultaPainel {
 }
 
 function Solicitar-ConsultaPainel {
-    param([ValidateSet('Ajustes','Recursos')][string]$Tipo,[switch]$Forcar,[scriptblock]$Codigo=$null,[int]$LimiteSegundos=60)
+    param([ValidateSet('Ajustes','Recursos','Atualizacoes','Historico')][string]$Tipo,[switch]$Forcar,[scriptblock]$Codigo=$null,[int]$LimiteSegundos=60)
     $s=$global:ConsultasPaineis[$Tipo]
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
-    if ($Tipo -eq 'Recursos' -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta de recursos indisponivel no modo protegido.';return}
+    if ($Tipo -in @('Recursos','Historico') -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel no modo protegido.';return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
     $s.data=$null;$ps=$null;$timer=$null
     try {
@@ -1585,6 +1596,16 @@ function Solicitar-ConsultaPainel {
         if ($Codigo) {[void]$ps.AddScript($Codigo.ToString())}
         elseif ($Tipo -eq 'Recursos') {
             [void]$ps.AddScript('$ErrorActionPreference="Stop"; [pscustomobject]@{itens=@(Get-WindowsOptionalFeature -Online -ErrorAction Stop)}')
+        } elseif ($Tipo -eq 'Atualizacoes') {
+            $fonte='function Tem-Atualizacoes {'+(Get-Command Tem-Atualizacoes -CommandType Function).ScriptBlock.ToString()+'}'+[Environment]::NewLine+'$ErrorActionPreference="Stop"; [pscustomobject]@{itens=@();politica=(Tem-Atualizacoes)}'
+            [void]$ps.AddScript($fonte)
+        } elseif ($Tipo -eq 'Historico') {
+            $fonte='param([string]$Pasta)'+[Environment]::NewLine+'$ErrorActionPreference="Stop"; $global:PastaDesfazer=$Pasta'+[Environment]::NewLine
+            foreach ($fn in @('Verificar-PastaPrivada','Listar-Sessoes','Ler-JSON','Obter-ContextoJournal','Confirmar-ContextoJournal','Obter-SnapshotHistorico')) {
+                $fonte+=('function '+$fn+' {'+(Get-Command $fn -CommandType Function).ScriptBlock.ToString()+'}'+[Environment]::NewLine)
+            }
+            $fonte+='Obter-SnapshotHistorico'
+            [void]$ps.AddScript($fonte).AddArgument($global:PastaDesfazer)
         } else {
             $fonte='param([string]$CatalogoJson)'+[Environment]::NewLine+'$ErrorActionPreference="Stop"'+[Environment]::NewLine
             foreach ($fn in @('Converter-Hive','Obter-RaizRegistro','Converter-Kind','Ler-ValorRegistro','Verificar-Acao','Verificar-Tweak','Obter-ContextoAjustes','Obter-PlanoEnergiaAtivo','Carregar-CacheAppx','Appx-Instalado')) {
@@ -1613,11 +1634,15 @@ function Ligar-Tudo {
     Inicializar-ConsultaInicio
     Inicializar-ConsultaProgramas
     Inicializar-ConsultasPaineis
-    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar })
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar; Cancelar-ConsultaPainel 'Atualizacoes' -Fechar; Cancelar-ConsultaPainel 'Historico' -Fechar })
     $global:UI.BotaoAtualizarAjustes.Add_Click({ Verificar-EstadoAjustes -Forcar })
     $global:UI.BotaoCancelarAjustes.Add_Click({ Cancelar-ConsultaPainel 'Ajustes' })
     $global:UI.BotaoAtualizarRecursos.Add_Click({ Solicitar-ConsultaPainel 'Recursos' -Forcar })
     $global:UI.BotaoCancelarRecursos.Add_Click({ Cancelar-ConsultaPainel 'Recursos' })
+    $global:UI.BotaoAtualizarAtualizacoes.Add_Click({ Solicitar-ConsultaPainel 'Atualizacoes' -Forcar })
+    $global:UI.BotaoCancelarAtualizacoes.Add_Click({ Cancelar-ConsultaPainel 'Atualizacoes' })
+    $global:UI.BotaoAtualizarHistorico.Add_Click({ Atualizar-ListaDesfazer -Forcar })
+    $global:UI.BotaoCancelarHistorico.Add_Click({ Cancelar-ConsultaPainel 'Historico' })
     $global:UI.BotaoCancelarProgramas.Add_Click({ Cancelar-ConsultaProgramas })
     $global:UI.BotaoAtualizarInicio.Add_Click({ Solicitar-SnapshotInicio -Forcar })
     $global:UI.BotaoCancelarInicio.Add_Click({ Cancelar-ConsultaInicio })
@@ -1638,7 +1663,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos')
+        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
@@ -1736,7 +1761,7 @@ function Ligar-Tudo {
 
     # pagina manutencao
     $global:UI.BotaoLimparTemp.Add_Click({ Executar-OperacaoUI { Limpar-Temporarios } })
-    $global:UI.BotaoLimparDns.Add_Click({ Executar-OperacaoUI { Limpar-DNS; Status 'dns limpo.' } })
+    $global:UI.BotaoLimparDns.Add_Click({ Executar-OperacaoUI { Limpar-DNS } })
     $global:UI.BotaoSincronizarHora.Add_Click({ Executar-OperacaoUI { Sincronizar-Hora } })
     $global:UI.BotaoBackupDrivers.Add_Click({ Executar-OperacaoUI { Clique-BackupDrivers } })
     $global:UI.BotaoAnalisarArmazenamento.Add_Click({ Clique-AnalisarArmazenamento })
@@ -1755,7 +1780,7 @@ function Ligar-Tudo {
     $global:UI.BotaoDesfazerUma.Add_Click({ Executar-OperacaoUI { Clique-Desfazer -UmaAcao } })
     $global:UI.BotaoConfirmarManual.Add_Click({ Executar-OperacaoUI { Clique-ConfirmarManual } })
     $global:UI.BotaoDetalhesSessao.Add_Click({ Clique-DetalhesSessao })
-    $global:UI.BotaoAtualizarListaSessoes.Add_Click({ Atualizar-ListaDesfazer; Log 'lista de sessoes atualizada.' })
+
 
     # pagina inicio
     $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })

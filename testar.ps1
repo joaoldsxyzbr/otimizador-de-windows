@@ -1149,6 +1149,15 @@ try {
             if ($global:UI.BotaoInstalarRecursos.IsEnabled -or $global:ConsultasPaineis.Recursos.fase -ne 'indisponivel') {throw 'Falha interpretada como recurso habilitavel.'}
             Passou 'Ajustes e Config assincronos: navegacao, deduplicacao, estados e falhas'
 
+            Solicitar-ConsultaPainel 'Historico' -Codigo {Start-Sleep -Seconds 3;[pscustomobject]@{itens=@([pscustomobject]@{rotulo='Journal invalido';arquivo='nao-usar.json';valido=$false})}}
+            Solicitar-ConsultaPainel 'Atualizacoes' -Codigo {Start-Sleep -Seconds 3;[pscustomobject]@{itens=@();politica=[pscustomobject]@{ExcludeWUDriverInQualityUpdate=1;DeferFeatureUpdates=0}}}
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            foreach ($pag in @('PaginaDesfazer','PaginaAtualizacoes','PaginaInstalar','PaginaDesfazer')) {Trocar-Pagina $pag}
+            if ($sw.Elapsed.TotalSeconds -ge 2 -or $global:UI.BotaoDesfazer.IsEnabled) {throw 'Historico bloqueou navegacao ou permitiu reversao durante carga.'}
+            Esperar-ConsultaPainel 'Historico'
+            Esperar-ConsultaPainel 'Atualizacoes'
+            if ($global:ConsultasPaineis.Historico.fase -ne 'atualizado' -or $global:UI.ListaDesfazer.Tag.Count -ne 0 -or $global:ConsultasPaineis.Atualizacoes.fase -ne 'atualizado' -or -not $global:UI.ChkBloquearDrivers.IsChecked) {throw 'Historico ou politicas nao apresentados corretamente.'}
+            Passou 'Historico e Atualizacoes assincronos; journal invalido sem alvo de reversao'
             # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
             $global:Janela.Close()
             $global:ModoProtegido=$true

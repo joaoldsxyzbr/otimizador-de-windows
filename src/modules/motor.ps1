@@ -201,6 +201,28 @@ function Salvar-Sessao {
     return (Gravar-SessaoArquivo)
 }
 
+# Only summaries cross to WPF. Invalid or foreign journals are never selectable targets.
+function Obter-SnapshotHistorico {
+    $arquivos=@(Listar-Sessoes)
+    $itens=@(foreach ($s in $arquivos) {
+        $rotulo=$s.BaseName
+        $valido=$false
+        try {
+            $json=Ler-JSON $s.FullName
+            if ($null -eq $json -or $null -eq $json.itens) {throw 'Journal invalido.'}
+            Confirmar-ContextoJournal $json
+            $concluidos=@($json.itens | Where-Object {$_.estadoReversao -eq 'concluido'}).Count
+            $incertos=@($json.itens | Where-Object {$_.estadoReversao -eq 'em_andamento'}).Count
+            $rotulo+=(' - {0}/{1} revertidas: {2}' -f $concluidos,@($json.itens).Count,$json.rotulo)
+            if ($incertos -gt 0) {$rotulo+=' [revisao manual necessaria]'}
+            if (-not $json.PSObject.Properties['versaoEsquema']) {$rotulo+=' [legado: identidade nao confirmada]'}
+            $valido=$true
+        } catch {$rotulo+=' [invalido ou contexto diferente]'}
+        [pscustomobject]@{rotulo=$rotulo;arquivo=$s.FullName;valido=$valido}
+    })
+    [pscustomobject]@{itens=$itens}
+}
+
 function Listar-Sessoes {
     if (-not (Test-Path $global:PastaDesfazer)) { return @() }
     Verificar-PastaPrivada $global:PastaDesfazer
