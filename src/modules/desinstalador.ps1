@@ -25,7 +25,7 @@ function Classificar-Programa {
     } elseif ($n -match '\b(visual c\+\+|redistributable|runtime|directx|xna|physx|openal)\b' -or $n -match '^(Microsoft )?\.NET\b|^Microsoft ASP\.NET\b|^Java \d|^Microsoft Windows Desktop Runtime\b') {
         $grupo='Dependencia'; $risco='Cautela'; $finalidade='Biblioteca, runtime ou plataforma compartilhada'; $motivo='Outros programas ou jogos podem depender deste componente; dependentes reais nao foram verificados.'
     } elseif ($n -match '\b(antivirus|endpoint protection|internet security|firewall|security agent|antimalware)\b' -or $n -match '^(McAfee|Norton|Kaspersky|Avast|Bitdefender|ESET|Malwarebytes)\b') {
-        $grupo='Seguranca'; $risco='Cautela'; $finalidade='Protecao ou seguranca'; $motivo='Nome sugere software de protecao; remover pode reduzir a seguranca.'
+        $grupo='Seguranca'; $risco='Bloqueado'; $finalidade='Protecao ou seguranca'; $motivo='Software de protecao: remocao e limpeza indisponiveis no OtimizadorPC. Use o fluxo autorizado do fabricante.'
     } elseif ($ms -and $n -match '^(Microsoft )?(Clipchamp|OneDrive|PowerToys|Teams|Office|Microsoft 365)(?:\b|$)') {
         $grupo='Opcional'; $risco='Normal'; $finalidade='Aplicativo de uso pessoal ou produtividade'; $motivo='Nome e fabricante declarados correspondem a aplicativo opcional conhecido; dados e integracoes podem ser afetados.'
     } else {
@@ -68,7 +68,7 @@ function Validar-ProtecaoPrograma {
             $atual=Converter-EntradaPrograma (Get-ItemProperty -LiteralPath $Prog.chavePs -ErrorAction Stop)
             $novo=Classificar-Programa $atual
             if ($novo.risco -eq 'Bloqueado') { throw ('Entrada agora protegida: ' + $atual.nome) }
-            if ($atual.nome -cne $Prog.nome -or $atual.editor -cne $Prog.editor -or $atual.comando -cne $Prog.comando -or $atual.quiet -cne $Prog.quiet -or $novo.risco -ne $info.risco -or $novo.categoria -ne $info.categoria) { throw 'Entrada mudou desde a listagem; atualize a lista e refaca a selecao.' }
+            if ($atual.nome -cne $Prog.nome -or $atual.editor -cne $Prog.editor -or $atual.versao -cne $Prog.versao -or $atual.msi -ne $Prog.msi -or $atual.codigoMsi -ne $Prog.codigoMsi -or $atual.comando -cne $Prog.comando -or $atual.quiet -cne $Prog.quiet -or $novo.risco -ne $info.risco -or $novo.categoria -ne $info.categoria) { throw 'Entrada mudou desde a listagem; atualize a lista e refaca a selecao.' }
         } elseif ($Desinstalar) { throw 'Entrada nao existe mais; atualize a lista.' }
     } elseif ($Desinstalar) { throw 'Entrada de registro nao identificada.' }
     if ($Desinstalar -and -not $info.podeDesinstalar) { throw 'Nenhum desinstalador registrado.' }
@@ -253,6 +253,38 @@ function Analisar-LinhaComando {
     return $null
 }
 
+# Accept only an MSI product code linked to the exact selected registry entry.
+function Obter-CodigoMsiDesinstalacao {
+    param($Prog,[string]$Argumentos)
+    $id=[guid]::Empty
+    if (-not $Prog.msi -or -not [guid]::TryParse([string]$Prog.codigoMsi,[ref]$id) -or $id -eq [guid]::Empty) {throw 'Entrada MSI sem codigo de produto confirmado.'}
+    $folha=([string]$Prog.chavePs -split '\\')[-1]
+    $chave=[guid]::Empty
+    if (-not [guid]::TryParse($folha,[ref]$chave) -or $chave -ne $id) {throw 'Codigo MSI nao corresponde a chave selecionada.'}
+    $m=[regex]::Match($Argumentos,'(?i)^\s*/[ix]\s*(\{[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\})(?:\s+(?:/quiet|/passive|/qn|/norestart))*\s*$')
+    $comando=[guid]::Empty
+    if (-not $m.Success -or -not [guid]::TryParse($m.Groups[1].Value,[ref]$comando) -or $comando -ne $id) {throw 'Comando MSI ambiguo ou produto divergente. Use Aplicativos instalados do Windows.'}
+    return $id.ToString('B')
+}
+
+function Confirmar-ExecutavelDesinstalacao {
+    param([string]$Exe)
+    $full=[IO.Path]::GetFullPath($Exe)
+    $roots=@($env:ProgramFiles,[Environment]::GetEnvironmentVariable('ProgramFiles(x86)')) | Where-Object {$_}
+    if (-not @($roots | Where-Object {$full.StartsWith(([IO.Path]::GetFullPath($_).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)}).Count) {throw 'Desinstalador fora de Program Files; use Aplicativos instalados do Windows.'}
+    $atual=$full
+    while ($atual) {
+        $item=Get-Item -LiteralPath $atual -Force -ErrorAction Stop
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {throw 'Caminho do desinstalador redirecionado.'}
+        $pai=Split-Path -Parent $atual
+        if (-not $pai -or $pai -eq $atual) {break}
+        $atual=$pai
+    }
+    $sig=Get-AuthenticodeSignature -LiteralPath $full -ErrorAction Stop
+    if ($sig.Status -ne 'Valid') {throw 'Assinatura do desinstalador nao validada; use Aplicativos instalados do Windows.'}
+    return (Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash
+}
+
 function Desinstalar-Programa {
     param($Prog)
     Confirmar-PermissaoAlteracao
@@ -269,11 +301,11 @@ function Desinstalar-Programa {
     $an = Analisar-LinhaComando ([Environment]::ExpandEnvironmentVariables($linha))
     if (-not $an) { throw 'Comando nao reconhecido. Use Aplicativos instalados do Windows.' }
     $folha = [IO.Path]::GetFileName($an.exe)
+    $hashExe=$null
     if ($folha -ieq 'msiexec.exe') {
-        $m = [regex]::Match($an.args, '(\{[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\})')
-        if (-not $m.Success) { throw 'MSI sem identificador valido.' }
-        $exe = Join-Path $env:SystemRoot 'System32\msiexec.exe'
-        $argumentos = '/x ' + $m.Groups[1].Value + ' /norestart'
+        $codigo=Obter-CodigoMsiDesinstalacao $Prog $an.args
+        $exe=Join-Path $env:SystemRoot 'System32\msiexec.exe'
+        $argumentos='/x '+$codigo+' /norestart'
     } else {
         if ($folha -in @('cmd.exe','powershell.exe','pwsh.exe','wscript.exe','cscript.exe','mshta.exe','rundll32.exe','regsvr32.exe')) {
             throw 'Desinstalador usa interpretador generico. Use o desinstalador oficial pelo Windows.'
@@ -282,14 +314,15 @@ function Desinstalar-Programa {
             throw 'Executavel local do desinstalador nao encontrado. Use Aplicativos instalados do Windows.'
         }
         $exe=[IO.Path]::GetFullPath($an.exe)
-        $roots=@($env:ProgramFiles,${env:ProgramFiles(x86)}) | Where-Object {$_}
-        if (-not @($roots | Where-Object {$exe.StartsWith(([IO.Path]::GetFullPath($_).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)}).Count) { throw 'Desinstalador fora de Program Files; use Aplicativos instalados do Windows.' }
-        $sig=Get-AuthenticodeSignature -LiteralPath $exe -ErrorAction Stop
-        if ($sig.Status -ne 'Valid') { throw 'Assinatura do desinstalador nao validada; use Aplicativos instalados do Windows.' }
+        $hashExe=Confirmar-ExecutavelDesinstalacao $exe
         $argumentos = $an.args
     }
     $msg = ('Executar o desinstalador de {0}?{1}{1}{2}{1}{3}{1}{1}Confirme que reconhece este arquivo.' -f $nome,[Environment]::NewLine,$exe,$argumentos)
     if (-not (Perguntar 'Confirmar desinstalador' $msg)) { throw 'Desinstalacao cancelada pelo usuario.' }
+    # Revalidate after the confirmation dialog; no stale identity or changed binary.
+    Confirmar-PermissaoAlteracao
+    [void](Validar-ProtecaoPrograma $Prog -Desinstalar)
+    if ($hashExe -and (Confirmar-ExecutavelDesinstalacao $exe) -cne $hashExe) {throw 'Executavel alterado desde a confirmacao; operacao cancelada.'}
     $params = @{ FilePath=$exe; Wait=$true; PassThru=$true; ErrorAction='Stop' }
     if ($argumentos) { $params.ArgumentList = $argumentos }
     $proc = Start-Process @params

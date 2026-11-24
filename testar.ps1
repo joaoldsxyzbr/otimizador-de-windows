@@ -751,7 +751,7 @@ try {
                 @{nome='Microsoft Visual C++ 2015-2022 Redistributable (x64)';editor='Microsoft Corporation';cat='Dependencia';risco='Cautela'},
                 @{nome='NVIDIA Graphics Driver';editor='NVIDIA';cat='Driver';risco='Cautela'},
                 @{nome='Microsoft PowerToys';editor='Microsoft Corporation';cat='Opcional';risco='Normal'},
-                @{nome='Norton Antivirus';editor='Norton';cat='Seguranca';risco='Cautela'},
+                @{nome='Norton Antivirus';editor='Norton';cat='Seguranca';risco='Bloqueado'},
                 @{nome='Desconhecido';editor='Microsoft Corporation';cat='Desconhecido';risco='Revisar'}
             )
             $lista=@()
@@ -764,7 +764,7 @@ try {
             }
             $oculto=[pscustomobject]@{nome='Componente oculto';componenteSistema=$true;comando='teste.exe'}
             $protegido=[pscustomobject]@{nome='Programa';naoRemover=$true;comando='teste.exe'}
-            foreach ($pr in @($oculto,$protegido,$lista[1],$lista[2])) {
+            foreach ($pr in @($oculto,$protegido,$lista[1],$lista[2],$lista[6])) {
                 if ((Classificar-Programa $pr).risco -ne 'Bloqueado') { throw 'Protecao nao aplicada.' }
                 $recusou=$false
                 try { Desinstalar-Programa $pr } catch { $recusou=$_.Exception.Message -match 'Componente protegido' }
@@ -1056,6 +1056,31 @@ try {
         }
     }
 } catch { Falhou 'interface pessoal' $_.Exception.Message }
+
+# ---- identificador MSI e integridade do desinstalador ----
+Secao 'identidade de desinstalacao'
+try {
+    $id='{11111111-1111-1111-1111-111111111111}'
+    $p=[pscustomobject]@{msi=$true;codigoMsi=$id;chavePs=('HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$id)}
+    if ((Obter-CodigoMsiDesinstalacao $p ('/I'+$id)) -ne $id) {throw 'Produto MSI valido recusado.'}
+    foreach ($argsMsi in @('/x {22222222-2222-2222-2222-222222222222}',('/x '+$id+' TRANSFORMS=outro.mst'),('/x '+$id+' /x '+$id),('/i '+$id+' /forcerestart'))) {
+        $recusou=$false
+        try {$null=Obter-CodigoMsiDesinstalacao $p $argsMsi} catch {$recusou=$true}
+        if (-not $recusou) {throw ('Comando MSI indevido aceito: '+$argsMsi)}
+    }
+    $p.codigoMsi='{22222222-2222-2222-2222-222222222222}'
+    $recusou=$false
+    try {$null=Obter-CodigoMsiDesinstalacao $p ('/x '+$p.codigoMsi)} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Produto MSI divergente da chave aceito.'}
+    & {
+        function Get-Item {[CmdletBinding()]param([string]$LiteralPath,[switch]$Force) [pscustomobject]@{Attributes=[IO.FileAttributes]::ReparsePoint}}
+        function Get-AuthenticodeSignature {throw 'Nao deve verificar assinatura de caminho redirecionado.'}
+        $recusou=$false
+        try {$null=Confirmar-ExecutavelDesinstalacao (Join-Path $env:ProgramFiles 'Teste\uninstall.exe')} catch {$recusou=$_.Exception.Message -match 'redirecionado'}
+        if (-not $recusou) {throw 'Caminho redirecionado aceito.'}
+    }
+    Passou 'produto MSI vinculado ao registro e redirecionamento de executavel recusado'
+} catch {Falhou 'identidade de desinstalacao' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
