@@ -78,6 +78,8 @@ $journals = @(Get-ChildItem -Path $global:PastaDesfazer -Filter '*.json' -ErrorA
 if ($journals.Count -eq 0) { Log 'FALHOU: nenhum journal gravado apos aplicar o preset' -Erro; exit 1 }
 $arquivo = $journals[0].FullName
 $json = Ler-JSON $arquivo
+if ($json.versaoEsquema -ne 2 -or -not $json.contexto.usuarioSid -or -not $json.contexto.maquina) {throw 'Journal sem esquema ou identidade.'}
+Confirmar-ContextoJournal $json
 $itens = @($json.itens)
 Log ('CI: journal ' + (Split-Path -Leaf $arquivo) + ' com ' + $itens.Count + ' item(ns)')
 if ($itens.Count -eq 0) { Log 'FALHOU: journal vazio' -Erro; exit 1 }

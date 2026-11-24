@@ -1057,6 +1057,43 @@ try {
     }
 } catch { Falhou 'interface pessoal' $_.Exception.Message }
 
+# ---- F3: identidade de novos journals e compatibilidade legada ----
+Secao 'contexto de journal'
+try {
+    $ctx=[pscustomobject]@{usuarioSid='S-1-5-21-1';maquina='11111111-1111-1111-1111-111111111111';registro64=$true}
+    $j=[pscustomobject]@{versaoEsquema=2;contexto=$ctx;itens=@()}
+    Confirmar-ContextoJournal $j $ctx
+    Confirmar-ContextoJournal ([pscustomobject]@{itens=@()}) $ctx
+    foreach ($outro in @(
+        [pscustomobject]@{usuarioSid='S-1-5-21-2';maquina=$ctx.maquina;registro64=$true},
+        [pscustomobject]@{usuarioSid=$ctx.usuarioSid;maquina='22222222-2222-2222-2222-222222222222';registro64=$true},
+        [pscustomobject]@{usuarioSid=$ctx.usuarioSid;maquina=$ctx.maquina;registro64=$false},
+        [pscustomobject]@{usuarioSid=$ctx.usuarioSid;maquina=$ctx.maquina;registro64='True'}
+    )) {
+        $recusou=$false
+        try {Confirmar-ContextoJournal $j $outro} catch {$recusou=$_.Exception.Message -match 'outro usuario'}
+        if (-not $recusou) {throw 'Contexto divergente aceito.'}
+    }
+    foreach ($invalido in @([pscustomobject]@{versaoEsquema=99;contexto=$ctx},[pscustomobject]@{versaoEsquema=2})) {
+        $recusou=$false
+        try {Confirmar-ContextoJournal $invalido $ctx} catch {$recusou=$_.Exception.Message -match 'Esquema'}
+        if (-not $recusou) {throw 'Esquema invalido aceito.'}
+    }
+    & {
+        function Log {param($Mensagem,[switch]$Erro)}
+        function Ler-JSON {param($Caminho) $j}
+        function Obter-ContextoJournal {[pscustomobject]@{usuarioSid='S-1-5-21-3';maquina=$ctx.maquina;registro64=$true}}
+        $script:escritasJournal=0
+        function Gravar-JSONAtomico {$script:escritasJournal++; throw 'Nao deve gravar.'}
+        function Desfazer-Item {$script:escritasJournal++; throw 'Nao deve reverter.'}
+        if ((Reverter-Sessao 'teste.json') -or $script:escritasJournal) {throw 'Reversao aceitou contexto divergente.'}
+        $recusou=$false
+        try {Confirmar-ReversaoManual 'teste.json' 0} catch {$recusou=$_.Exception.Message -match 'outro usuario'}
+        if (-not $recusou -or $script:escritasJournal) {throw 'Confirmacao manual aceitou contexto divergente.'}
+    }
+    Passou 'novos journals vinculados ao usuario, maquina e visao; esquema legado preservado'
+} catch {Falhou 'contexto de journal' $_.Exception.Message}
+
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
 try {

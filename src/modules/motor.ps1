@@ -95,9 +95,36 @@ function Registro-Corresponde {
 
 # ---- journal da sessao ----
 
+# Bind new sessions to the actual identity and registry view, not a PC profile.
+function Obter-ContextoJournal {
+    $identidade=[Security.Principal.WindowsIdentity]::GetCurrent()
+    try {
+        $sid=$identidade.User.Value
+        if (-not $sid) {throw 'SID do contexto indisponivel.'}
+        $maquina=[string](Get-ItemProperty -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Cryptography' -Name MachineGuid -ErrorAction Stop).MachineGuid
+        $id=[guid]::Empty
+        if (-not [guid]::TryParse($maquina,[ref]$id) -or $id -eq [guid]::Empty) {throw 'Identidade local da maquina indisponivel.'}
+        return [pscustomobject]@{usuarioSid=$sid;maquina=$id.ToString();registro64=[Environment]::Is64BitProcess}
+    } finally {$identidade.Dispose()}
+}
+
+function Confirmar-ContextoJournal {
+    param($Journal,$Atual)
+    # Legacy journals remain readable; no identity assertion can be inferred.
+    if (-not $Journal.PSObject.Properties['versaoEsquema']) {return}
+    if ($Journal.versaoEsquema -ne 2 -or -not $Journal.contexto) {throw 'Esquema de journal desconhecido ou incompleto.'}
+    if (-not $PSBoundParameters.ContainsKey('Atual')) {$Atual=Obter-ContextoJournal}
+    $c=$Journal.contexto
+    if (-not $c.usuarioSid -or -not $c.maquina -or $c.registro64 -isnot [bool] -or
+        -not $Atual -or $c.usuarioSid -ne $Atual.usuarioSid -or $c.maquina -ne $Atual.maquina -or $c.registro64 -ne $Atual.registro64) {
+        throw 'Journal pertence a outro usuario, maquina ou visao de registro; reversao indisponivel neste contexto.'
+    }
+}
+
 function Iniciar-Sessao {
     param([string]$Rotulo)
     Confirmar-PermissaoAlteracao
+    $global:ContextoSessaoJournal = Obter-ContextoJournal
     $global:SessaoItens = New-Object System.Collections.ArrayList
     $global:RotuloSessao = $Rotulo
     $global:ErrosSessao = 0
@@ -121,6 +148,8 @@ function Obter-ArquivoSessao {
 function Gravar-SessaoArquivo {
     $arquivo = Obter-ArquivoSessao
     $obj = [pscustomobject]@{
+        versaoEsquema = 2
+        contexto = $global:ContextoSessaoJournal
         criado = $global:SessaoCriado
         rotulo = $global:RotuloSessao
         itens  = @($global:SessaoItens)
@@ -522,6 +551,7 @@ function Desfazer-Item {
                     if ($kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) { $valor = [byte[]]@($valor) }
                     if ($kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) { $valor = [string[]]@($valor) }
                     [Microsoft.Win32.Registry]::SetValue($rede, $Item.nome, $valor, $kind) | Out-Null
+                    if (-not (Registro-Corresponde (Ler-ValorRegistro $Item.caminho $Item.nome) $true $kind.ToString() $valor)) {throw 'Restauracao do valor de registro nao confirmada.'}
                     Log ("registro restaurado: {0}\{1}" -f $Item.caminho, $Item.nome)
                 } else {
                     $partes = $rede -split '\\', 2
@@ -533,6 +563,7 @@ function Desfazer-Item {
                             $chave.Close()
                         }
                     }
+                    if ((Ler-ValorRegistro $Item.caminho $Item.nome).existia) {throw 'Remocao do valor de registro nao confirmada.'}
                     Log ("registro removido: {0}\{1}" -f $Item.caminho, $Item.nome)
                 }
             }
@@ -710,6 +741,7 @@ function Reverter-Sessao {
     try {
         $json = Ler-JSON $Arquivo
         if ($null -eq $json -or $null -eq $json.itens) { throw 'Journal invalido.' }
+        Confirmar-ContextoJournal $json
         $itens = @($json.itens)
         $feitas = 0
         for ($i = $itens.Count - 1; $i -ge 0; $i--) {
@@ -749,6 +781,8 @@ function Confirmar-ReversaoManual {
     Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     $json = Ler-JSON $Arquivo
+    if ($null -eq $json -or $null -eq $json.itens) {throw 'Journal invalido.'}
+    Confirmar-ContextoJournal $json
     $itens = @($json.itens)
     for ($i = $itens.Count - 1; $i -ge 0; $i--) {
         if ($itens[$i].estadoReversao -eq 'concluido') { continue }
