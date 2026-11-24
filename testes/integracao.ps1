@@ -251,5 +251,38 @@ try {
     }
 }
 
+# ---- 11. tarefa real descartavel, sem gatilhos ----
+$nomeTarefa = 'OtimizadorPC-CI-' + [guid]::NewGuid().ToString('N')
+try {
+    $acaoTarefa = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\cmd.exe') -Argument '/c exit 0'
+    Register-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -Action $acaoTarefa -ErrorAction Stop | Out-Null
+    Iniciar-Sessao 'ci-tarefa'
+    Desativar-TarefaComJournal '\' $nomeTarefa
+    $arq = Salvar-Sessao
+    if ((Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Disabled') { throw 'Tarefa nao desativada.' }
+    if (-not (Reverter-Sessao $arq)) { throw 'Tarefa nao revertida.' }
+    if ((Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Ready') { throw 'Tarefa nao reativada.' }
+    Log 'CI ok: tarefa descartavel desativada e reativada com journal'
+} catch { Log ('FALHOU: tarefa: ' + $_.Exception.Message) -Erro; exit 1 }
+finally { Unregister-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue }
+
+# ---- 12. plano .reg restrito com remocao de valor padrao ----
+$nomePlano = 'Software\OtimizadorPC-CI-Plano-' + [guid]::NewGuid().ToString('N')
+try {
+    $chave = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($nomePlano)
+    try { $chave.SetValue('','original'); $chave.SetValue('numero',23) } finally { $chave.Dispose() }
+    $texto = "Windows Registry Editor Version 5.00`n`n[HKEY_CURRENT_USER\$nomePlano]`n@=-`n" + '"numero"=dword:0000002a'
+    $plano = @(Ler-PlanoRegRestrito $texto)
+    Iniciar-Sessao 'ci-plano'
+    foreach ($acao in $plano) { Executar-Acao $acao 'plano descartavel' }
+    $arq = Salvar-Sessao
+    $ck = 'HKCU:\' + $nomePlano
+    if ($global:ErrosSessao -ne 0 -or (Ler-ValorRegistro $ck '').existia -or (Ler-ValorRegistro $ck 'numero').valor -ne 42) { throw 'Plano nao aplicado corretamente.' }
+    if (-not (Reverter-Sessao $arq)) { throw 'Plano nao revertido.' }
+    if ((Ler-ValorRegistro $ck '').valor -cne 'original' -or (Ler-ValorRegistro $ck 'numero').valor -ne 23) { throw 'Valores nao restaurados.' }
+    Log 'CI ok: plano restrito e remocao de valor padrao restaurados'
+} catch { Log ('FALHOU: plano restrito: ' + $_.Exception.Message) -Erro; exit 1 }
+finally { [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomePlano,$false) }
+
 Log 'CI INTEGRACAO: todos os testes passaram'
 exit 0

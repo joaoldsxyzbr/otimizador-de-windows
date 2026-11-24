@@ -566,6 +566,7 @@ function Alterar-ItemInventario {
         Iniciar-Sessao 'gerenciador-servicos'
         Alterar-ServicoComJournal $Item.nome 'Manual'
     } elseif ($Grupo -eq 'tarefas') {
+        if ($Item.nome -match '[*?\[\]]' -or $Item.caminho -match '[*?\[\]]') { throw 'Identificador ambiguo.' }
         $atual = Get-ScheduledTask -TaskPath $Item.caminho -TaskName $Item.nome -ErrorAction Stop
         if ($atual.State -ne $Item.estado -or $atual.State -ne 'Ready') { throw 'Tarefa indisponivel ou inventario desatualizado.' }
         if (-not (Perguntar 'Desativar tarefa' ('Desativar ' + $Item.caminho + $Item.nome + '? Tarefas de sistema nao sao aceitas.'))) { return $false }
@@ -670,10 +671,11 @@ function Clique-InventarioLocal {
                     try {
                         if (Alterar-ItemInventario $ctx.grupo $ctx.grade.SelectedItem) {
                             Avisar 'Operacao concluida' 'Reabra o inventario para atualizar. Veja a sessao na aba Desfazer.'
+                            $ctx.janela.IsEnabled=$true
                             $ctx.janela.Close()
                         }
                     } catch { Avisar 'Operacao interrompida' $_.Exception.Message }
-                    finally { $ctx.janela.IsEnabled=$true; $global:OperacaoUIAtiva=$false }
+                    finally { if ($ctx.janela.IsLoaded) { $ctx.janela.IsEnabled=$true }; $global:OperacaoUIAtiva=$false }
                 })
                 [System.Windows.Controls.DockPanel]::SetDock($acao,'Top')
                 [void]$corpo.Children.Add($acao)

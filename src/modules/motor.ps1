@@ -353,11 +353,19 @@ function Executar-Acao {
                     backupReg    = $arqBackup
                 })
                 if ($Acao.remover) {
-                    if ($leitura.existia) { Remove-ItemProperty -LiteralPath $Acao.caminho -Name $Acao.nome -ErrorAction Stop }
+                    if ($leitura.existia) {
+                        $partes = $leitura.rede -split '\\',2
+                        $raiz = Obter-RaizRegistro $partes[0]
+                        $chave = $raiz.OpenSubKey($partes[1],$true)
+                        if (-not $chave) { throw 'Chave indisponivel para remocao.' }
+                        try { $chave.DeleteValue([string]$Acao.nome,$true) } finally { $chave.Dispose() }
+                    }
+                    if ((Ler-ValorRegistro $Acao.caminho $Acao.nome).existia) { throw 'Remocao de valor nao confirmada.' }
                     Log ('valor de registro removido: ' + $Acao.nome)
                     return
                 }
                 [Microsoft.Win32.Registry]::SetValue($leitura.rede, $Acao.nome, $dados, $kind) | Out-Null
+                if (-not (Registro-Corresponde (Ler-ValorRegistro $Acao.caminho $Acao.nome) $true $kind.ToString() $dados)) { throw 'Gravacao de registro nao confirmada.' }
                 Log ("registro: {0} -> {1} = {2}" -f $Acao.caminho, $Acao.nome, $Acao.dados)
             }
 

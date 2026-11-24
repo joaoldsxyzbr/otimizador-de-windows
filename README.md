@@ -70,6 +70,7 @@ nao quer janela? modo cli:
 - recuperacao de valores de registro e PATH: compara o estado atual com o aplicado e o anterior; interrompe se houver mudanca posterior em vez de sobrescrever. Conflitos exigem revisao manual.
 - estado administrativo: a nova pasta ProgramData\otimizadorpc-v2 exige ACL restrita a administradores/SYSTEM, sem confiar automaticamente no estado antigo. Os arquivos anteriores em ProgramData\otimizadorpc permanecem intactos, mas precisam de recuperacao manual/revisao; nao copie journals antigos para a pasta nova.
 - manutencao: erros nativos e PowerShell propagados ao console; reset de Windows Update preserva caches com nomes unicos e tenta reiniciar somente os servicos que estavam ativos. Limpeza rapida de temporarios limitada a arquivos na raiz, sem seguir links. Reset de rede exige confirmacao.
+- integracao real tambem cobre tarefa descartavel e plano local restrito com exclusao de valor padrao.
 - integracao real em VM/runner descartavel verifica os valores de registro do preset, valores padrao, arquivo com caracteres especiais, hash e preservacao de conflitos. O teste se recusa a apagar journals existentes.
 - uma trava exclusiva em pasta protegida impede GUI/CLI/portatil v2 simultaneos; fechar a janela durante operacao mutavel e bloqueado. Versoes antigas nao respeitam a trava.
 - operacoes mutaveis da interface passam por um controlador que evita reentrada; codigos de saida de desinstaladores e comandos sao verificados.
