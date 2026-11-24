@@ -29,7 +29,7 @@ nao quer janela? modo cli:
 
 ## desenvolvimento v2 (pre-release)
 
-- perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: ` .\\otimizadorpc.ps1 -Cli notebook -Simular`.
+- perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
 - os perfis novos sao conservadores; nao garantem FPS ou autonomia. O ajuste de avisos RDP fica exclusivamente manual por reduzir protecoes contra conexoes nao confiaveis.
 
 - diagnostico local na pagina inicial: memoria, espaco em disco, entradas de inicializacao e sinais de reinicio pendente.

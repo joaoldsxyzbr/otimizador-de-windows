@@ -39,6 +39,7 @@ function Converter-Kind {
         'String'     { return [Microsoft.Win32.RegistryValueKind]::String }
         'ExpandString' { return [Microsoft.Win32.RegistryValueKind]::ExpandString }
         'Binary'     { return [Microsoft.Win32.RegistryValueKind]::Binary }
+        'MultiString' { return [Microsoft.Win32.RegistryValueKind]::MultiString }
     }
     return [Microsoft.Win32.RegistryValueKind]::String
 }
@@ -54,16 +55,25 @@ function Inferir-Kind {
 }
 
 function Ler-ValorRegistro {
-    # le um valor do registro pela notacao PS (HKLM:\...) e devolve hashtable com valor + existia
     param([string]$CaminhoPS, [string]$Nome)
     $rede = Converter-Hive $CaminhoPS
-    $atual = [Microsoft.Win32.Registry]::GetValue($rede, $Nome, $null)
-    return @{
-        valor    = $atual
-        existia  = ($null -ne $atual)
-        tipo     = (Inferir-Kind $atual)
-        rede     = $rede
-    }
+    $partes = $rede -split '\\', 2
+    $raiz = Obter-RaizRegistro $partes[0]
+    if ($null -eq $raiz -or $partes.Count -ne 2) { throw ('Caminho de registro invalido: ' + $CaminhoPS) }
+    $resultado = @{ valor = $null; existia = $false; tipo = 'DWord'; rede = $rede }
+    $chave = $raiz.OpenSubKey($partes[1], $false)
+    if ($null -eq $chave) { return $resultado }
+    try {
+        if ($chave.GetValueNames() -contains $Nome) {
+            $resultado.existia = $true
+            $resultado.tipo = $chave.GetValueKind($Nome).ToString()
+            if (@('DWord','QWord','String','ExpandString','Binary','MultiString') -notcontains $resultado.tipo) {
+                throw ('Tipo de registro nao suportado: ' + $resultado.tipo)
+            }
+            $resultado.valor = $chave.GetValue($Nome, $null, [Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
+        }
+        return $resultado
+    } finally { $chave.Dispose() }
 }
 
 # ---- journal da sessao ----
@@ -194,7 +204,8 @@ function Executar-Acao {
                     caminho      = $Acao.caminho
                     nome         = $Acao.nome
                     existia      = $leitura.existia
-                    valorAnterior = ($leitura.valor | ConvertTo-Json -Compress)
+                    valorAnterior = (ConvertTo-Json -InputObject $leitura.valor -Compress)
+                    valorAnteriorEstruturado = [pscustomobject]@{ valor = $leitura.valor }
                     tipoAnterior = $leitura.tipo
                     backupReg    = $arqBackup
                 })
@@ -202,6 +213,8 @@ function Executar-Acao {
                 $dados = $Acao.dados
                 if ($kind -eq [Microsoft.Win32.RegistryValueKind]::DWord) { $dados = [int]$Acao.dados }
                 if ($kind -eq [Microsoft.Win32.RegistryValueKind]::QWord) { $dados = [long]$Acao.dados }
+                if ($kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) { $dados = [byte[]]@($Acao.dados) }
+                if ($kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) { $dados = [string[]]@($Acao.dados) }
                 [Microsoft.Win32.Registry]::SetValue($leitura.rede, $Acao.nome, $dados, $kind) | Out-Null
                 Log ("registro: {0} -> {1} = {2}" -f $Acao.caminho, $Acao.nome, $Acao.dados)
             }
@@ -357,9 +370,12 @@ function Desfazer-Item {
                 $rede = Converter-Hive $Item.caminho
                 if ($Item.existia) {
                     $kind = Converter-Kind $Item.tipoAnterior
-                    $valor = ($Item.valorAnterior | ConvertFrom-Json)
+                    if ($null -ne $Item.valorAnteriorEstruturado) { $valor = $Item.valorAnteriorEstruturado.valor }
+                    else { $valor = ($Item.valorAnterior | ConvertFrom-Json) }
                     if ($kind -eq [Microsoft.Win32.RegistryValueKind]::DWord) { $valor = [int]$valor }
                     if ($kind -eq [Microsoft.Win32.RegistryValueKind]::QWord) { $valor = [long]$valor }
+                    if ($kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) { $valor = [byte[]]@($valor) }
+                    if ($kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) { $valor = [string[]]@($valor) }
                     [Microsoft.Win32.Registry]::SetValue($rede, $Item.nome, $valor, $kind) | Out-Null
                     Log ("registro restaurado: {0}\{1}" -f $Item.caminho, $Item.nome)
                 } else {

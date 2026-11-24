@@ -112,5 +112,37 @@ if ($alvo.existia) {
 if (-not (Test-Path ($arquivo + '.revertido'))) { Log 'FALHOU: journal nao foi renomeado para .revertido' -Erro; exit 1 }
 Log 'CI ok: journal renomeado para .revertido'
 
+# ---- 7. preserva tipos reais do registro, inclusive variaveis nao expandidas ----
+$nomeChave = 'Software\OtimizadorPC-CI-' + [guid]::NewGuid().ToString('N')
+$caminhoTeste = 'HKCU:\' + $nomeChave
+try {
+    $chave = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($nomeChave)
+    try {
+        $chave.SetValue('expand', '%TEMP%\arquivo', [Microsoft.Win32.RegistryValueKind]::ExpandString)
+        $chave.SetValue('multi', [string[]]@('um','dois'), [Microsoft.Win32.RegistryValueKind]::MultiString)
+        $chave.SetValue('bin', [byte[]]@(0,255,12), [Microsoft.Win32.RegistryValueKind]::Binary)
+    } finally { $chave.Dispose() }
+    Iniciar-Sessao 'ci-tipos-registro'
+    foreach ($nome in @('expand','multi','bin')) {
+        Executar-Acao ([pscustomobject]@{ tipo='registro'; caminho=$caminhoTeste; nome=$nome; tipoValor='String'; dados='alterado' }) 'teste de tipo'
+    }
+    $journalTipos = Salvar-Sessao
+    if (-not $journalTipos -or -not (Reverter-Sessao $journalTipos)) { throw 'Nao reverteu journal de tipos.' }
+    $expand = Ler-ValorRegistro $caminhoTeste 'expand'
+    $multi = Ler-ValorRegistro $caminhoTeste 'multi'
+    $bin = Ler-ValorRegistro $caminhoTeste 'bin'
+    if ($expand.tipo -ne 'ExpandString' -or $expand.valor -ne '%TEMP%\arquivo' -or
+        $multi.tipo -ne 'MultiString' -or ($multi.valor -join ',') -ne 'um,dois' -or
+        $bin.tipo -ne 'Binary' -or ($bin.valor -join ',') -ne '0,255,12') {
+        throw 'Tipos ou dados originais nao foram preservados.'
+    }
+    Log 'CI ok: tipos reais do registro preservados'
+} catch {
+    Log ('FALHOU: ' + $_.Exception.Message) -Erro
+    exit 1
+} finally {
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nomeChave, $false)
+}
+
 Log 'CI INTEGRACAO: todos os testes passaram'
 exit 0
