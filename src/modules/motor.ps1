@@ -73,7 +73,7 @@ function Iniciar-Sessao {
     $global:SessaoItens = New-Object System.Collections.ArrayList
     $global:RotuloSessao = $Rotulo
     $global:ErrosSessao = 0
-    $global:CarimboSessao = Get-Date -Format 'yyyy-MM-dd_HH-mm-ss'
+    $global:CarimboSessao = (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '_' + [guid]::NewGuid().ToString('N').Substring(0, 12)
     $global:SessaoCriado = (Get-Date -Format 'o')
     $global:BackupN = 0
     $global:SessaoArquivo = $null
@@ -449,7 +449,7 @@ function Desfazer-Item {
             }
 
             'desinstalado-app' {
-                throw ('Reinstalacao manual necessaria: ' + $Item.nome)." -f $Item.nome)
+                throw ('Reinstalacao manual necessaria: ' + $Item.nome)
             }
 
             'tarefa' {
@@ -548,8 +548,10 @@ function Reverter-Sessao {
         $novoNome = (Split-Path -Leaf $Arquivo) + '.revertido'
         Rename-Item -LiteralPath $Arquivo -NewName $novoNome -ErrorAction Stop
         Log 'sessao revertida. algumas mudancas podem exigir relogar no windows.'
+        return $true
     } catch {
         Log ('Reversao interrompida: ' + $_.Exception.Message) -Erro
+        return $false
     }
 }
 
