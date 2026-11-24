@@ -344,6 +344,7 @@ function Executar-Acao {
 
 function Desfazer-Item {
     param($Item)
+    $ErrorActionPreference = 'Stop'
     try {
         switch ($Item.tipo) {
 
@@ -374,12 +375,14 @@ function Desfazer-Item {
                 foreach ($arq in @($Item.backups)) {
                     if (-not [string]::IsNullOrWhiteSpace($arq) -and (Test-Path $arq)) {
                         reg.exe import $arq 2>$null | Out-Null
+                        if ($LASTEXITCODE -ne 0) { throw 'Falha ao importar backup do registro.' }
                         Log ('registro restaurado do backup: ' + (Split-Path -Leaf $arq))
-                    }
+                    } else { throw 'Backup custom ausente.' }
                 }
                 foreach ($chave in @($Item.chavesNovas)) {
                     if (-not [string]::IsNullOrWhiteSpace($chave)) {
                         reg.exe delete $chave /f 2>$null | Out-Null
+                        if ($LASTEXITCODE -ne 0) { throw 'Falha ao remover chave custom.' }
                         Log ('chave que nao existia antes foi removida: ' + $chave)
                     }
                 }
@@ -389,9 +392,11 @@ function Desfazer-Item {
             'servico' {
                 $tipoOk = $Item.tipoAnterior
                 if (@('Automatic', 'Manual', 'Disabled') -notcontains $tipoOk) { $tipoOk = 'Manual' }
-                Set-Service -Name $Item.nome -StartupType $tipoOk -ErrorAction SilentlyContinue
+                Set-Service -Name $Item.nome -StartupType $tipoOk -ErrorAction Stop
                 if ($Item.estadoAnterior -eq 'Running') {
-                    Start-Service -Name $Item.nome -ErrorAction SilentlyContinue
+                    Start-Service -Name $Item.nome -ErrorAction Stop
+                } elseif ($Item.estadoAnterior -eq 'Stopped') {
+                    Stop-Service -Name $Item.nome -ErrorAction Stop
                 }
                 Log ("servico restaurado: {0} -> {1}" -f $Item.nome, $tipoOk)
             }
@@ -406,15 +411,16 @@ function Desfazer-Item {
             'energia' {
                 if ($Item.guidAnterior) {
                     powercfg /setactive $Item.guidAnterior | Out-Null
+                    if ($LASTEXITCODE -ne 0) { throw 'Falha ao restaurar plano de energia.' }
                     Log ("plano de energia restaurado: {0}" -f $Item.guidAnterior)
                 }
             }
 
             'recurso' {
                 if ($Item.estadoAnterior -eq 'Enabled') {
-                    Enable-WindowsOptionalFeature -Online -FeatureName $Item.nome -All -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    Enable-WindowsOptionalFeature -Online -FeatureName $Item.nome -All -NoRestart -ErrorAction Stop | Out-Null
                 } else {
-                    Disable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    Disable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null
                 }
                 Log ("recurso restaurado: {0}" -f $Item.nome)
             }
@@ -433,16 +439,16 @@ function Desfazer-Item {
                 if ($fez) {
                     Log ("appx '{0}' reinstalado pelo desfazer (familia: {1})." -f $Item.pacote, $Item.familia)
                 } else {
-                    Log ("appx '{0}': nao deu pra reinstalar automaticamente; busque pelo nome na Microsoft Store." -f $Item.pacote)
+                    throw ('Reinstalacao manual necessaria pela Microsoft Store: ' + $Item.pacote)
                 }
             }
 
             'desinstalado-app' {
-                Log ("app desinstalado anteriormente: {0} - se quiser de volta, instale de novo (aba instalar ou site oficial)." -f $Item.nome)
+                throw ('Reinstalacao manual necessaria: ' + $Item.nome)." -f $Item.nome)
             }
 
             'tarefa' {
-                Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction SilentlyContinue | Out-Null
+                Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
                 Log ("tarefa reativada: {0}{1}" -f [string]$Item.tarefaPath, [string]$Item.tarefaNome)
             }
 
@@ -474,7 +480,7 @@ function Desfazer-Item {
                     $ck2 = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
                 }
                 if ($null -eq $ck2) {
-                    Log ("nao achei a chave do PATH: " + [string]$Item.escopo)
+                    throw ("Chave do PATH ausente: " + [string]$Item.escopo)
                 } else {
                     $kind = $ck2.GetValueKind('Path')
                     $ck2.SetValue('Path', [string]$Item.valorAnterior, $kind)
@@ -490,21 +496,25 @@ function Desfazer-Item {
                     Move-Item -Path $Item.destino -Destination $Item.origem -Force
                     Log ("rastro restaurado da quarantena: " + $Item.origem)
                 } else {
-                    Log ("nao restaurei (backup sumiu ou o original ja existe): " + $Item.origem)
+                    throw ("Backup ausente ou conflito no destino: " + $Item.origem)
                 }
             }
 
             'quarantena-registro' {
                 if (Test-Path $Item.arquivoReg) {
                     reg.exe import $Item.arquivoReg 2>&1 | Out-Null
+                    if ($LASTEXITCODE -ne 0) { throw 'Falha ao importar registro da quarentena.' }
                     Log ("chave de registro restaurada: " + $Item.chave)
                 } else {
-                    Log ("backup do registro nao encontrado: " + $Item.arquivoReg)
+                    throw ("Backup do registro nao encontrado: " + $Item.arquivoReg)
                 }
             }
+            default { throw ('Tipo de reversao desconhecido: ' + $Item.tipo) }
         }
+        return $true
     } catch {
         Log ("falha ao desfazer item '{0}': {1}" -f $Item.tipo, $_.Exception.Message) -Erro
+        return $false
     }
 }
 
@@ -515,11 +525,17 @@ function Reverter-Sessao {
     [array]::Reverse($itens)
     Log ("revertendo sessao '{0}' ({1} acoes)..." -f $json.rotulo, $itens.Count)
     foreach ($item in $itens) {
-        Desfazer-Item $item
+        if (-not (Desfazer-Item $item)) {
+            Log 'Reversao interrompida: journal preservado para revisao. Nao repita sem conferir os itens ja restaurados.' -Erro
+            return
+        }
         Atualizar-UI
     }
     $novoNome = (Split-Path -Leaf $Arquivo) + '.revertido'
-    try { Rename-Item -Path $Arquivo -NewName $novoNome -ErrorAction Stop } catch { }
+    try { Rename-Item -Path $Arquivo -NewName $novoNome -ErrorAction Stop } catch {
+        Log ('Falha ao finalizar journal: ' + $_.Exception.Message) -Erro
+        return
+    }
     Log 'sessao revertida. algumas mudancas podem exigir relogar no windows.'
 }
 
