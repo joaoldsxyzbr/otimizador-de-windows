@@ -134,3 +134,7 @@ o winutil e MIT licenciado e foi a referencia: arquitetura de catalogos json, mo
 - windows 10 e 11 (alguns tweaks marcados "win11" nao aparecem no 10, e vice-versa)
 - tweaks visuais podem pedir relogon completo pra aparecer
 - winget precisa do "app installer" da store; a aba config tenta instalar/reparar sozinho
+
+## abrir sem instalar
+
+Veja o comando PowerShell de uma linha no [README](README.md#abrir-sem-instalar-previa-v2). O launcher baixa e monta a versao portatil temporariamente; nao e um instalador.

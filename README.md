@@ -4,6 +4,16 @@
 
 App de otimizacao do Windows 10 e 11 em PowerShell + janela nativa WPF (estilo Winutil do Chris Titus, MIT), 100% PT-BR, com journal de desfazer por acao e quarantena. Feito pra uso geral/pessoal: visual, privacidade, desempenho, debloat, desinstalacao limpa e manutencao, tudo num so lugar.
 
+## abrir sem instalar (previa v2)
+
+Abra **Windows PowerShell como administrador** e cole o comando abaixo. Use apenas a URL deste repositorio e confira o [launcher](iniciar.ps1) antes de executa-lo.
+
+```powershell
+$p = Join-Path $env:TEMP ('otimizadorpc-iniciar-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/joaoldsxyzbr/otimizador-de-windows/desenvolvimento-v2/iniciar.ps1' -OutFile $p -ErrorAction Stop; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $p -Ref desenvolvimento-v2 } finally { Remove-Item -LiteralPath $p -Force -ErrorAction SilentlyContinue }
+```
+
+O launcher baixa um commit especifico da branch, confere os arquivos necessarios contra os blobs Git, monta a versao portatil em pasta temporaria e abre a janela. Nao instala o app nem exige Git, Python ou outros programas. A pasta temporaria e removida ao sair; logs e journals continuam em `%ProgramData%\otimizadorpc`. Arquivos customizados em `custom\` da copia temporaria nao persistem. O launcher usa HTTPS e a integridade do GitHub, nao assinatura independente; confie no repositorio antes de executar como administrador. A previa ainda precisa de validacao manual. Para CLI, acrescente `-Cli seguro -Simular` depois de `-Ref desenvolvimento-v2` no comando. Para fixar uma versao, substitua o valor de `-Ref` pelo SHA completo do commit.
+
 ## como usar
 
 1. baixe/clone o repo e abra a pasta

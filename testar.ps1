@@ -350,6 +350,13 @@ try {
 } catch { Falhou 'quarentena segura' $_.Exception.Message }
 finally { if (Test-Path -LiteralPath $testeQuarentena) { Remove-Item -LiteralPath $testeQuarentena -Recurse -Force } }
 
+# ---- launcher sem instalar: montagem local e validacao sem abrir a GUI ----
+Secao 'launcher portatil'
+try {
+    & (Join-Path $raiz 'iniciar.ps1') -FonteLocal $raiz -SomenteValidar
+    Passou 'launcher monta e valida portatil sem instalar'
+} catch { Falhou 'launcher portatil' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
