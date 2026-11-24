@@ -17,3 +17,7 @@ Acoes que escrevem diretamente em Policies/PolicyManager ficam somente consulta/
 - Migrar cada mutacao e cada reversao para a mesma camada; tratar dependencias de recursos, assinatura/proveniencia de instaladores, protecao de dados, tarefas e quarentena.
 - Revisar alvos permitidos com evidencias de beneficio, testes de falha e Windows cliente. Ausencia de um indicador de gerenciamento nao autoriza uma mudanca.
 - Somente apos paridade e aceite, substituir o bloqueio global; modo diagnostico e autorizacao do TI permanecem.
+
+## Recursos opcionais
+
+Novas acoes de recurso exigem nome na lista de oito recursos expostos e ativacao booleana explicita; desativacao arbitraria nao e permitida. A consulta conservadora de indicadores de politica de servicing precede alteracao e reversao, sem alegar cobertura completa de GPO/MDM. Reversao fora da lista exige revisao manual. Virtualizacao pode interferir com hipervisores e outras cargas; a interface avisa. A protecao global permanece.

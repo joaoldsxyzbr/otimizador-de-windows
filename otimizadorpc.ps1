@@ -147,6 +147,8 @@ if ($global:ModoProtegido) {
 }
 $global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - ' + $global:ModoOtimizador)
 [void]$global:Janela.ShowDialog()
+$pendentes=Finalizar-ConsultasPendentes
+if ($pendentes -gt 0) {Write-Warning ('Consultas ainda encerrando: '+$pendentes+'. Nenhuma espera indefinida foi solicitada.')}
 
 } finally {
     if ($null -ne $travaInstancia) { $travaInstancia.Dispose() }

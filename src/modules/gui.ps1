@@ -551,7 +551,7 @@ function Clique-InstalarRecursos {
         Avisar 'Nada selecionado' 'Marque os recursos do Windows que quer habilitar.'
         return
     }
-    $conf = Perguntar 'Habilitar recursos' ('Habilitar {0} recurso(s) do Windows? Alguns pedem reinicializacao e internet. Se dependencias forem alteradas, a reversao exigira revisao manual.' -f $selecionados.Count)
+    $conf = Perguntar 'Habilitar recursos' ('Habilitar {0} recurso(s) do Windows? Alguns pedem reinicializacao e internet. Virtualizacao pode afetar hipervisores, jogos e outras cargas. Revise compatibilidade, dependencias e autorizacao. Se dependencias forem alteradas, a reversao exigira revisao manual.' -f $selecionados.Count)
     if (-not $conf) { return }
     Status 'habilitando recursos...'
     Ocupado $true
@@ -1628,6 +1628,38 @@ function Solicitar-ConsultaPainel {
         if ($s.trabalho) {Cancelar-ConsultaPainel $Tipo 'Falha ao iniciar consulta.';$timer.Start()}
         else {if ($timer) {$timer.Stop()};if ($ps) {$ps.Dispose()};Mostrar-EstadoPainel $s 'indisponivel' 'Nao foi possivel iniciar a consulta.'}
     }
+}
+
+# The window is already closed: drain completed workers without an unbounded wait.
+# A provider that ignores cancellation cannot be forcibly disposed on the UI thread.
+function Finalizar-ConsultasPendentes {
+    param([int]$LimiteMs=2000)
+    $grupos=@(
+        @{nome='ConsultasUwpAtivas';funcao='Concluir-ConsultaUwp'},
+        @{nome='ConsultasInicioAtivas';funcao='Concluir-ConsultaInicio'},
+        @{nome='ConsultasProgramasAtivas';funcao='Concluir-ConsultaProgramas'},
+        @{nome='TimersPaineis';funcao='Concluir-ConsultaPainel'}
+    )
+    $relogio=[Diagnostics.Stopwatch]::StartNew()
+    do {
+        $pendentes=0
+        foreach ($grupo in $grupos) {
+            $variavel=Get-Variable -Name $grupo.nome -Scope Global -ErrorAction SilentlyContinue
+            if (-not $variavel -or -not $variavel.Value) {continue}
+            $mapa=$variavel.Value
+            foreach ($timer in @($mapa.Keys)) {
+                $estado=$mapa[$timer]
+                if (-not $estado -or -not $estado.fechada) {continue}
+                $j=$estado.trabalho
+                if ($j -and $j.async.IsCompleted -and (-not $j.parada -or $j.parada.IsCompleted)) {
+                    & $grupo.funcao $timer
+                } else {$pendentes++}
+            }
+        }
+        if ($pendentes -eq 0) {return 0}
+        if ($relogio.ElapsedMilliseconds -lt $LimiteMs) {Start-Sleep -Milliseconds 50}
+    } while ($relogio.ElapsedMilliseconds -lt $LimiteMs)
+    return $pendentes
 }
 
 function Ligar-Tudo {

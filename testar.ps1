@@ -1175,8 +1175,14 @@ try {
             Esperar-ConsultaPainel 'Atualizacoes'
             if ($global:ConsultasPaineis.Historico.fase -ne 'atualizado' -or $global:UI.ListaDesfazer.Tag.Count -ne 0 -or $global:ConsultasPaineis.Atualizacoes.fase -ne 'atualizado' -or -not $global:UI.ChkBloquearDrivers.IsChecked) {throw 'Historico ou politicas nao apresentados corretamente.'}
             Passou 'Historico e Atualizacoes assincronos; journal invalido sem alvo de reversao'
-            # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
+            # Close with a pending read-only worker; no indefinitely blocked exit.
+            Solicitar-ConsultaPainel 'Recursos' -Forcar -Codigo {Start-Sleep -Seconds 10;[pscustomobject]@{itens=@()}}
             $global:Janela.Close()
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            $restantes=Finalizar-ConsultasPendentes -LimiteMs 2000
+            if ($sw.Elapsed.TotalSeconds -ge 4 -or $restantes -ne 0) {throw 'Encerramento de consulta sintetica nao confirmado.'}
+            Passou 'encerramento limitado libera consulta sintetica cancelada'
+            # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
             $global:ModoProtegido=$true
             $global:CatalogoUwp=Get-Content -LiteralPath (Join-Path $raiz 'data\uwp.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             function Verificar-EstadoAjustes { }
@@ -1390,6 +1396,26 @@ try {
     }
     Passou 'recuperacao rejeita journal externo, extensao invalida e redirecionamento'
 } catch {Falhou 'alvo de recuperacao' $_.Exception.Message}
+
+# ---- protection of optional features ----
+Secao 'recursos opcionais'
+try {
+    if ((Avaliar-ProtecaoAlvo ([pscustomobject]@{tipo='recurso';nome='NetFx3';ativar=$true})).estado -ne 'avaliacao-adicional') {throw 'Recurso catalogado recusado.'}
+    foreach ($a in @(
+        [pscustomobject]@{tipo='recurso';nome='Windows-Defender';ativar=$true},
+        [pscustomobject]@{tipo='recurso';nome='NetFx3';ativar=$false},
+        [pscustomobject]@{tipo='recurso';nome='NetFx3';ativar='false'}
+    )) {
+        if ((Avaliar-ProtecaoAlvo $a).estado -ne 'bloqueado') {throw 'Recurso desconhecido ou desativacao aceita.'}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $true}
+        $recusou=$false
+        try {Confirmar-PoliticaRecursosLocal} catch {$recusou=$_.Exception.Message -match 'politica de componentes'}
+        if (-not $recusou) {throw 'Indicador de politica ignorado.'}
+    }
+    Passou 'recursos opcionais restritos a habilitacao catalogada e politicas preservadas'
+} catch {Falhou 'recursos opcionais' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

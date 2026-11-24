@@ -433,6 +433,20 @@ function Definir-PlanoEnergia {
 
 # F2: barreira adicional, nao um detector completo de politica efetiva.
 # A ausencia de bloqueio nesta etapa nunca significa autorizacao para alterar.
+# Optional feature changes are constrained to the features exposed by the UI.
+function Testar-RecursoCatalogado {
+    param([string]$Nome)
+    return ($Nome -in @('Microsoft-Hyper-V-All','VirtualMachinePlatform','Microsoft-Windows-Subsystem-Linux','Containers-DisposableClientVM','NetFx3','DirectPlay','WindowsMediaPlayer','TelnetClient'))
+}
+
+function Confirmar-PoliticaRecursosLocal {
+    foreach ($p in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Servicing','HKLM:\SOFTWARE\Policies\Microsoft\Windows\Servicing','HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Servicing')) {
+        try {$presente=Test-Path -LiteralPath $p -ErrorAction Stop}
+        catch {throw 'Consulta de politica de componentes inconclusiva.'}
+        if ($presente) {throw 'Indicador de politica de componentes encontrado; utilize o procedimento autorizado.'}
+    }
+}
+
 function Avaliar-ProtecaoAlvo {
     param($Acao)
     $motivo=$null
@@ -460,7 +474,10 @@ function Avaliar-ProtecaoAlvo {
             if (-not [guid]::TryParse([string]$Acao.guid,[ref]$id) -or $id -eq [guid]::Empty) { $motivo='GUID de energia invalido.' }
         }
         'appx' { }
-        'recurso' { }
+        'recurso' {
+            if (-not (Testar-RecursoCatalogado ([string]$Acao.nome))) {$motivo='Recurso fora da lista revisada.'}
+            elseif ($Acao.ativar -isnot [bool] -or -not $Acao.ativar) {$motivo='Somente habilitacao explicita de recurso catalogado e permitida.'}
+        }
         default { $motivo='Tipo de acao nao suportado para nova aplicacao.' }
     }
     if ($motivo) { return [pscustomobject]@{estado='bloqueado';motivo=$motivo} }
@@ -606,6 +623,7 @@ function Executar-Acao {
             }
 
             'recurso' {
+                Confirmar-PoliticaRecursosLocal
                 $antes = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ nome=$_.FeatureName; estado=$_.State.ToString() } })
                 $feat = @($antes | Where-Object { $_.nome -eq $Acao.nome })
                 if ($feat.Count -ne 1) { throw 'Recurso nao encontrado.' }
@@ -730,6 +748,8 @@ function Desfazer-Item {
                 $atual = (Get-WindowsOptionalFeature -Online -FeatureName $Item.nome -ErrorAction Stop).State.ToString()
                 if ($atual -eq $Item.estadoAnterior) { return $true }
                 if ($atual -ne $Item.estadoDepois -or $atual -notin @('Enabled','Disabled')) { throw 'Recurso em estado pendente ou alterado posteriormente.' }
+                if (-not (Testar-RecursoCatalogado $Item.nome)) {throw 'Recurso fora da lista revisada; recupere manualmente.'}
+                Confirmar-PoliticaRecursosLocal
                 if ($Item.estadoAnterior -eq 'Enabled') { Enable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null }
                 elseif ($Item.estadoAnterior -eq 'Disabled') { Disable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null }
                 else { throw 'Estado anterior nao suportado.' }
