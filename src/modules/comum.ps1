@@ -83,6 +83,39 @@ function Obter-TravaInstancia {
     }
 }
 
+# Preferencia visual local; nao altera o tema do Windows.
+function Cor-Tema {
+    param([string]$Cor,[string]$Tema=$global:TemaOtimizador)
+    if ($Tema -ne 'claro') { return $Cor }
+    $mapa = @{
+        '#131316'='#f6f8fb'; '#22222a'='#ffffff'; '#e5e7eb'='#243247'; '#2c2c36'='#cbd5e1'
+        '#4b5563'='#64748b'; '#9ca3af'='#475569'; '#1c1c24'='#e7eef7'; '#20202a'='#dbeafe'
+        '#f3f4f6'='#0f172a'; '#3a3a45'='#94a3b8'; '#23232d'='#e2e8f0'; '#1c2f52'='#c7ddff'
+        '#dbeafe'='#143b77'; '#374151'='#94a3b8'; '#17171b'='#eaf0f7'; '#26262c'='#cbd5e1'
+        '#6b7280'='#526176'; '#93c5fd'='#1d4ed8'; '#d1d5db'='#334155'; '#1b1b20'='#ffffff'
+        '#0d0d10'='#f1f5f9'; '#a7f3d0'='#166534'; '#86efac'='#166534'; '#fde047'='#854d0e'
+    }
+    if ($mapa.ContainsKey($Cor)) { return $mapa[$Cor] }
+    return $Cor
+}
+
+function Converter-TemaXaml {
+    param([string]$Xaml,[string]$Tema)
+    if ($Tema -ne 'claro') { return $Xaml }
+    return [regex]::Replace($Xaml,'#[0-9a-fA-F]{6}\b',{ param($m) Cor-Tema $m.Value 'claro' })
+}
+
+function Ler-TemaOtimizador {
+    $global:TemaOtimizador='escuro'
+    $arquivo=Join-Path $global:RaizEstado 'preferencias.json'
+    if (Test-Path -LiteralPath $arquivo -PathType Leaf) {
+        try {
+            $obj=Ler-JSON $arquivo
+            if ($obj.tema -in @('claro','escuro')) { $global:TemaOtimizador=[string]$obj.tema }
+        } catch { }
+    }
+}
+
 function Ler-JSON {
     param([string]$Caminho)
     return (Get-Content -LiteralPath $Caminho -Raw -Encoding UTF8 -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop)

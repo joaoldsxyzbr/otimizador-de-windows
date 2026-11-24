@@ -108,6 +108,8 @@ if ($Cli) {
 $xamlCaminho = Join-Path $PSScriptRoot 'src\ui\principal.xaml'
 try {
     $xamlTexto = Get-Content -Path $xamlCaminho -Raw -Encoding UTF8
+    Ler-TemaOtimizador
+    $xamlTexto = Converter-TemaXaml $xamlTexto $global:TemaOtimizador
     $leitor = New-Object System.IO.StringReader($xamlTexto)
     $leitorXml = [System.Xml.XmlReader]::Create($leitor)
     $global:Janela = [Windows.Markup.XamlReader]::Load($leitorXml)
@@ -130,7 +132,7 @@ $controles = @(
     'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp',
     'ListaProgramas', 'FiltroDesinstalar', 'BotaoAtualizarProgramas', 'ChkPontoRestoreDesinstalar', 'BotaoDesinstalarProg', 'BotaoVarrerRastros', 'RotuloRastros', 'BotaoMarcarRastros', 'BotaoDesmarcarRastros', 'InfoMarcadosRastros', 'BotaoApagarRastros', 'ListaRastros',
     'ListaApps', 'BotaoInstalarApps', 'BotaoAtualizarTudo', 'BotaoMarcarPadroes', 'FiltroApps',
-    'ListaRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'PainelLegado',
+    'ListaRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'BotaoTema', 'PainelLegado',
     'ChkBloquearDrivers', 'ChkAdiarRecursos', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
     'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',
     'BotaoRecuperarIcones', 'BotaoLimparDns', 'BotaoSincronizarHora', 'BotaoBackupDrivers', 'BotaoAnalisarArmazenamento',

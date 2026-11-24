@@ -8,7 +8,7 @@ function Nova-Checkbox {
     $cb.Content = $Texto
     $cb.Tag = $Tag
     $cb.Margin = '2,3,0,3'
-    $cb.Foreground = '#e5e7eb'
+    $cb.Foreground = (Cor-Tema '#e5e7eb')
     $cb.FontSize = 13
     $cb.IsChecked = $Marcado
     if (-not [string]::IsNullOrWhiteSpace($Dica)) {
@@ -21,8 +21,8 @@ function Nova-Categoria {
     param([string]$Titulo)
     $gb = New-Object System.Windows.Controls.GroupBox
     $gb.Header = $Titulo
-    $gb.Foreground = '#93c5fd'
-    $gb.BorderBrush = '#374151'
+    $gb.Foreground = (Cor-Tema '#93c5fd')
+    $gb.BorderBrush = (Cor-Tema '#374151')
     $gb.Margin = '0,10,0,4'
     $sp = New-Object System.Windows.Controls.StackPanel
     $sp.Margin = '6,4,0,0'
@@ -212,9 +212,9 @@ function Verificar-EstadoAjustes {
         $estado = Verificar-Tweak $t
         $contagens[$estado]++
         switch ($estado) {
-            'aplicado' { $cb.Foreground = '#86efac'; $cb.Content = $t.nome + '  (ja aplicado)' }
-            'parcial'  { $cb.Foreground = '#fde047'; $cb.Content = $t.nome + '  (parcial)' }
-            default    { $cb.Foreground = '#e5e7eb'; $cb.Content = $t.nome }
+            'aplicado' { $cb.Foreground = (Cor-Tema '#86efac'); $cb.Content = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (ja aplicado)' }
+            'parcial'  { $cb.Foreground = (Cor-Tema '#fde047'); $cb.Content = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (parcial)' }
+            default    { $cb.Foreground = (Cor-Tema '#e5e7eb'); $cb.Content = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + ']' }
         }
         Atualizar-UI
     }
@@ -229,10 +229,10 @@ function Verificar-EstadoUwp {
     foreach ($cb in (Get-Checkboxes $global:UI.ListaUwp)) {
         $p = $cb.Tag
         if (Appx-Instalado $p.pacote) {
-            $cb.Foreground = '#e5e7eb'
+            $cb.Foreground = (Cor-Tema '#e5e7eb')
             $cb.Content = $p.nome
         } else {
-            $cb.Foreground = '#6b7280'
+            $cb.Foreground = (Cor-Tema '#6b7280')
             $cb.Content = $p.nome + '  (nao instalado)'
             $cb.IsChecked = $false
         }
@@ -1043,6 +1043,13 @@ function Ligar-Tudo {
     $global:UI.BotaoFixUpdate.Add_Click({ Executar-OperacaoUI { Resetar-WindowsUpdate } })
     $global:UI.BotaoFixRede.Add_Click({ Executar-OperacaoUI { Resetar-Rede } })
     $global:UI.BotaoFixWinget.Add_Click({ Executar-OperacaoUI { Instalar-Winget } })
+    $global:UI.BotaoTema.Add_Click({
+        try {
+            $novo=if ($global:TemaOtimizador -eq 'claro') { 'escuro' } else { 'claro' }
+            Gravar-JSONAtomico -Arquivo (Join-Path $global:RaizEstado 'preferencias.json') -Objeto ([pscustomobject]@{tema=$novo})
+            Avisar 'Tema salvo' ('Tema ' + $novo + ' sera usado quando reabrir o app.')
+        } catch { Avisar 'Falha ao salvar tema' $_.Exception.Message }
+    })
 
     # pagina atualizacoes
     $global:UI.BotaoAplicarAtualizacoes.Add_Click({

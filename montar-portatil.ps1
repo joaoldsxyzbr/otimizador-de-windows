@@ -165,6 +165,8 @@ Add-Texto '$xamlTexto = @'''
 Add-Texto $xaml.TrimEnd()
 Add-Texto "'@"
 Add-Texto 'try {'
+Add-Texto '    Ler-TemaOtimizador'
+Add-Texto '    $xamlTexto = Converter-TemaXaml $xamlTexto $global:TemaOtimizador'
 Add-Texto '    $leitor = New-Object System.IO.StringReader($xamlTexto)'
 Add-Texto '    $leitorXml = [System.Xml.XmlReader]::Create($leitor)'
 Add-Texto '    $global:Janela = [Windows.Markup.XamlReader]::Load($leitorXml)'

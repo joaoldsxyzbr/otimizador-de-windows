@@ -62,6 +62,7 @@ nao quer janela? modo cli:
 ## desenvolvimento v2 (pre-release)
 
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- tema claro/escuro em Config, aplicado ao reabrir. Preferencia salva na pasta protegida do app, sem alterar tema do Windows.
 - progresso de ajustes, debloat, recursos e quarentena com cancelamento cooperativo entre acoes. Console de manutencao mantem o dispatcher responsivo enquanto aguarda o processo. Nao interrompe comandos administrativos em andamento.
 - inventario com oito abas pesquisaveis e ordenaveis: inicializacao, Run do usuario, servicos, tarefas, discos, rede, drivers e processos; exportacao JSON e atalhos nativos. Acoes com journal limitadas a remover Run do usuario, inicio manual de servicos do catalogo e desativar tarefas nao Microsoft em estado Ready. Alteracoes nativas nao entram no journal. Ajustes exibem rotulos de cautela.
 - interface ajusta a altura/largura inicial a area util da tela, controles de varias abas quebram linha e inventario usa consulta cancelavel em runspace.

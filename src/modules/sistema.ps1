@@ -286,7 +286,7 @@ function Consultar-ReleaseOficial {
     try {
         [Net.ServicePointManager]::SecurityProtocol = $tls -bor [Net.SecurityProtocolType]::Tls12
         $headers = @{ 'User-Agent' = 'OtimizadorPC'; Accept = 'application/vnd.github+json' }
-        $releases = @(Invoke-RestMethod -Uri 'https://api.github.com/repos/joaoldsxyzbr/otimizador-de-windows/releases?per_page=20' -Headers $headers -TimeoutSec 20 -ErrorAction Stop)
+        $releases = Invoke-RestMethod -Uri 'https://api.github.com/repos/joaoldsxyzbr/otimizador-de-windows/releases?per_page=20' -Headers $headers -TimeoutSec 20 -ErrorAction Stop
         $validas = @($releases | Where-Object {
             -not $_.draft -and $_.tag_name -match '^v[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[0-9]+)?$' -and
             @($_.assets | Where-Object { $_.name -eq 'otimizadorpc.ps1' }).Count -eq 1 -and
@@ -306,7 +306,11 @@ function Baixar-ReleaseVerificada {
         [Net.ServicePointManager]::SecurityProtocol = $tls -bor [Net.SecurityProtocolType]::Tls12
         $base = 'https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/' + $Tag + '/otimizadorpc.ps1'
         $manifesto = Invoke-WebRequest -Uri ($base + '.sha256') -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
-        if ([string]$manifesto.Content -notmatch '^([a-fA-F0-9]{64})\s+otimizadorpc\.ps1\s*$') { throw 'Manifesto SHA256 invalido.' }
+        if (-not $manifesto.RawContentStream -or $manifesto.RawContentStream.Length -gt 1024) { throw 'Manifesto SHA256 com tamanho inesperado.' }
+        $manifesto.RawContentStream.Position=0
+        $leitor=New-Object IO.StreamReader($manifesto.RawContentStream,[Text.Encoding]::UTF8,$true,1024,$true)
+        try { $textoHash=$leitor.ReadToEnd() } finally { $leitor.Dispose() }
+        if ($textoHash -notmatch '^([a-fA-F0-9]{64})\s+otimizadorpc\.ps1\s*$') { throw 'Manifesto SHA256 invalido.' }
         $esperado = $Matches[1]
         $arquivo = Invoke-WebRequest -Uri $base -UseBasicParsing -TimeoutSec 60 -ErrorAction Stop
         $stream = $arquivo.RawContentStream

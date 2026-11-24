@@ -671,6 +671,24 @@ try {
     Passou 'comparacao valida amostras e cenario'
 } catch { Falhou 'comparacao de amostras' $_.Exception.Message }
 
+# ---- tema claro e escuro carregam o mesmo XAML ----
+Secao 'temas'
+try {
+    & {
+        . (Join-Path $raiz 'src\modules\comum.ps1')
+        Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
+        $texto=Get-Content -LiteralPath (Join-Path $raiz 'src\ui\principal.xaml') -Raw -Encoding UTF8
+        foreach ($tema in @('escuro','claro')) {
+            $convertido=Converter-TemaXaml $texto $tema
+            $janela=[Windows.Markup.XamlReader]::Parse($convertido)
+            if (-not $janela.FindName('BotaoTema')) { throw 'Controle de tema ausente.' }
+            $janela.Close()
+        }
+        if ((Cor-Tema '#131316' 'claro') -ne '#f6f8fb' -or (Cor-Tema '#131316' 'escuro') -ne '#131316') { throw 'Paleta incorreta.' }
+        Passou 'XAML de ambos os temas carrega'
+    }
+} catch { Falhou 'temas' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
