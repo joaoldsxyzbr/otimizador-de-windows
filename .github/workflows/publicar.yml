@@ -1,0 +1,212 @@
+name: Publicar OtimizadorPC
+
+on:
+  workflow_dispatch:
+    inputs:
+      canal:
+        description: 'Canal de publicacao'
+        type: choice
+        options:
+          - previa
+          - estavel
+        default: previa
+        required: true
+      tag:
+        description: 'Tag nova (ex.: v2.0.0-rc.1 ou v2.0.0)'
+        type: string
+        default: v2.0.0-rc.1
+        required: true
+      confirmar_estavel:
+        description: 'Confirmo a revisao e os testes manuais no Windows 10/11 (somente para estavel)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar-otimizadorpc-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    name: Selecionar e fixar o commit
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.fonte.outputs.sha }}
+    steps:
+      - name: Validar solicitacao
+        shell: bash
+        env:
+          CANAL: ${{ inputs.canal }}
+          TAG: ${{ inputs.tag }}
+          CONFIRMAR: ${{ inputs.confirmar_estavel }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'joaoldsxyzbr/otimizador-de-windows' ]]
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || { echo 'Execute o workflow pela main.'; exit 1; }
+          if [[ "$CANAL" == 'estavel' ]]; then
+            [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Tag estavel invalida.'; exit 1; }
+            [[ "$CONFIRMAR" == 'true' ]] || { echo 'Confirme a revisao e os testes manuais.'; exit 1; }
+          else
+            [[ "$CANAL" == 'previa' && "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(rc|beta|alpha|preview)\.[0-9]+$ ]] || { echo 'Tag de previa invalida.'; exit 1; }
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.canal == 'estavel' && 'main' || 'desenvolvimento-v2' }}
+          persist-credentials: false
+
+      - name: Fixar commit de origem
+        id: fonte
+        shell: bash
+        env:
+          CANAL: ${{ inputs.canal }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$CANAL" == 'estavel' ]]; then
+            # Uma release estavel nao pode carregar a versao interna preview.
+            grep -Fx "\$global:VersaoOtimizador = '${TAG#v}'" src/modules/comum.ps1 >/dev/null || { echo 'Versao interna diferente da tag; atualize e revise a main.'; exit 1; }
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  compilar:
+    name: Testar e compilar no Windows
+    needs: preparar
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preparar.outputs.sha }}
+          persist-credentials: false
+
+      - name: Testes existentes e download do commit correto
+        shell: powershell
+        env:
+          SOURCE_SHA: ${{ needs.preparar.outputs.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # testar.ps1 usa GITHUB_SHA para seu teste remoto. Neste workflow,
+          # GITHUB_SHA pode ser da main, nao do commit selecionado.
+          # Reexecutamos especificamente esse teste com o SHA fixado abaixo.
+          $env:GITHUB_ACTIONS = 'false'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\testar.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Bateria de testes falhou.' }
+          & .\iniciar.ps1 -Ref $env:SOURCE_SHA -SomenteValidar
+        timeout-minutes: 15
+
+      - name: Compilar os scripts
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\montar-portatil.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Compilacao falhou.' }
+          foreach ($arq in @('otimizadorpc.ps1','otimizadorpc.ps1.sha256','otimizadorpc-portatil.ps1','rodar-portatil.bat')) {
+              if (-not (Test-Path -LiteralPath (Join-Path 'dist' $arq) -PathType Leaf)) { throw "Arquivo ausente: $arq" }
+          }
+          $hash = (Get-FileHash -LiteralPath 'dist\otimizadorpc.ps1' -Algorithm SHA256).Hash
+          $esperado = ((Get-Content -LiteralPath 'dist\otimizadorpc.ps1.sha256' -Raw).Trim() -split '\s+')[0]
+          if ($hash -ne $esperado) { throw 'SHA256 divergente.' }
+          foreach ($arq in @('dist\otimizadorpc.ps1','dist\otimizadorpc-portatil.ps1')) {
+              $erros = $null
+              [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $arq).Path, [ref]$null, [ref]$erros)
+              if (@($erros).Count -gt 0) { throw ('Erro de sintaxe: ' + ($erros.Message -join '; ')) }
+          }
+        timeout-minutes: 5
+
+      - name: Simular a versao portatil
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\dist\otimizadorpc-portatil.ps1 -Cli seguro -Simular
+          if ($LASTEXITCODE -ne 0) { throw 'Simulacao portatil falhou.' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\dist\otimizadorpc-portatil.ps1 -Cli agressivo -Simular
+          if ($LASTEXITCODE -ne 0) { throw 'Simulacao agressiva falhou.' }
+        timeout-minutes: 10
+
+      - name: Validar o script online em memoria e o WPF
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $codigo = [IO.File]::ReadAllText((Resolve-Path 'dist\otimizadorpc.ps1').Path)
+          & ([scriptblock]::Create($codigo)) -Cli essencial -Simular
+          & ([scriptblock]::Create($codigo)) -ValidarInterface
+          $journals = @(Get-ChildItem "$env:ProgramData\otimizadorpc\desfazer" -Filter '*.json' -ErrorAction SilentlyContinue)
+          if ($journals.Count -gt 0) { throw 'A simulacao criou journals.' }
+        timeout-minutes: 10
+
+      - name: Guardar todos os arquivos de publicacao
+        uses: actions/upload-artifact@v4
+        with:
+          name: otimizadorpc-release
+          if-no-files-found: error
+          path: |
+            dist/otimizadorpc.ps1
+            dist/otimizadorpc.ps1.sha256
+            dist/otimizadorpc-portatil.ps1
+            dist/rodar-portatil.bat
+
+  integracao:
+    name: Testar aplicacao e reversao reais em runner descartavel
+    needs: preparar
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.preparar.outputs.sha }}
+          persist-credentials: false
+      - name: Integracao real
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\testes\integracao.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Integracao falhou.' }
+        timeout-minutes: 20
+
+  publicar:
+    name: Criar release somente apos aprovacao dos testes
+    needs: [preparar, compilar, integracao]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: otimizadorpc-release
+          path: dist
+
+      - name: Conferir integridade e publicar
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          CANAL: ${{ inputs.canal }}
+          SOURCE_SHA: ${{ needs.preparar.outputs.sha }}
+        run: |
+          set -euo pipefail
+          cd dist
+          tr -d '\r' < otimizadorpc.ps1.sha256 | sha256sum --check -
+          cd ..
+          # Nao sobrescreve releases nem reutiliza tags ja existentes.
+          set +e
+          git ls-remote --exit-code --tags "https://github.com/$GITHUB_REPOSITORY.git" "refs/tags/$TAG"
+          status=$?
+          set -e
+          if [[ "$status" != '2' ]]; then
+            echo 'Tag ja existente ou falha ao consulta-la. Publicacao cancelada.'
+            exit 1
+          fi
+          flags=(--prerelease --latest=false)
+          if [[ "$CANAL" == 'estavel' ]]; then flags=(--latest); fi
+          gh release create "$TAG" \
+            dist/otimizadorpc.ps1 \
+            dist/otimizadorpc.ps1.sha256 \
+            dist/otimizadorpc-portatil.ps1 \
+            dist/rodar-portatil.bat \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "OtimizadorPC $TAG" \
+            --notes "Compilacao e testes automatizados aprovados. Commit: $SOURCE_SHA. Canal: $CANAL." \
+            "${flags[@]}"
+          echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
