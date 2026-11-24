@@ -276,6 +276,29 @@ try {
         }
     }
     Passou 'presets e perfis respeitam compatibilidade e selecao manual'
+
+    foreach ($id in @('aplicativos-em-segundo-plano','efeitos-visuais','pastas-automaticas','caminhos-longos','numlock-inicializacao','bsod-detalhado','remover-home-galeria','mouse-precisao')) {
+        $item=@($catalogoTeste.tweaks | Where-Object {$_.id -eq $id})
+        if ($item.Count -ne 1 -or -not $item[0].apenasManual) {throw ('Ajuste contextual entrou em preset: '+$id)}
+    }
+    $barra=$catalogoTeste.tweaks | Where-Object {$_.id -eq 'limpar-barra-tarefas'}
+    if (@($barra.acoes | Where-Object {$_.nome -eq 'TaskbarAl'}).Count) {throw 'Ocultar icones nao deve alterar alinhamento.'}
+    $visual=$catalogoTeste.tweaks | Where-Object {$_.id -eq 'efeitos-visuais'}
+    if (@($visual.acoes | Where-Object {$_.nome -eq 'UserPreferencesMask'}).Count) {throw 'Mascara geral de preferencias sobrescrita.'}
+    foreach ($nivel in @('seguro','balanceado','agressivo')) {
+        $alvos=@{}
+        foreach ($item in @(Selecionar-TweaksPreset $nivel $catalogoTeste $true)) {
+            foreach ($acao in $item.acoes) {
+                if ($acao.tipo -ne 'registro') {continue}
+                $chave=([string]$acao.caminho+'|'+[string]$acao.nome).ToLowerInvariant()
+                $valor=ConvertTo-Json -InputObject $acao.dados -Compress
+                if ($alvos.ContainsKey($chave) -and $alvos[$chave] -cne $valor) {throw ('Preset com valores conflitantes: '+$nivel+' '+$chave)}
+                $alvos[$chave]=$valor
+            }
+        }
+    }
+    Passou 'auditoria inicial: presets sem ajustes contextuais e sem valores de registro contraditorios'
+
     # Usa executor simulado: nenhum ajuste real de registro ou servico.
     & {
         function Log { param([string]$Mensagem, [switch]$Erro) }
