@@ -330,6 +330,26 @@ try {
 } catch { Falhou 'analise de armazenamento' $_.Exception.Message }
 finally { if (Test-Path -LiteralPath $testePasta) { Remove-Item -LiteralPath $testePasta -Recurse -Force } }
 
+# ---- journal deve impedir a movimentacao quando nao puder ser salvo ----
+Secao 'quarentena e falhas de persistencia'
+$testeQuarentena = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-quarentena-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $testeQuarentena -ErrorAction Stop | Out-Null
+    . (Join-Path $raiz 'src\modules\desinstalador.ps1')
+    $origem = Join-Path $testeQuarentena 'origem.txt'
+    [IO.File]::WriteAllText($origem, 'teste')
+    & {
+        function Registrar-Jornal { param($Item) throw 'Falha simulada de journal' }
+        $falhou = $false
+        try { Apagar-Rastro ([pscustomobject]@{ tipo='arquivo'; caminho=$origem }) $testeQuarentena 1 } catch { $falhou = $true }
+        if (-not $falhou -or -not (Test-Path -LiteralPath $origem) -or (Test-Path -LiteralPath (Join-Path $testeQuarentena '01_origem.txt'))) {
+            throw 'Arquivo foi movido sem journal.'
+        }
+    }
+    Passou 'falha no journal preserva arquivo original'
+} catch { Falhou 'quarentena segura' $_.Exception.Message }
+finally { if (Test-Path -LiteralPath $testeQuarentena) { Remove-Item -LiteralPath $testeQuarentena -Recurse -Force } }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

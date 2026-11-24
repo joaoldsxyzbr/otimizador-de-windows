@@ -131,7 +131,7 @@ $controles = @(
     'ChkBloquearDrivers', 'ChkAdiarRecursos', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
     'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',
     'BotaoRecuperarIcones', 'BotaoLimparDns', 'BotaoSincronizarHora', 'BotaoBackupDrivers', 'BotaoAnalisarArmazenamento',
-    'ListaDesfazer', 'BotaoDesfazer', 'BotaoAtualizarListaSessoes'
+    'ListaDesfazer', 'BotaoDesfazer', 'BotaoAtualizarListaSessoes', 'BotaoDetalhesSessao'
 )
 foreach ($nome in $controles) {
     $global:UI[$nome] = $global:Janela.FindName($nome)

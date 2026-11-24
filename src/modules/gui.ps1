@@ -640,6 +640,50 @@ function Clique-AnalisarArmazenamento {
     }
 }
 
+# Inspecao do journal selecionado; nao executa comandos nem apaga backups.
+function Clique-DetalhesSessao {
+    try {
+        $lb = $global:UI.ListaDesfazer
+        if ($lb.SelectedIndex -lt 0) { Avisar 'Selecione' 'Escolha uma sessao na lista.'; return }
+        $arquivo = $lb.Tag[$lb.SelectedIndex]
+        if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo -PathType Leaf)) { Avisar 'Sessao ausente' 'Atualize a lista de sessoes.'; return }
+        $json = Ler-JSON $arquivo
+        $linhas = @('Journal: ' + $arquivo, ('Sessao: ' + $json.rotulo), ('Criada: ' + $json.criado), '', 'Inspecao somente leitura; nao apague backups manualmente.', '')
+        foreach ($item in @($json.itens)) {
+            $estado = 'pendente'
+            if ($item.estadoReversao -eq 'concluido') { $estado = 'revertido' }
+            elseif ($item.estadoReversao -eq 'em_andamento') { $estado = 'incerto - revisao manual' }
+            $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '
+            $linhas += ('[{0}] {1}: {2}' -f $estado, $item.tipo, $alvo)
+            foreach ($backup in @($item.destino, $item.arquivoReg, $item.backupReg) + @($item.backups)) {
+                if (-not $backup) { continue }
+                $disp = 'ausente'
+                if (Test-Path -LiteralPath $backup) { $disp = 'presente' }
+                $linhas += ('    backup ({0}): {1}' -f $disp, $backup)
+            }
+        }
+        $dlg = New-Object System.Windows.Window
+        $dlg.Title = 'Detalhes da sessao e quarentena'
+        $dlg.Owner = $global:Janela
+        $dlg.WindowStartupLocation = 'CenterOwner'
+        $dlg.Width = 800
+        $dlg.Height = 550
+        $dlg.MaxWidth = [System.Windows.SystemParameters]::WorkArea.Width
+        $dlg.MaxHeight = [System.Windows.SystemParameters]::WorkArea.Height
+        $caixa = New-Object System.Windows.Controls.TextBox
+        $caixa.IsReadOnly = $true
+        $caixa.AcceptsReturn = $true
+        $caixa.TextWrapping = 'Wrap'
+        $caixa.VerticalScrollBarVisibility = 'Auto'
+        $caixa.Text = ($linhas -join [Environment]::NewLine)
+        $dlg.Content = $caixa
+        [void]$dlg.ShowDialog()
+    } catch {
+        Log ('falha ao consultar sessao: ' + $_.Exception.Message) -Erro
+        Avisar 'Sessao invalida' 'Nao foi possivel ler os detalhes. Preserve os arquivos e consulte o log.'
+    }
+}
+
 function Ligar-Tudo {
 
     # navegacao da barra lateral
@@ -718,6 +762,7 @@ function Ligar-Tudo {
 
     # pagina desfazer
     $global:UI.BotaoDesfazer.Add_Click({ Clique-Desfazer })
+    $global:UI.BotaoDetalhesSessao.Add_Click({ Clique-DetalhesSessao })
     $global:UI.BotaoAtualizarListaSessoes.Add_Click({ Atualizar-ListaDesfazer; Log 'lista de sessoes atualizada.' })
 
     # pagina inicio

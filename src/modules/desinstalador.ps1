@@ -639,10 +639,10 @@ function Clique-ApagarRastros {
     }
     $arq = Salvar-Sessao
     Ocupado $false
-    $res = ('limpeza concluida: {0} rastro(s) foram para a quarantena.' -f $apagados)
+    $res = ('limpeza: {0} rastro(s) processado(s) sem excecao; consulte o log para confirmar as alteracoes.' -f $apagados)
     if ($arq) { $res = $res + ' journal: ' + (Split-Path -Leaf $arq) }
     Log $res
-    Status 'rastros limpos.'
+    if ($global:ErrosSessao -gt 0) { Status 'limpeza com falhas; consulte o log.' } else { Status 'limpeza processada; confira o log.' }
     if (Perguntar 'Conferir' 'Varrer de novo para conferir se sobrou algo?') {
         if ($null -ne $global:ProgVarredura) { Executar-Varredura $global:ProgVarredura }
     } else {

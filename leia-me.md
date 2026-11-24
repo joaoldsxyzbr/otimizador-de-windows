@@ -54,7 +54,7 @@ pronto. nao precisa instalar nada.
 - **desinstalar selecionado(s)** roda o desinstalador do proprio programa em modo silencioso quando reconhece o instalador (msi, inno setup, nsis); senao abre o desinstalador normal
 - **varrer rastros** procura pelo nome do programa: pastas em appdata/programdata/program files, atalhos do menu iniciar e desktop, entrada de desinstalacao que sobrou, chaves de registro (hkcu e hklm), servicos que apontam pra ele, tarefas agendadas, regras de firewall, inicializacao (run) e entrada morta do PATH (v1.3)
 - v1.3: programas sem comando de desinstalacao no registro caem no fallback do winget (procura pelo nome, em modo silencioso)
-- servicos e tarefas da varredura nunca sao apagados: apenas parados/desativados, e o Desfazer restaura o tipo e o estado anteriores; regra de firewall removida e recriada na hora pelo journal; entrada do PATH sai sem quebrar o resto (mantem o tipo do valor e variaveis como %ProgramFiles%; relogon aplica)
+- servicos e tarefas da varredura nunca sao apagados: apenas parados/desativados, e o Desfazer restaura o tipo e o estado anteriores; regra local de permissao do firewall desativada e restaurada pelo journal (regras de bloqueio preservadas); entrada do PATH sai sem quebrar o resto (mantem o tipo do valor e variaveis como %ProgramFiles%; relogon aplica)
 - **apagar rastros** nao apaga de vez: move os arquivos pra `c:\programdata\otimizadorpc\quarantena` e exporta as chaves de registro pra `.reg`; a aba **desfazer tudo** restaura cada item na hora
 - nomes genericos demais (ex.: "microsoft") sao bloqueados na varredura pra nao casar com coisas inocentes
 - varredura e proposta automaticamente depois de cada desinstalacao
