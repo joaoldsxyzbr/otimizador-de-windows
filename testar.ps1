@@ -266,6 +266,16 @@ try {
         throw 'Estado atual ou backup incorreto.'
     }
     Passou 'journal atomico preserva estado atual e anterior'
+    $catalogoTeste = Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($perfil in @('essencial','gamer','notebook','privacidade','corporativo','seguro','balanceado','agressivo')) {
+        foreach ($win11 in @($false,$true)) {
+            $itensPerfil = @(Selecionar-TweaksPreset -Nivel $perfil -Catalogo $catalogoTeste -Win11 $win11)
+            if ($itensPerfil.Count -eq 0 -or @($itensPerfil | Where-Object { $_.apenasManual -or $_.id -like 'custom-*' -or ($_.so -eq 'win11' -and -not $win11) -or ($_.so -eq 'win10' -and $win11) }).Count -gt 0) {
+                throw ('Perfil vazio ou incompativel: ' + $perfil)
+            }
+        }
+    }
+    Passou 'presets e perfis respeitam compatibilidade e selecao manual'
     # Usa executor simulado: nenhum ajuste real de registro ou servico.
     & {
         function Log { param([string]$Mensagem, [switch]$Erro) }

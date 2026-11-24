@@ -59,7 +59,9 @@ function Montar-PaginaAjustes {
             $grupos[$t.categoria] = Nova-Categoria $t.categoria
             [void]$painel.Children.Add($grupos[$t.categoria])
         }
-        [void]$grupos[$t.categoria].Content.Children.Add((Nova-Checkbox -Texto $t.nome -Tag $t -Dica $t.desc))
+        $nome = $t.nome
+        if ($t.apenasManual) { $nome += ' [somente manual - cautela]' }
+        [void]$grupos[$t.categoria].Content.Children.Add((Nova-Checkbox -Texto $nome -Tag $t -Dica $t.desc))
     }
 }
 
@@ -388,9 +390,13 @@ function Clique-InstalarRecursos {
 function Clique-Preset {
     param([string]$Nivel)
     $cbs = Get-Checkboxes $global:UI.ListaAjustes
-    foreach ($cb in $cbs) {
-        $cb.IsChecked = ($cb.Tag.niveis -contains $Nivel)
+    try {
+        $ids = @(Selecionar-TweaksPreset -Nivel $Nivel -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11) | ForEach-Object { $_.id })
+    } catch {
+        Avisar 'Preset invalido' $_.Exception.Message
+        return
     }
+    foreach ($cb in $cbs) { $cb.IsChecked = ($ids -contains $cb.Tag.id) }
     Log ('preset marcado: ' + $Nivel + ' (' + @(($cbs | Where-Object { $_.IsChecked })).Count + ' ajustes). confira a lista e clique em aplicar.')
 }
 
@@ -503,6 +509,12 @@ function Ligar-Tudo {
     $global:UI.BotaoPresetSeguro.Add_Click({ Clique-Preset 'seguro' })
     $global:UI.BotaoPresetBalanceado.Add_Click({ Clique-Preset 'balanceado' })
     $global:UI.BotaoPresetAgressivo.Add_Click({ Clique-Preset 'agressivo' })
+    $global:UI.BotaoPerfilEssencial.Add_Click({ Clique-Preset 'essencial' })
+    $global:UI.BotaoPerfilGamer.Add_Click({ Clique-Preset 'gamer' })
+    $global:UI.BotaoPerfilNotebook.Add_Click({ Clique-Preset 'notebook' })
+    $global:UI.BotaoPerfilPrivacidade.Add_Click({ Clique-Preset 'privacidade' })
+    $global:UI.BotaoPerfilCorporativo.Add_Click({ Clique-Preset 'corporativo' })
+    $global:UI.BotaoPerfilRecomendado.Add_Click({ Clique-Preset 'recomendado' })
     $global:UI.BotaoAplicarAjustes.Add_Click({ Clique-AplicarAjustes })
     $global:UI.BotaoExportarPlano.Add_Click({ Clique-ExportarPlano })
     $global:UI.BotaoImportarPlano.Add_Click({ Clique-ImportarPlano })

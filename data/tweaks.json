@@ -1057,7 +1057,8 @@
     {
       "id": "rdp-sem-aviso",
       "nome": "Sem aviso em arquivos RDP nao assinados",
-      "desc": "Remove os avisos chatos ao abrir arquivos .rdp nao assinados que as versoes novas do Windows passaram a mostrar. Nao mexe em credenciais nem seguranca da conexao.",
+      "apenasManual": true,
+      "desc": "AVISO: reduz avisos de seguranca ao abrir arquivos RDP nao assinados. Pode facilitar abertura de conexoes nao confiaveis. Nao recomendado; apenas selecao manual.",
       "categoria": "Sistema",
       "niveis": [
         "balanceado",

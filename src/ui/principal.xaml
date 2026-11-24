@@ -336,6 +336,15 @@
                             <CheckBox x:Name="ChkSimularAjustes" IsChecked="False" Margin="0,0,14,0" Foreground="#e5e7eb" Content="Simular" ToolTip="Marca e clica em aplicar: escreve no log tudo o que faria, sem alterar nada no pc. Ideal antes de rodar no pc do trabalho."/>
                             <Button x:Name="BotaoAplicarAjustes" Style="{StaticResource BotaoVerde}" Content="Aplicar ajustes selecionados" MinWidth="210"/>
                         </StackPanel>
+                        <WrapPanel Margin="0,4,0,4">
+                            <TextBlock Text="Perfis:" VerticalAlignment="Center" Foreground="#9ca3af" Margin="0,0,8,0"/>
+                            <Button x:Name="BotaoPerfilRecomendado" Content="Recomendado" Margin="0,2,6,2" ToolTip="Seleciona Corporativo, Notebook ou Essencial conforme o ambiente."/>
+                            <Button x:Name="BotaoPerfilEssencial" Content="Essencial" Margin="0,2,6,2"/>
+                            <Button x:Name="BotaoPerfilGamer" Content="Gamer" Margin="0,2,6,2" ToolTip="Preferencias de mouse e conveniencia; nao promete FPS."/>
+                            <Button x:Name="BotaoPerfilNotebook" Content="Notebook" Margin="0,2,6,2" ToolTip="Ajustes leves, sem forcar alto desempenho."/>
+                            <Button x:Name="BotaoPerfilPrivacidade" Content="Privacidade" Margin="0,2,6,2"/>
+                            <Button x:Name="BotaoPerfilCorporativo" Content="Corporativo" Margin="0,2,6,2" ToolTip="Apenas exibe extensoes de arquivos. Consulte o administrador."/>
+                        </WrapPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
                             <TextBox x:Name="FiltroAjustes" Width="280" Height="30" Background="#22222a" Foreground="#e5e7eb" BorderBrush="#374151" Padding="6,4" VerticalContentAlignment="Center" ToolTip="filtra pelo nome ou descricao; campo vazio mostra tudo"/>

@@ -654,22 +654,45 @@ function Verificar-Tweak {
 # aplica um preset de nivel (seguro/balanceado/agressivo) sem janela nenhuma.
 # usado pelo modo cli: .\otimizadorpc.ps1 -Cli balanceado [-Simular]
 # replica o fluxo do botao aplicar da gui: restore point, journal por acao e log em arquivo.
+# Perfis conservadores: selecao explicita por ID, sem scripts customizados.
+function Obter-PerfilRecomendado {
+    if (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) { return 'corporativo' }
+    try {
+        if (@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) { return 'notebook' }
+    } catch { }
+    return 'essencial'
+}
+
+function Selecionar-TweaksPreset {
+    param([string]$Nivel, $Catalogo, [bool]$Win11)
+    if ($Nivel -eq 'recomendado') { $Nivel = Obter-PerfilRecomendado }
+    $perfis = @{
+        essencial   = @('extensoes-de-arquivo', 'apps-sugeridos')
+        gamer       = @('extensoes-de-arquivo', 'mouse-precisao', 'finalizar-tarefa-barra')
+        notebook    = @('extensoes-de-arquivo', 'bateria-porcentagem', 'apps-sugeridos')
+        privacidade = @('extensoes-de-arquivo', 'historico-atividades', 'apps-sugeridos', 'bing-no-menu-iniciar')
+        corporativo = @('extensoes-de-arquivo')
+    }
+    $legado = @('seguro', 'balanceado', 'agressivo') -contains $Nivel
+    if (-not $legado -and -not $perfis.ContainsKey($Nivel)) { throw ('Preset desconhecido: ' + $Nivel) }
+    foreach ($t in $Catalogo.tweaks) {
+        if ($t.id -like 'custom-*' -or $t.apenasManual) { continue }
+        if (($t.so -eq 'win11' -and -not $Win11) -or ($t.so -eq 'win10' -and $Win11)) { continue }
+        if (($legado -and ($t.niveis -contains $Nivel)) -or (-not $legado -and ($perfis[$Nivel] -contains $t.id))) {
+            $t
+        }
+    }
+}
+
 function Aplicar-Preset {
     param([string]$Nivel, [switch]$Simular)
 
-    $validos = @('seguro', 'balanceado', 'agressivo')
-    if ($validos -notcontains $Nivel) {
-        Log ('nivel de preset desconhecido: ' + $Nivel + '. use: seguro, balanceado ou agressivo.') -Erro
+    try {
+        $selecionados = @(Selecionar-TweaksPreset -Nivel $Nivel -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11))
+    } catch {
+        Log $_.Exception.Message -Erro
         return $false
     }
-
-    # mesmo filtro da gui: respeita tweaks exclusivos de win10/win11
-    $win11 = Eh-Win11
-    $selecionados = @($global:CatalogoTweaks.tweaks | Where-Object {
-        ($_.niveis -contains $Nivel) -and
-        -not (($_.so -eq 'win11') -and (-not $win11)) -and
-        -not (($_.so -eq 'win10') -and $win11)
-    })
     if ($selecionados.Count -eq 0) {
         Log ('nenhum ajuste encontrado para o nivel ' + $Nivel + '.') -Erro
         return $false
