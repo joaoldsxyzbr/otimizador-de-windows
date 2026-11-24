@@ -45,3 +45,24 @@ O script online executa em memoria e dispensa instalacao; logs e backups permane
 O CI deve conferir a nova pasta de estado `ProgramData\otimizadorpc-v2` para journals e logs; os caminhos antigos dos artefatos de CI precisam ser atualizados pelo mantenedor. O teste offline verifica a pasta nova no runner.
 
 RC.5: validar manualmente os dois temas, os botoes de gerenciador (Run do usuario, servicos do catalogo e tarefas descartaveis), o cancelamento entre acoes, o monitor, o teste sintetico e o download verificado. A escolha de atualizar permanece explicita; nunca executar um download automaticamente como administrador.
+
+## Roteiro de aceite manual (Windows 10 e Windows 11)
+
+Use VMs com snapshot e uma conta administrativa. Nao execute testes destrutivos em uma maquina pessoal.
+
+| Teste | Resultado esperado |
+| --- | --- |
+| Abrir release, conferir titulo e executar simulacao | Versao corresponde a tag; nenhum journal novo nem alteracao no Windows. |
+| Abrir segunda instancia GUI/CLI | Segunda instancia recusada; reabrir apos fechar a primeira funciona. |
+| Alternar tema em Config e reabrir | Tema persistido, texto legivel, selecao visivel, botoes acessiveis em 1366x768 e com DPI 125%. |
+| Inventario, filtros, exportacao | Oito abas; filtros literais; exportacao JSON; nenhuma alteracao sem confirmacao. |
+| Run do usuario, servico do catalogo, tarefa descartavel | Alteracao confirmada, journal e reversao; conflito posterior deve ser preservado. |
+| Varredura de aplicativo descartavel | Marcar/desmarcar uma unica caixa e varias; nada marcado por padrao; contador correto; quarentena e desfazer. |
+| Lote de ajustes, debloat, recursos | Progresso; cancelar entre acoes; journal preservado; reinicio/dependencias indicados quando necessario. |
+| Monitor, carga sintetica e comparativo | Resultados e JSON; mesmas condicoes de carga; cancelamento de consulta; sem promessa de ganho de FPS. |
+| Backup de drivers | Exportacao de terceiros em pasta escolhida, interface responsiva, arquivos preservados em falhas. |
+| Consultar e baixar versao oficial | Tags reais, confirmacao explicita, SHA256 correto, nenhum codigo executado automaticamente. |
+
+## Ajustes pendentes nos workflows
+
+Nos arquivos `.github/workflows/ci.yml` e `.github/workflows/publicar.yml`, substitua as referencias de journal/log em `ProgramData\otimizadorpc\desfazer` e `ProgramData\otimizadorpc\logs` pelas equivalentes em `ProgramData\otimizadorpc-v2\desfazer` e `ProgramData\otimizadorpc-v2\logs`. Inclua os dois assets online e SHA256 na coleta do CI, alem dos arquivos portateis. Preserve as validacoes de simulacao, compilacao, integracao e integridade. Nao remova o gate de testes manuais para publicacao estavel.
