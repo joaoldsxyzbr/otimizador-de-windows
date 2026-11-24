@@ -2,15 +2,17 @@
 
 ## Abrir sem instalar
 
-Em um computador autorizado, abra o **Windows PowerShell 5.1 normal (sem administrador)** e cole:
+Em um computador autorizado, abra o **Windows PowerShell 5.1 normal (sem administrador)**:
 
 ```powershell
-irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.7/otimizadorpc.ps1 | iex
+irm https://raw.githubusercontent.com/joaoldsxyzbr/otimizador-de-windows/main/abrir.ps1 | iex
 ```
 
-A RC.7 inicia em diagnostico mesmo elevada. Para uso pessoal autorizado, revise o codigo e o SHA256, abra PowerShell como administrador e execute o script com o parametro `-Pessoal`. Sinais de gerenciamento impedem alteracoes. Em empresa, solicite autorizacao do TI antes de executar codigo externo. O comando direto nao confere hash automaticamente.
+**Comando fixo:** o launcher da main consulta [versao-atual.txt](https://github.com/joaoldsxyzbr/otimizador-de-windows/blob/main/versao-atual.txt), baixa o script da release indicada e confere seu SHA256 antes de executa-lo em modo diagnostico. O workflow de publicacao atualiza o canal somente apos testes e publicacao dos assets. Pode apontar para uma candidata aprovada no CI, ainda sem aceite manual. Nao e necessario mudar o comando a cada release.
 
-[Release RC.7 e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/tag/v2.0.0-rc.7). Validacao manual pendente.
+[Releases e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases) | [Codigo V2 em desenvolvimento](https://github.com/joaoldsxyzbr/otimizador-de-windows/tree/desenvolvimento-v2)
+
+O comando executa o launcher remoto da main sem assinatura digital; o SHA256 valida o arquivo do aplicativo, nao autentica o launcher. Revise a origem e o codigo. Em computador empresarial, solicite autorizacao do TI antes de executar. Para uso pessoal autorizado, baixe o script e o SHA256 da release indicada, confira o hash e execute com `-Pessoal` em Windows PowerShell elevado. Sinais de gerenciamento impedem alteracoes.
 
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
