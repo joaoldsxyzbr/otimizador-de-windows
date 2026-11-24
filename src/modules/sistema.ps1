@@ -333,7 +333,7 @@ function Baixar-ReleaseVerificada {
         $manifesto = Invoke-WebRequest -Uri ($base + '.sha256') -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
         if (-not $manifesto.RawContentStream -or $manifesto.RawContentStream.Length -gt 1024) { throw 'Manifesto SHA256 com tamanho inesperado.' }
         $manifesto.RawContentStream.Position=0
-        $leitor=New-Object IO.StreamReader($manifesto.RawContentStream,[Text.Encoding]::UTF8,$true,1024,$true)
+        $leitor=[IO.StreamReader]::new($manifesto.RawContentStream,[Text.Encoding]::UTF8,$true,1024,$true)
         try { $textoHash=$leitor.ReadToEnd() } finally { $leitor.Dispose() }
         if ($textoHash -notmatch '^([a-fA-F0-9]{64})\s+otimizadorpc\.ps1\s*$') { throw 'Manifesto SHA256 invalido.' }
         $esperado = $Matches[1]
@@ -342,7 +342,7 @@ function Baixar-ReleaseVerificada {
         if (-not $stream -or $stream.Length -lt 1 -or $stream.Length -gt 2MB) { throw 'Tamanho inesperado do script.' }
         $stream.Position=0
         $mem = New-Object IO.MemoryStream
-        try { $stream.CopyTo($mem); $bytes=$mem.ToArray() } finally { $mem.Dispose() }
+        try { $stream.CopyTo($mem); $bytes=$mem.ToArray() } finally { $mem.Dispose(); $stream.Dispose() }
         $sha=[Security.Cryptography.SHA256]::Create()
         try { $hash=([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','') } finally { $sha.Dispose() }
         if ($hash -ne $esperado) { throw 'SHA256 divergente; arquivo recusado.' }

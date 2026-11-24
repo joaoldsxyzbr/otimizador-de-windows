@@ -697,6 +697,32 @@ try {
     Passou 'carga fixa produz tres rodadas sem tocar arquivos'
 } catch { Falhou 'teste de carga padronizada' $_.Exception.Message }
 
+# ---- download de atualizacao: bytes e hash, sem rede e sem executar ----
+Secao 'integridade de atualizacao'
+try {
+    & {
+        . (Join-Path $raiz 'src\modules\sistema.ps1')
+        $script:bytesTeste=[Text.Encoding]::UTF8.GetBytes('script de teste nao executado')
+        $sha=[Security.Cryptography.SHA256]::Create()
+        try { $script:hashTeste=([BitConverter]::ToString($sha.ComputeHash($script:bytesTeste))).Replace('-','') } finally { $sha.Dispose() }
+        function Invoke-WebRequest {
+            [CmdletBinding()] param([string]$Uri,[switch]$UseBasicParsing,[int]$TimeoutSec)
+            $prefixo='https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/download/v2.0.0-rc.5/otimizadorpc.ps1'
+            if ($Uri -eq ($prefixo+'.sha256')) { $bytes=[Text.Encoding]::ASCII.GetBytes($script:hashTeste+'  otimizadorpc.ps1') }
+            elseif ($Uri -eq $prefixo) { $bytes=$script:bytesTeste }
+            else { throw 'URL nao permitida.' }
+            return [pscustomobject]@{ RawContentStream=[IO.MemoryStream]::new([byte[]]$bytes) }
+        }
+        $res=Baixar-ReleaseVerificada 'v2.0.0-rc.5'
+        if ($res.hash -ne $script:hashTeste -or [Text.Encoding]::UTF8.GetString($res.bytes) -ne 'script de teste nao executado') { throw 'Bytes verificados divergentes.' }
+        $script:hashTeste='0'*64
+        $recusou=$false
+        try { $null=Baixar-ReleaseVerificada 'v2.0.0-rc.5' } catch { $recusou=$_.Exception.Message -match 'SHA256 divergente' }
+        if (-not $recusou) { throw 'Hash invalido nao recusado.' }
+    }
+    Passou 'download aceita bytes corretos e recusa SHA256 divergente'
+} catch { Falhou 'integridade de atualizacao' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
