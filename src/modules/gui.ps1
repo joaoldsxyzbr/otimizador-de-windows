@@ -47,6 +47,14 @@ function Get-Checkboxes {
 
 # ---- montagem das paginas ----
 
+# Cautela e finalidade sao distintas de ganho de desempenho.
+function Classificar-RiscoAjuste {
+    param($Tweak)
+    if ($Tweak.apenasManual -or @($Tweak.acoes | Where-Object { $_.tipo -in @('servico','appx','recurso','energia') }).Count -gt 0) { return 'cautela alta' }
+    if ($Tweak.categoria -in @('Preferencias','Barra de tarefas e menu Iniciar','Explorador de arquivos')) { return 'preferencia visual' }
+    return 'revise impacto'
+}
+
 function Montar-PaginaAjustes {
     $win11 = Eh-Win11
     $painel = $global:UI.ListaAjustes
@@ -59,8 +67,8 @@ function Montar-PaginaAjustes {
             $grupos[$t.categoria] = Nova-Categoria $t.categoria
             [void]$painel.Children.Add($grupos[$t.categoria])
         }
-        $nome = $t.nome
-        if ($t.apenasManual) { $nome += ' [somente manual - cautela]' }
+        $nome = $t.nome + ' [' + (Classificar-RiscoAjuste $t) + ']'
+        if ($t.apenasManual) { $nome += ' [somente manual]' }
         [void]$grupos[$t.categoria].Content.Children.Add((Nova-Checkbox -Texto $nome -Tag $t -Dica $t.desc))
     }
 }
@@ -524,6 +532,15 @@ function Clique-ConfirmarManual {
     } catch { Avisar 'Confirmacao indisponivel' $_.Exception.Message }
 }
 
+function Filtrar-Inventario {
+    param($Dados,[string]$Texto)
+    foreach ($item in @($Dados)) {
+        if ($null -eq $item) { continue }
+        $textoItem = ($item.PSObject.Properties | ForEach-Object { [string]$_.Value }) -join ' '
+        if ([string]::IsNullOrWhiteSpace($Texto) -or $textoItem.IndexOf($Texto.Trim(),[StringComparison]::OrdinalIgnoreCase) -ge 0) { $item }
+    }
+}
+
 function Clique-InventarioLocal {
     try {
         Status 'coletando inventario local...'
@@ -531,7 +548,7 @@ function Clique-InventarioLocal {
         if ($resultado.Count -ne 1 -or $null -eq $resultado[0]) { Status 'inventario cancelado.'; return }
         $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window
-        $dlg.Title = 'Inventario local - OtimizadorPC'
+        $dlg.Title = 'Gerenciador local - OtimizadorPC'
         $dlg.Owner = $global:Janela
         $dlg.WindowStartupLocation = 'CenterOwner'
         $dlg.Width = 760
@@ -561,7 +578,8 @@ function Clique-InventarioLocal {
         foreach ($atalho in @(
             @{ nome='Inicializacao'; comando='taskmgr.exe' },
             @{ nome='Servicos'; comando='services.msc' },
-            @{ nome='Tarefas'; comando='taskschd.msc' }
+            @{ nome='Tarefas'; comando='taskschd.msc' },
+            @{ nome='Drivers'; comando='devmgmt.msc' }
         )) {
             $botao = New-Object System.Windows.Controls.Button
             $botao.Content = $atalho.nome
@@ -569,26 +587,38 @@ function Clique-InventarioLocal {
             $botao.Padding = '10,6'
             $botao.Margin = '0,0,8,8'
             $botao.Add_Click({
-                try { Start-Process -FilePath ([string]$this.Tag) -ErrorAction Stop | Out-Null }
+                try { Start-Process -FilePath (Join-Path $env:SystemRoot ('System32\' + [string]$this.Tag)) -ErrorAction Stop | Out-Null }
                 catch { Avisar 'Falha ao abrir ferramenta' $_.Exception.Message }
             })
             [void]$barra.Children.Add($botao)
         }
-        $caixa = New-Object System.Windows.Controls.TextBox
-        $caixa.IsReadOnly = $true
-        $caixa.AcceptsReturn = $true
-        $caixa.VerticalScrollBarVisibility = 'Auto'
-        $caixa.HorizontalScrollBarVisibility = 'Auto'
-        $caixa.FontFamily = 'Consolas'
-        $linhas = @('Inventario local (somente leitura). Revise antes de compartilhar.', '')
-        foreach ($grupo in @('inicializacao','servicos','tarefas','discos','rede')) {
-            $linhas += ('--- {0} ({1}) ---' -f $grupo, @($dados.$grupo).Count)
-            $linhas += (($dados.$grupo | Format-Table -AutoSize | Out-String -Width 220).Trim())
-            $linhas += ''
+        $nota = New-Object System.Windows.Controls.TextBlock
+        $nota.TextWrapping = 'Wrap'
+        $nota.Text = 'Inventario somente leitura. Alteracoes nas ferramentas nativas nao entram no journal. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
+        $nota.Margin = '0,0,0,8'
+        [System.Windows.Controls.DockPanel]::SetDock($nota,'Top')
+        [void]$painel.Children.Add($nota)
+        $abas = New-Object System.Windows.Controls.TabControl
+        foreach ($grupo in @('inicializacao','servicos','tarefas','discos','rede','drivers','processos')) {
+            $tab = New-Object System.Windows.Controls.TabItem
+            $tab.Header = $grupo
+            $corpo = New-Object System.Windows.Controls.DockPanel
+            $filtro = New-Object System.Windows.Controls.TextBox
+            $filtro.Margin = '6'; $filtro.ToolTip='Digite nome, estado ou outro campo para filtrar'
+            [System.Windows.Controls.DockPanel]::SetDock($filtro,'Top')
+            [void]$corpo.Children.Add($filtro)
+            $grade = New-Object System.Windows.Controls.DataGrid
+            $grade.IsReadOnly=$true; $grade.AutoGenerateColumns=$true
+            $grade.CanUserAddRows=$false; $grade.CanUserDeleteRows=$false
+            $grade.SelectionMode='Single'; $grade.EnableRowVirtualization=$true
+            $grade.ItemsSource = @($dados.$grupo)
+            $filtro.Tag = @{ dados=@($dados.$grupo); grade=$grade }
+            $filtro.Add_TextChanged({ $this.Tag.grade.ItemsSource = @(Filtrar-Inventario $this.Tag.dados $this.Text) })
+            [void]$corpo.Children.Add($grade)
+            $tab.Content=$corpo
+            [void]$abas.Items.Add($tab)
         }
-        $linhas += @($dados.avisos)
-        $caixa.Text = ($linhas -join [Environment]::NewLine)
-        [void]$painel.Children.Add($caixa)
+        [void]$painel.Children.Add($abas)
         $dlg.Content = $painel
         Status 'inventario coletado.'
         [void]$dlg.ShowDialog()

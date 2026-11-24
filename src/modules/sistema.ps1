@@ -116,6 +116,8 @@ function Obter-InventarioLocal {
         tarefas = @()
         discos = @()
         rede = @()
+        drivers = @()
+        processos = @()
         avisos = @()
     }
     try {
@@ -142,6 +144,14 @@ function Obter-InventarioLocal {
             [pscustomobject]@{ nome = $_.Name; estado = $_.Status.ToString(); velocidadeLink = [string]$_.LinkSpeed }
         })
     } catch { $relatorio.avisos += 'Nao foi possivel consultar adaptadores de rede.' }
+    try {
+        $relatorio.drivers = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop | Where-Object { $_.DeviceName } | Select-Object DeviceName,DriverVersion,DriverProviderName,IsSigned | Sort-Object DeviceName)
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar drivers.' }
+    try {
+        $relatorio.processos = @(Get-Process -ErrorAction Stop | Sort-Object WorkingSet64 -Descending | Select-Object -First 100 | ForEach-Object {
+            [pscustomobject]@{ nome=$_.ProcessName; pid=$_.Id; memoriaMB=[math]::Round($_.WorkingSet64 / 1MB,1) }
+        })
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar processos.' }
     return [pscustomobject]$relatorio
 }
 

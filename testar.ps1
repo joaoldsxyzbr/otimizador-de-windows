@@ -624,6 +624,16 @@ try {
     Passou 'reversao de recursos com dependencias exige revisao manual'
 } catch { Falhou 'recursos com dependencias' $_.Exception.Message }
 
+# ---- filtros e rotulos de risco ----
+Secao 'gerenciador e rotulos'
+try {
+    . (Join-Path $raiz 'src\modules\gui.ps1')
+    $dados = @([pscustomobject]@{nome='Alpha';estado='Running'},[pscustomobject]@{nome='Beta';estado='Stopped'})
+    if (@(Filtrar-Inventario $dados 'running').Count -ne 1 -or @(Filtrar-Inventario $dados '').Count -ne 2 -or @(Filtrar-Inventario $dados '[').Count -ne 0) { throw 'Filtro incorreto.' }
+    if ((Classificar-RiscoAjuste ([pscustomobject]@{ categoria='Sistema'; acoes=@([pscustomobject]@{tipo='servico'}) })) -ne 'cautela alta') { throw 'Servico sem rotulo de cautela.' }
+    Passou 'filtro literal e classificacao de cautela'
+} catch { Falhou 'gerenciador e rotulos' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
