@@ -57,28 +57,19 @@ try {
         Write-Host ('Baixando OtimizadorPC: ' + $Ref + ' (' + $sha + ')')
         $arvore = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/git/trees/' + $treeSha + '?recursive=1') -Headers $headers -TimeoutSec 30
         if ($arvore.truncated -or $arvore.sha -ne $treeSha) { throw 'Arvore Git invalida ou incompleta.' }
-        $zip = Join-Path $temporario 'fonte.zip'
-        Invoke-WebRequest -UseBasicParsing -Uri ('https://codeload.github.com/' + $repo + '/zip/' + $sha) -OutFile $zip -TimeoutSec 120
-        $extraido = Join-Path $temporario 'extraido'
-        Expand-Archive -LiteralPath $zip -DestinationPath $extraido
-        $pastas = @(Get-ChildItem -LiteralPath $extraido -Directory)
-        if ($pastas.Count -ne 1) { throw 'Estrutura inesperada do arquivo ZIP.' }
         $fonte = Join-Path $temporario 'fonte'
         New-Item -ItemType Directory -Path $fonte | Out-Null
-        # Confere cada arquivo executado com o identificador de blob do commit.
-        # Isto verifica consistencia com o GitHub, nao assinatura independente do autor.
+        # Le os bytes originais de cada blob Git, sem conversao de final de linha.
         foreach ($rel in $arquivos) {
             $entrada = @($arvore.tree | Where-Object { $_.path -ceq $rel -and $_.type -eq 'blob' -and $_.mode -eq '100644' })
             if ($entrada.Count -ne 1 -or $entrada[0].sha -notmatch '^[0-9a-f]{40}$') { throw ('Arquivo Git invalido: ' + $rel) }
-            $src = Join-Path $pastas[0].FullName $rel
-            $item = Get-Item -LiteralPath $src
-            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw ('Arquivo inesperado: ' + $rel) }
-            $bytes = [IO.File]::ReadAllBytes($src)
+            $blob = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/git/blobs/' + $entrada[0].sha) -Headers $headers -TimeoutSec 30
+            if ($blob.sha -ne $entrada[0].sha -or $blob.encoding -ne 'base64') { throw ('Blob invalido: ' + $rel) }
+            $bytes = [Convert]::FromBase64String([string]$blob.content)
             $prefixo = [Text.Encoding]::ASCII.GetBytes(('blob ' + $bytes.Length + [char]0))
             $hash = [Security.Cryptography.SHA1]::Create()
-            try {
-                $calculado = ([BitConverter]::ToString($hash.ComputeHash([byte[]]($prefixo + $bytes)))).Replace('-','').ToLowerInvariant()
-            } finally { $hash.Dispose() }
+            try { $calculado = ([BitConverter]::ToString($hash.ComputeHash([byte[]]($prefixo + $bytes)))).Replace('-','').ToLowerInvariant() }
+            finally { $hash.Dispose() }
             if ($calculado -ne $entrada[0].sha) { throw ('Integridade Git divergente: ' + $rel) }
             $dest = Join-Path $fonte $rel
             New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
