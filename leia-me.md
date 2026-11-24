@@ -1,6 +1,6 @@
 # otimizadorpc
 
-app de otimizacao do windows do joao, no estilo do winutil do chris titus: janela nativa (wpf), catalogos em json e tudo reversivel.
+app de otimizacao do windows do joao, no estilo do winutil do chris titus: janela nativa (wpf), catalogos em json e recuperacao de alteracoes quando possivel.
 
 ## como usar (o jeito simples)
 
@@ -20,7 +20,7 @@ pronto. nao precisa instalar nada.
 | **ajustes e tweaks** | 47 tweaks em catalogo com 3 presets (seguro / balanceado / agressivo): telemetria, privacidade (inclusive copilot/ia), desempenho, barra de tarefas, explorer, edge (sem remover o navegador), energia e rede |
 | **debloat** | remove apps uwp pre-instalados da microsoft (clima bing, 3d viewer, cortana, etc.), com lista de cautela pra nao apagar nada util |
 | **desinstalar** | lista os programas instalados, desinstala via comando silencioso (msi/inno/nsis) e varre os rastros que sobram (pastas, registro, atalhos); tudo vai pra quarantena e desfaz |
-| **instalar apps** | instalacao em massa via winget (200+ apps com ids oficiais; essenciais vem marcados) |
+| **instalar apps** | instalacao em massa via winget (66 apps com ids WinGet; essenciais vem marcados) |
 | **config e recursos** | habilitar recursos do windows (hyper-v, wsl 2, sandbox, .net 3.5...), correcoes comuns (reset do windows update, reset de rede) e paineis classicos |
 | **atualizacoes** | bloquear drivers via wu e adiar versoes novas (180 dias) sem tocar nas atualizacoes de seguranca |
 | **manutencao** | limpeza de temporarios, limpeza de disco, dism, sfc, chkdsk online, cache de icones, dns e hora |
@@ -113,7 +113,7 @@ dois pontos fortes do win11debloat que entraram na v1.5:
 
 fechando os buracos que sobraram da comparacao com os dois populares:
 
-- **journal a prova de crash:** o journal da sessao agora e gravado no arquivo A CADA acao (nao so no fim). se o app ou o windows morrer no meio de um apply, tudo que ja foi feito continua desfazivel pela aba desfazer. o arquivo so nasce na primeira acao, pra nao sujar a pasta com sessao vazia.
+- **journal atomico:** a sessao registra o estado anterior antes da acao e preserva uma copia anterior (.bak). O desfazer registra o progresso e interrompe se o resultado for incerto. Consulte o log e preserve os arquivos para revisao manual. Nem toda operacao pode ser revertida automaticamente.
 - **desfazer de app da store:** ao remover um pacote uwp, o journal guarda a familia do pacote; o desfazer tenta `Add-AppxPackage -RegisterByFamilyName` (volta na hora quando a remocao foi por usuario). quando foi removido com -AllUsers e nao da, o log diz pra buscar na store.
 - **4 tweaks novos** (valores conferidos no catalogo oficial do winutil): **desativar copilot e ia** (recall desligado via politica, ia do notepad, servico de ia, pacote do copilot; win11, agressivo), **esconder recomendacoes do menu iniciar** (win11, balanceado; atencao: derruba o spotlight da tela de bloqueio), **esconder a busca da barra** e **esconder o botao de visao de tarefas** (ambos os windows). o catalogo agora tem 47 tweaks.
 
