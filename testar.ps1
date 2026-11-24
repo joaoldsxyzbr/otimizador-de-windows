@@ -59,6 +59,15 @@ foreach ($f in $scripts) {
     else { Passou ('ascii puro: ' + $f.Name) }
 }
 
+# ---- sintaxe PowerShell de todos os scripts fonte ----
+Secao 'sintaxe powershell'
+foreach ($f in @(Get-ChildItem -LiteralPath $raiz -Recurse -Filter '*.ps1' | Where-Object { $_.FullName -notlike '*\dist\*' })) {
+    $errosParse = $null
+    [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$errosParse)
+    if (@($errosParse).Count -eq 0) { Passou ('sintaxe: ' + $f.Name) }
+    else { Falhou ('sintaxe: ' + $f.Name) (($errosParse | ForEach-Object { $_.Message }) -join '; ') }
+}
+
 # ---- 3. catalogo de tweaks ----
 Secao 'data/tweaks.json'
 $tweaks = $null
@@ -257,6 +266,31 @@ try {
         throw 'Estado atual ou backup incorreto.'
     }
     Passou 'journal atomico preserva estado atual e anterior'
+    # Usa executor simulado: nenhum ajuste real de registro ou servico.
+    & {
+        function Log { param([string]$Mensagem, [switch]$Erro) }
+        function Atualizar-UI {}
+        function Ler-JSON { param([string]$Caminho) Get-Content -LiteralPath $Caminho -Raw -Encoding UTF8 | ConvertFrom-Json }
+        $script:acoesTeste = @()
+        function Desfazer-Item { param($Item) $script:acoesTeste += $Item.tipo; return ($Item.tipo -ne 'falha') }
+        $retomar = Join-Path $testeJournal 'retomar.json'
+        Gravar-JSONAtomico -Arquivo $retomar -Objeto @{ rotulo = 'teste'; itens = @(@{ tipo = 'pendente' }, @{ tipo = 'ja-feita'; estadoReversao = 'concluido' }) }
+        if ((Reverter-Sessao $retomar) -ne $true -or ($script:acoesTeste -join ',') -ne 'pendente' -or -not (Test-Path ($retomar + '.revertido'))) {
+            throw 'Retomada repetiu acao concluida ou nao finalizou.'
+        }
+        Passou 'retomada pula acoes concluidas'
+        $script:acoesTeste = @()
+        $incerto = Join-Path $testeJournal 'incerto.json'
+        Gravar-JSONAtomico -Arquivo $incerto -Objeto @{ rotulo = 'teste'; itens = @(@{ tipo = 'pendente' }, @{ tipo = 'falha' }) }
+        if ((Reverter-Sessao $incerto) -ne $false) { throw 'Falha foi tratada como sucesso.' }
+        if ((Reverter-Sessao $incerto) -ne $false -or ($script:acoesTeste -join ',') -ne 'falha') {
+            throw 'Acao incerta foi repetida ou sequencia continuou.'
+        }
+        $estado = Ler-JSON $incerto
+        if ($estado.itens[1].estadoReversao -ne 'em_andamento') { throw 'Estado incerto nao preservado.' }
+        Passou 'falha preserva journal e bloqueia repeticao'
+    }
+
     $falha = $false
     try {
         Gravar-JSONAtomico -Arquivo (Join-Path $testeJournal 'ausente\sessao.json') -Objeto @{ itens = @() }
