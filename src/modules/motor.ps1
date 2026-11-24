@@ -902,7 +902,7 @@ function Carregar-CacheAppx {
         if (((Get-Date) - $global:CacheAppxCarregadoEm).TotalSeconds -lt 120) { $vencido = $false }
     }
     if ($vencido) {
-        $global:CacheAppx = @(Get-AppxPackage | ForEach-Object { $_.Name })
+        $global:CacheAppx = @(Get-AppxPackage -ErrorAction Stop | ForEach-Object { $_.Name })
         $global:CacheAppxCarregadoEm = Get-Date
     }
 }
@@ -945,8 +945,7 @@ function Verificar-Acao {
                 return (-not (Appx-Instalado $Acao.pacote))
             }
             'energia' {
-                $saida = (powercfg /getactivescheme) 2>&1 | Out-String
-                return $saida.Contains($Acao.guid)
+                return ((Obter-PlanoEnergiaAtivo) -eq [string]$Acao.guid)
             }
             default { return $null }
         }
@@ -967,7 +966,10 @@ function Verificar-Tweak {
     }
     if ($verificaveis -eq 0) { return 'desconhecido' }
     if ($ativos -eq $verificaveis -and $verificaveis -eq @($Tweak.acoes).Count) { return 'aplicado' }
-    if ($ativos -eq 0) { return 'nao' }
+    if ($ativos -eq 0) {
+        if ($verificaveis -lt @($Tweak.acoes).Count) {return 'desconhecido'}
+        return 'nao'
+    }
     return 'parcial'
 }
 

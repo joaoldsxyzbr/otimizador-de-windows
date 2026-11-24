@@ -1124,6 +1124,31 @@ try {
             if ($global:ConsultaProgramas.fase -ne 'indisponivel') {throw 'Cancelamento nao confirmado.'}
             Passou 'Desinstalar assincrono: navegacao, cache, falha e cancelamento'
 
+            # Both panel types use the shared non-modal read-only worker.
+            function Esperar-ConsultaPainel {
+                param($Tipo)
+                $sw=[Diagnostics.Stopwatch]::StartNew()
+                while ($global:ConsultasPaineis[$Tipo].trabalho -and $sw.Elapsed.TotalSeconds -lt 15) {
+                    Start-Sleep -Milliseconds 50
+                    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+                }
+                if ($global:ConsultasPaineis[$Tipo].trabalho) {throw 'Consulta nao encerrou.'}
+            }
+            Solicitar-ConsultaPainel 'Ajustes' -Codigo {Start-Sleep -Seconds 3; [pscustomobject]@{contexto=[pscustomobject]@{build=26100;edicao='Professional';cliente=$true};itens=@([pscustomobject]@{id='extensoes-de-arquivo';estado='nao'})}}
+            Solicitar-ConsultaPainel 'Recursos' -Codigo {Start-Sleep -Seconds 3; [pscustomobject]@{itens=@([pscustomobject]@{FeatureName='NetFx3';State='Disabled'})}}
+            $trabA=$global:ConsultasPaineis.Ajustes.trabalho
+            $trabR=$global:ConsultasPaineis.Recursos.trabalho
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            foreach ($pag in @('PaginaAjustes','PaginaConfig','PaginaInstalar','PaginaAjustes')) {Trocar-Pagina $pag}
+            if ($sw.Elapsed.TotalSeconds -ge 2 -or -not [object]::ReferenceEquals($trabA,$global:ConsultasPaineis.Ajustes.trabalho) -or -not [object]::ReferenceEquals($trabR,$global:ConsultasPaineis.Recursos.trabalho) -or $global:UI.BotaoAplicarAjustes.IsEnabled -or $global:UI.BotaoInstalarRecursos.IsEnabled) {throw 'Navegacao bloqueada, consulta duplicada ou mutacao habilitada.'}
+            Esperar-ConsultaPainel 'Ajustes'
+            Esperar-ConsultaPainel 'Recursos'
+            if ($global:ConsultasPaineis.Ajustes.fase -ne 'atualizado' -or $global:ConsultasPaineis.Recursos.fase -ne 'atualizado' -or -not $global:UI.BotaoAplicarAjustes.IsEnabled -or @(Get-Checkboxes $global:UI.ListaRecursos | Where-Object {$_.IsEnabled}).Count -ne 1) {throw 'Snapshots nao apresentados corretamente.'}
+            Solicitar-ConsultaPainel 'Recursos' -Forcar -Codigo {throw 'Falha simulada'}
+            Esperar-ConsultaPainel 'Recursos'
+            if ($global:UI.BotaoInstalarRecursos.IsEnabled -or $global:ConsultasPaineis.Recursos.fase -ne 'indisponivel') {throw 'Falha interpretada como recurso habilitavel.'}
+            Passou 'Ajustes e Config assincronos: navegacao, deduplicacao, estados e falhas'
+
             # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
             $global:Janela.Close()
             $global:ModoProtegido=$true

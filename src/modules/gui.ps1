@@ -92,8 +92,9 @@ function Atualizar-RotuloAjuste {
 }
 
 function Montar-PaginaAjustes {
+    param($Contexto=$null)
     $win11 = Eh-Win11
-    $ctx=Obter-ContextoAjustes
+    $ctx=$Contexto
     $painel = $global:UI.ListaAjustes
     $painel.Children.Clear()
     $grupos = @{}
@@ -168,6 +169,7 @@ function Montar-PaginaInstalar {
 }
 
 function Montar-PaginaRecursos {
+    param([object[]]$Estados=@(),[bool]$Consultou=$false)
     $painel = $global:UI.ListaRecursos
     $painel.Children.Clear()
     $recursos = @(
@@ -180,10 +182,6 @@ function Montar-PaginaRecursos {
         [pscustomobject]@{ nome = 'Windows Media Player (legado)'; feat = 'WindowsMediaPlayer'; desc = 'WMP classico para midias antigas.' }
         [pscustomobject]@{ nome = 'Cliente Telnet'; feat = 'TelnetClient'; desc = 'Cliente telnet para testes de rede e equipamentos antigos.' }
     )
-    $estados=@(); $consultou=$false
-    if (-not $global:ModoProtegido) {
-        try { $estados=@(Get-WindowsOptionalFeature -Online -ErrorAction Stop); $consultou=$true } catch { }
-    }
     foreach ($r in $recursos) {
         $f=@($estados | Where-Object {$_.FeatureName -eq $r.feat})
         $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($f.Count -ne 1) {'indisponivel nesta instalacao'} else {$f[0].State.ToString()}
@@ -272,19 +270,8 @@ function Aplicar-Filtro {
 # ---- estado atual (o que ja esta aplicado) ----
 
 function Verificar-EstadoAjustes {
-    Status 'verificando estado dos ajustes...'
-    Ocupado $true
-    $contagens = @{ aplicado = 0; parcial = 0; nao = 0; desconhecido = 0 }
-    foreach ($cb in (Get-Checkboxes $global:UI.ListaAjustes)) {
-        $t = $cb.Tag
-        $estado = Verificar-Tweak $t
-        $contagens[$estado]++
-        Atualizar-RotuloAjuste $cb $estado
-        Atualizar-UI
-    }
-    Ocupado $false
-    Log ('estado verificado: {0} ajuste(s) ja aplicado(s), {1} parcial(is), {2} nao aplicado(s), {3} sem verificacao automatica.' -f $contagens['aplicado'], $contagens['parcial'], $contagens['nao'], $contagens['desconhecido'])
-    Status 'estado verificado.'
+    param([switch]$Forcar)
+    Solicitar-ConsultaPainel 'Ajustes' -Forcar:$Forcar
 }
 
 # Each window owns its snapshot. Only the Dispatcher touches WPF controls.
@@ -425,7 +412,7 @@ function Trocar-Pagina {
     if ($Nome -eq 'PaginaInicio') { Preencher-PaginaInicio }
     if ($Nome -eq 'PaginaAjustes') { Verificar-EstadoAjustes }
     if ($Nome -eq 'PaginaDebloat') { Verificar-EstadoUwp }
-    if ($Nome -eq 'PaginaConfig') { Montar-PaginaRecursos }
+    if ($Nome -eq 'PaginaConfig') { Solicitar-ConsultaPainel 'Recursos' }
     if ($Nome -eq 'PaginaDesfazer') {
         if ($global:ModoProtegido) {
             $global:UI.ListaDesfazer.Items.Clear()
@@ -456,7 +443,8 @@ function Trocar-Pagina {
 # ---- cliques ----
 
 function Clique-AplicarAjustes {
-    $selecionados = @(Get-Checkboxes $global:UI.ListaAjustes | Where-Object { $_.IsChecked })
+    if ($global:ConsultasPaineis.Ajustes.fase -ne 'atualizado') { Avisar 'Consulta indisponivel' 'Atualize os ajustes antes de aplicar.'; return }
+    $selecionados = @(Get-Checkboxes $global:UI.ListaAjustes | Where-Object { $_.IsChecked -and $_.IsEnabled })
     $ctx=Obter-ContextoAjustes
     foreach ($cb in $selecionados) {if (-not (Testar-CompatibilidadeAjuste $cb.Tag $ctx)) {Avisar 'Ajuste indisponivel' ('Compatibilidade minima nao atendida: '+$cb.Tag.nome); return}}
     if ($selecionados.Count -eq 0) {
@@ -567,6 +555,7 @@ function Clique-InstalarApps {
 }
 
 function Clique-InstalarRecursos {
+    if ($global:ConsultasPaineis.Recursos.fase -ne 'atualizado') { Avisar 'Consulta indisponivel' 'Atualize os recursos antes de habilitar.'; return }
     $selecionados = @(Get-Checkboxes $global:UI.ListaRecursos | Where-Object { $_.IsChecked -and $_.IsEnabled })
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os recursos do Windows que quer habilitar.'
@@ -595,20 +584,21 @@ function Clique-InstalarRecursos {
 
 function Clique-Preset {
     param([string]$Nivel)
+    if ($global:ConsultasPaineis.Ajustes.fase -ne 'atualizado') {return}
     $cbs = Get-Checkboxes $global:UI.ListaAjustes
     try {
         $perfil=$Nivel
-        if ($Nivel -eq 'recomendado') { $perfil=Obter-PerfilRecomendado }
+        if ($Nivel -eq 'recomendado') { $perfil='essencial' }
         $ids = @(Selecionar-TweaksPreset -Nivel $perfil -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11) | ForEach-Object { $_.id })
     } catch {
         Avisar 'Preset invalido' $_.Exception.Message
         return
     }
     foreach ($cb in $cbs) {
-        $cb.IsChecked = ($cb.IsEnabled -and $ids -contains $cb.Tag.id -and (Verificar-Tweak $cb.Tag) -ne 'aplicado')
+        $cb.IsChecked = ($cb.IsEnabled -and $ids -contains $cb.Tag.id -and $global:ConsultasPaineis.Ajustes.resultados[[string]$cb.Tag.id] -ne 'aplicado')
     }
     if ($Nivel -eq 'recomendado') {
-        $motivo=switch ($perfil) {'corporativo' {'Possivel ambiente gerenciado; apenas extensoes de arquivos.'} 'notebook' {'Bateria detectada; ajustes leves sem forcar energia.'} default {'Sem evidencia para ajustes agressivos; selecao essencial.'}}
+        $motivo='Sem evidencia para ajustes agressivos; selecao essencial, independente do tipo de computador.'
         Avisar 'Recomendacao explicada' ($motivo + ' A selecao nao aplica nada e ignora ajustes ja aplicados.')
     }
     Log ('preset marcado: ' + $Nivel + ' (' + @(($cbs | Where-Object { $_.IsChecked })).Count + ' ajustes). confira a lista e clique em aplicar.')
@@ -1267,6 +1257,12 @@ function Executar-OperacaoUI {
     } finally {
         $janela.IsEnabled = $antes
         $global:OperacaoUIAtiva = $false
+        if ($global:ConsultasPaineis) {
+            Cancelar-ConsultaPainel 'Ajustes' 'Consulta desatualizada apos operacao.'
+            Cancelar-ConsultaPainel 'Recursos' 'Consulta desatualizada apos operacao.'
+            if ($global:PaginaAtual -eq 'PaginaAjustes') { Verificar-EstadoAjustes -Forcar }
+            if ($global:PaginaAtual -eq 'PaginaConfig') { Solicitar-ConsultaPainel 'Recursos' -Forcar }
+        }
         if ($global:ConsultaProgramas) {
             Cancelar-ConsultaProgramas 'Inventario desatualizado apos operacao.'
             if ($global:PaginaAtual -eq 'PaginaDesinstalar') { Carregar-Programas -Forcar }
@@ -1487,12 +1483,141 @@ function Solicitar-SnapshotProgramas {
     }
 }
 
+# Shared read-only worker for adjustment state and optional feature inventories.
+function Inicializar-ConsultasPaineis {
+    if ($null -eq $global:TimersPaineis) {$global:TimersPaineis=@{}}
+    $global:ConsultasPaineis=@{}
+    foreach ($tipo in @('Ajustes','Recursos')) {
+        $global:ConsultasPaineis[$tipo]=@{tipo=$tipo;ui=$global:UI;fase='inicial';data=$null;trabalho=$null;fechada=$false;motivo='';resultados=@{}}
+        Mostrar-EstadoPainel $global:ConsultasPaineis[$tipo] 'inicial' 'Inventario ainda nao consultado.'
+    }
+}
+
+function Mostrar-EstadoPainel {
+    param($s,[string]$Fase,[string]$Mensagem)
+    $s.fase=$Fase
+    if ($s.fechada) {return}
+    $ui=$s.ui
+    $ui[('InfoConsulta'+$s.tipo)].Text=$Mensagem
+    $ui[('BotaoAtualizar'+$s.tipo)].IsEnabled=($null -eq $s.trabalho)
+    $ui[('BotaoCancelar'+$s.tipo)].IsEnabled=($Fase -eq 'carregando')
+    $habilitar=($Fase -eq 'atualizado' -and -not $global:ModoProtegido -and -not $global:OperacaoUIAtiva)
+    $botoes=if ($s.tipo -eq 'Ajustes') {@('BotaoAplicarAjustes','BotaoPresetSeguro','BotaoPresetBalanceado','BotaoPresetAgressivo','BotaoPerfilEssencial','BotaoPerfilGamer','BotaoPerfilNotebook','BotaoPerfilPrivacidade','BotaoPerfilCorporativo','BotaoPerfilRecomendado','BotaoImportarPlano','BotaoExportarPlano')} else {@('BotaoInstalarRecursos')}
+    foreach ($nome in $botoes) {$ui[$nome].IsEnabled=$habilitar}
+    if ($Fase -ne 'atualizado') {
+        $s.resultados=@{}
+        foreach ($cb in @(Get-Checkboxes $ui[('Lista'+$s.tipo)])) {
+            $cb.IsChecked=$false;$cb.IsEnabled=$false
+            if ($s.tipo -eq 'Ajustes') {Atualizar-RotuloAjuste $cb 'desconhecido'}
+        }
+        if ($s.tipo -eq 'Recursos') {Montar-PaginaRecursos}
+    }
+}
+
+function Cancelar-ConsultaPainel {
+    param([string]$Tipo,[string]$Motivo='Consulta cancelada.',[switch]$Fechar)
+    $s=$global:ConsultasPaineis[$Tipo]
+    if (-not $s) {return}
+    if ($Fechar) {$s.fechada=$true}
+    $s.data=$null;$s.motivo=$Motivo
+    $j=$s.trabalho
+    if ($j) {
+        Mostrar-EstadoPainel $s 'cancelando' ($Motivo+' Aguardando encerramento.')
+        if (-not $j.cancelado) {
+            $j.cancelado=$true
+            if (-not $j.async.IsCompleted) {try {$j.parada=$j.ps.BeginStop($null,$null)} catch {}}
+        }
+    } else {Mostrar-EstadoPainel $s 'indisponivel' $Motivo}
+}
+
+function Concluir-ConsultaPainel {
+    param($Timer)
+    $s=$global:TimersPaineis[$Timer]
+    if (-not $s) {$Timer.Stop();return}
+    $j=$s.trabalho
+    if (-not $j.async.IsCompleted) {
+        if (-not $j.cancelado -and $j.relogio.Elapsed.TotalSeconds -ge $j.limite -and [object]::ReferenceEquals($s,$global:ConsultasPaineis[$s.tipo])) {Cancelar-ConsultaPainel $s.tipo 'Tempo limite atingido.'}
+        return
+    }
+    if ($j.parada -and -not $j.parada.IsCompleted) {return}
+    $Timer.Stop();$global:TimersPaineis.Remove($Timer)
+    $dados=@();$falha=$false
+    try {
+        if ($j.parada) {try {$j.ps.EndStop($j.parada)} catch {}}
+        $dados=@($j.ps.EndInvoke($j.async))
+        if ($j.ps.Streams.Error.Count -gt 0 -or $dados.Count -ne 1 -or -not $dados[0].PSObject.Properties['itens']) {$falha=$true}
+    } catch {$falha=$true}
+    finally {$j.ps.Dispose();$s.trabalho=$null}
+    if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultasPaineis[$s.tipo])) {return}
+    if ($j.cancelado) {Mostrar-EstadoPainel $s 'indisponivel' ($s.motivo+' Atualize para tentar novamente.');return}
+    if ($falha -or $global:OperacaoUIAtiva) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel ou desatualizada. Tente novamente.';return}
+    try {
+        if ($s.tipo -eq 'Ajustes') {
+            if (-not $dados[0].contexto) {throw 'Compatibilidade nao confirmada.'}
+            Montar-PaginaAjustes $dados[0].contexto
+            foreach ($item in @($dados[0].itens)) {
+                if ($item.estado -notin @('aplicado','parcial','nao','desconhecido')) {throw 'Estado invalido.'}
+                $s.resultados[[string]$item.id]=[string]$item.estado
+            }
+            foreach ($cb in @(Get-Checkboxes $s.ui.ListaAjustes)) {
+                $estado=$s.resultados[[string]$cb.Tag.id]
+                if (-not $estado) {$estado='desconhecido'}
+                Atualizar-RotuloAjuste $cb $estado
+            }
+            Aplicar-Filtro -Texto $s.ui.FiltroAjustes.Text -Painel $s.ui.ListaAjustes
+        } else {
+            Montar-PaginaRecursos -Estados @($dados[0].itens) -Consultou $true
+        }
+        $s.data=Get-Date
+        Mostrar-EstadoPainel $s 'atualizado' ('Consulta concluida as '+$s.data.ToString('HH:mm:ss')+'. Revise antes de alterar.')
+    } catch {Mostrar-EstadoPainel $s 'indisponivel' 'Nao foi possivel apresentar os dados. Tente novamente.'}
+}
+
+function Solicitar-ConsultaPainel {
+    param([ValidateSet('Ajustes','Recursos')][string]$Tipo,[switch]$Forcar,[scriptblock]$Codigo=$null,[int]$LimiteSegundos=60)
+    $s=$global:ConsultasPaineis[$Tipo]
+    if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
+    if ($Tipo -eq 'Recursos' -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta de recursos indisponivel no modo protegido.';return}
+    if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
+    $s.data=$null;$ps=$null;$timer=$null
+    try {
+        $ps=[PowerShell]::Create()
+        if ($Codigo) {[void]$ps.AddScript($Codigo.ToString())}
+        elseif ($Tipo -eq 'Recursos') {
+            [void]$ps.AddScript('$ErrorActionPreference="Stop"; [pscustomobject]@{itens=@(Get-WindowsOptionalFeature -Online -ErrorAction Stop)}')
+        } else {
+            $fonte='param([string]$CatalogoJson)'+[Environment]::NewLine+'$ErrorActionPreference="Stop"'+[Environment]::NewLine
+            foreach ($fn in @('Converter-Hive','Obter-RaizRegistro','Converter-Kind','Ler-ValorRegistro','Verificar-Acao','Verificar-Tweak','Obter-ContextoAjustes','Obter-PlanoEnergiaAtivo','Carregar-CacheAppx','Appx-Instalado')) {
+                $corpo=(Get-Command $fn -CommandType Function).ScriptBlock.ToString()
+                $fonte+=("function "+$fn+" {"+$corpo+"}"+[Environment]::NewLine)
+            }
+            $fonte+='$ctx=Obter-ContextoAjustes; $catalogo=ConvertFrom-Json $CatalogoJson; $itens=@(foreach ($t in $catalogo.tweaks) {[pscustomobject]@{id=$t.id;estado=(Verificar-Tweak $t)}}); [pscustomobject]@{contexto=$ctx;itens=$itens}'
+            [void]$ps.AddScript($fonte).AddArgument((ConvertTo-Json -InputObject $global:CatalogoTweaks -Depth 20 -Compress))
+        }
+        $timer=New-Object System.Windows.Threading.DispatcherTimer
+        $timer.Interval=[TimeSpan]::FromMilliseconds(100)
+        $timer.Add_Tick({param($sender,$eventArgs) Concluir-ConsultaPainel $sender})
+        $s.trabalho=@{ps=$ps;async=$ps.BeginInvoke();parada=$null;cancelado=$false;relogio=[Diagnostics.Stopwatch]::StartNew();limite=$LimiteSegundos}
+        $global:TimersPaineis[$timer]=$s
+        Mostrar-EstadoPainel $s 'carregando' 'Consultando em segundo plano. Voce pode trocar de aba.'
+        $timer.Start()
+    } catch {
+        if ($s.trabalho) {Cancelar-ConsultaPainel $Tipo 'Falha ao iniciar consulta.';$timer.Start()}
+        else {if ($timer) {$timer.Stop()};if ($ps) {$ps.Dispose()};Mostrar-EstadoPainel $s 'indisponivel' 'Nao foi possivel iniciar a consulta.'}
+    }
+}
+
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
     Inicializar-ConsultaUwp
     Inicializar-ConsultaInicio
     Inicializar-ConsultaProgramas
-    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar })
+    Inicializar-ConsultasPaineis
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar })
+    $global:UI.BotaoAtualizarAjustes.Add_Click({ Verificar-EstadoAjustes -Forcar })
+    $global:UI.BotaoCancelarAjustes.Add_Click({ Cancelar-ConsultaPainel 'Ajustes' })
+    $global:UI.BotaoAtualizarRecursos.Add_Click({ Solicitar-ConsultaPainel 'Recursos' -Forcar })
+    $global:UI.BotaoCancelarRecursos.Add_Click({ Cancelar-ConsultaPainel 'Recursos' })
     $global:UI.BotaoCancelarProgramas.Add_Click({ Cancelar-ConsultaProgramas })
     $global:UI.BotaoAtualizarInicio.Add_Click({ Solicitar-SnapshotInicio -Forcar })
     $global:UI.BotaoCancelarInicio.Add_Click({ Cancelar-ConsultaInicio })
@@ -1513,7 +1638,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas')
+        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
