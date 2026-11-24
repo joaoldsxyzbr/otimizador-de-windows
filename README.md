@@ -61,6 +61,7 @@ nao quer janela? modo cli:
 ## desenvolvimento v2 (pre-release)
 
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- interface ajusta a altura/largura inicial a area util da tela, controles de varias abas quebram linha e inventario usa consulta cancelavel em runspace.
 - ajustes iniciam em simulacao; debloat nao seleciona aplicativos automaticamente e atua apenas no usuario atual, com nomes exatos, sem desprovisionar pacotes. Reinstalacao depende de disponibilidade e verificacao.
 - desinstalador: correspondencia exata para pastas/chaves, bloqueio de locais protegidos e links, servicos/tarefas/entradas de inicializacao/PATH candidatos apenas com executavel ou caminho ausente. Nao e prova de que o rastro pertence ao app; revise cada caixa. Desinstaladores com comandos ambiguos devem ser executados pelo Windows, nao por fallback cmd.
 - recuperacao de valores de registro e PATH: compara o estado atual com o aplicado e o anterior; interrompe se houver mudanca posterior em vez de sobrescrever. Conflitos exigem revisao manual.

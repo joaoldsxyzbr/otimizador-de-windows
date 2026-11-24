@@ -527,9 +527,9 @@ function Clique-ConfirmarManual {
 function Clique-InventarioLocal {
     try {
         Status 'coletando inventario local...'
-        $global:Janela.IsEnabled = $false
-        try { $dados = Obter-InventarioLocal }
-        finally { $global:Janela.IsEnabled = (-not $global:OperacaoUIAtiva) }
+        $resultado = @(Executar-ConsultaLocal -Titulo 'Inventario local' -Codigo ${function:Obter-InventarioLocal})
+        if ($resultado.Count -ne 1 -or $null -eq $resultado[0]) { Status 'inventario cancelado.'; return }
+        $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window
         $dlg.Title = 'Inventario local - OtimizadorPC'
         $dlg.Owner = $global:Janela
@@ -853,7 +853,20 @@ function Executar-OperacaoUI {
     }
 }
 
+# WPF usa unidades independentes de DPI; respeita a area util da tela.
+function Ajustar-TamanhoJanela {
+    $area = [System.Windows.SystemParameters]::WorkArea
+    $j = $global:Janela
+    $j.MaxWidth = $area.Width
+    $j.MaxHeight = $area.Height
+    $j.MinWidth = [math]::Min(900,[math]::Max(0,$area.Width))
+    $j.MinHeight = [math]::Min(580,[math]::Max(0,$area.Height))
+    $j.Width = [math]::Min(1200,$area.Width)
+    $j.Height = [math]::Min(780,$area.Height)
+}
+
 function Ligar-Tudo {
+    Ajustar-TamanhoJanela
 
     # navegacao da barra lateral
     $global:UI.BotaoNavInicio.Add_Click({ Trocar-Pagina 'PaginaInicio' })
@@ -951,6 +964,5 @@ function Ligar-Tudo {
     Montar-PaginaInstalar
     Montar-PaginaRecursos
     Montar-PaineisLegados
-    Preencher-PaginaInicio
     Trocar-Pagina 'PaginaInicio'
 }

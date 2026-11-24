@@ -332,15 +332,15 @@
                     <StackPanel Grid.Row="0" Margin="24,18,24,4">
                         <TextBlock Style="{StaticResource TituloPagina}" Text="Ajustes e tweaks"/>
                         <TextBlock Style="{StaticResource SubTitulo}" Text="Passe o mouse em cada item para ver o que ele faz. Presets marcam grupos prontos; voce ainda confere e edita antes de aplicar." TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
+                        <WrapPanel Margin="0,10,0,4">
                             <TextBlock Text="Marcar preset:" VerticalAlignment="Center" Foreground="#9ca3af" Margin="0,0,8,0"/>
                             <Button x:Name="BotaoPresetSeguro" Content="Seguro" Margin="0,0,6,0" MinWidth="95"/>
                             <Button x:Name="BotaoPresetBalanceado" Content="Balanceado" Margin="0,0,6,0" MinWidth="95"/>
                             <Button x:Name="BotaoPresetAgressivo" Content="Agressivo" Margin="0,0,14,0" MinWidth="95"/>
                             <CheckBox x:Name="ChkPontoRestore" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" Content="Criar ponto de restauracao antes" ToolTip="Recomendado: cria um ponto do sistema antes de aplicar os ajustes, caso algo de errado."/>
                             <CheckBox x:Name="ChkSimularAjustes" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" Content="Simular" ToolTip="Marca e clica em aplicar: escreve no log tudo o que faria, sem alterar nada no pc. Ideal antes de rodar no pc do trabalho."/>
-                            <Button x:Name="BotaoAplicarAjustes" Style="{StaticResource BotaoVerde}" Content="Aplicar ajustes selecionados" MinWidth="210"/>
-                        </StackPanel>
+                            <Button x:Name="BotaoAplicarAjustes" Style="{StaticResource BotaoVerde}" Content="Aplicar ajustes selecionados" MinWidth="210" Margin="0,0,8,4"/>
+                        </WrapPanel>
                         <WrapPanel Margin="0,4,0,4">
                             <TextBlock Text="Perfis:" VerticalAlignment="Center" Foreground="#9ca3af" Margin="0,0,8,0"/>
                             <Button x:Name="BotaoPerfilRecomendado" Content="Recomendado" Margin="0,2,6,2" ToolTip="Seleciona Corporativo, Notebook ou Essencial conforme o ambiente."/>
@@ -350,13 +350,13 @@
                             <Button x:Name="BotaoPerfilPrivacidade" Content="Privacidade" Margin="0,2,6,2"/>
                             <Button x:Name="BotaoPerfilCorporativo" Content="Corporativo" Margin="0,2,6,2" ToolTip="Apenas exibe extensoes de arquivos. Consulte o administrador."/>
                         </WrapPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <WrapPanel Margin="0,4,0,0">
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
                             <TextBox x:Name="FiltroAjustes" Width="280" Height="30" Background="#22222a" Foreground="#e5e7eb" BorderBrush="#374151" Padding="6,4" VerticalContentAlignment="Center" ToolTip="filtra pelo nome ou descricao; campo vazio mostra tudo"/>
                             <TextBlock Text="(verde = ja aplicado | amarelo = parcial)" Foreground="#6b7280" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="12"/>
                             <Button x:Name="BotaoExportarPlano" Style="{StaticResource BotaoAzul}" Content="Exportar plano" MinWidth="115" Margin="16,0,0,0" ToolTip="salva em um .json os ajustes marcados agora; da pra importar em outro pc ou repetir depois."/>
                             <Button x:Name="BotaoImportarPlano" Style="{StaticResource BotaoAzul}" Content="Importar plano" MinWidth="115" Margin="8,0,0,0" ToolTip="abre um plano exportado e marca os ajustes correspondentes na lista (nao aplica nada sozinho)."/>
-                        </StackPanel>
+                        </WrapPanel>
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="24,6,14,10">
                         <StackPanel x:Name="ListaAjustes"/>
@@ -372,15 +372,15 @@
                     <StackPanel Grid.Row="0" Margin="24,18,24,4">
                         <TextBlock Style="{StaticResource TituloPagina}" Text="Debloat - apps pre-instalados"/>
                         <TextBlock Style="{StaticResource SubTitulo}" Text="Remove aplicativos opcionais apenas do usuario atual. Nenhum item vem marcado. Leia as descricoes: a recuperacao pela Store depende da disponibilidade do aplicativo." TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
+                        <WrapPanel Margin="0,10,0,4">
                             <CheckBox x:Name="ChkPontoRestoreUwp" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" Content="Criar ponto de restauracao antes"/>
-                            <Button x:Name="BotaoRemoverUwp" Style="{StaticResource BotaoVermelho}" Content="Remover apps selecionados" MinWidth="210"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button x:Name="BotaoRemoverUwp" Style="{StaticResource BotaoVermelho}" Content="Remover apps selecionados" MinWidth="210" Margin="0,0,8,4"/>
+                        </WrapPanel>
+                        <WrapPanel Margin="0,4,0,0">
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
                             <TextBox x:Name="FiltroUwp" Width="280" Height="30" Background="#22222a" Foreground="#e5e7eb" BorderBrush="#374151" Padding="6,4" VerticalContentAlignment="Center" ToolTip="filtra pelo nome ou descricao; campo vazio mostra tudo"/>
                             <TextBlock Text="(cinza = nao esta instalado)" Foreground="#6b7280" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="12"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="24,6,14,10">
                         <StackPanel x:Name="ListaUwp"/>
@@ -398,16 +398,16 @@
                     <StackPanel Grid.Row="0" Margin="24,18,24,4">
                         <TextBlock Style="{StaticResource TituloPagina}" Text="Desinstalar apps"/>
                         <TextBlock Style="{StaticResource SubTitulo}" Text="Lista os programas instalados. Desinstale e depois use 'varrer rastros' para levar junto as pastas, chaves de registro, atalhos, servicos orfaos, tarefas agendadas, regras de firewall, inicializacao e entrada do PATH que sobram depois (recurso tipo Revo Uninstaller). Arquivos e chaves recebem backup antes da alteracao; servicos e tarefas podem ser desativados. A recuperacao pela aba Desfazer pode exigir revisao manual." TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
+                        <WrapPanel Margin="0,10,0,4">
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
                             <TextBox x:Name="FiltroDesinstalar" Width="280" Height="30" Background="#22222a" Foreground="#e5e7eb" BorderBrush="#374151" Padding="6,4" VerticalContentAlignment="Center" ToolTip="filtra pelo nome, editor ou versao"/>
                             <Button x:Name="BotaoAtualizarProgramas" Content="Atualizar lista" Margin="8,0,0,0" MinWidth="120"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        </WrapPanel>
+                        <WrapPanel Margin="0,4,0,0">
                             <CheckBox x:Name="ChkPontoRestoreDesinstalar" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" VerticalAlignment="Center" Content="Criar ponto de restauracao antes"/>
                             <Button x:Name="BotaoDesinstalarProg" Style="{StaticResource BotaoVermelho}" Content="Desinstalar selecionado(s)" Margin="0,0,8,0" MinWidth="200"/>
-                            <Button x:Name="BotaoVarrerRastros" Style="{StaticResource BotaoAzul}" Content="Varrer rastros do selecionado" MinWidth="210" ToolTip="Procura pastas, registro, atalhos, servicos, tarefas agendadas, firewall, inicializacao (run) e PATH com o nome do programa. Um programa por vez."/>
-                        </StackPanel>
+                            <Button x:Name="BotaoVarrerRastros" Style="{StaticResource BotaoAzul}" Content="Varrer rastros do selecionado" MinWidth="210" ToolTip="Procura pastas, registro, atalhos, servicos, tarefas agendadas, firewall, inicializacao (run) e PATH com o nome do programa. Um programa por vez." Margin="0,0,8,4"/>
+                        </WrapPanel>
                     </StackPanel>
                     <ListBox x:Name="ListaProgramas" Grid.Row="1" Background="#1b1b20" Foreground="#e5e7eb" BorderBrush="#374151" Margin="24,6,14,4" FontSize="13" SelectionMode="Extended" ToolTip="Ctrl+clique seleciona varios"/>
                     <StackPanel Grid.Row="2" Margin="24,8,14,4">
@@ -431,15 +431,15 @@
                     <StackPanel Grid.Row="0" Margin="24,18,24,4">
                         <TextBlock Style="{StaticResource TituloPagina}" Text="Instalar aplicativos"/>
                         <TextBlock Style="{StaticResource SubTitulo}" Text="Instalacao em massa via winget (gerenciador oficial da Microsoft). Os marcados por padrao sao os essenciais que recomendo em qualquer pc." TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,4">
+                        <WrapPanel Margin="0,10,0,4">
                             <Button x:Name="BotaoMarcarPadroes" Content="Marcar essenciais" Margin="0,0,8,0" MinWidth="140"/>
                             <Button x:Name="BotaoInstalarApps" Style="{StaticResource BotaoVerde}" Content="Instalar selecionados" Margin="0,0,8,0" MinWidth="170"/>
-                            <Button x:Name="BotaoAtualizarTudo" Style="{StaticResource BotaoAzul}" Content="Atualizar tudo (winget)" MinWidth="180"/>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                            <Button x:Name="BotaoAtualizarTudo" Style="{StaticResource BotaoAzul}" Content="Atualizar tudo (winget)" MinWidth="180" Margin="0,0,8,4"/>
+                        </WrapPanel>
+                        <WrapPanel Margin="0,4,0,0">
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
                             <TextBox x:Name="FiltroApps" Width="280" Height="30" Background="#22222a" Foreground="#e5e7eb" BorderBrush="#374151" Padding="6,4" VerticalContentAlignment="Center" ToolTip="filtra pelo nome ou descricao; campo vazio mostra tudo"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </StackPanel>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="24,6,14,10">
                         <StackPanel x:Name="ListaApps"/>
@@ -496,11 +496,11 @@
                                 <CheckBox x:Name="ChkBloquearDrivers" Foreground="#e5e7eb" Margin="0,0,18,0" IsChecked="False" Content="Nao baixar drivers pelo Windows Update" ToolTip="Drivers de video etc. continuarao instalados apenas por voce. Util quando o wu insiste num driver ruim."/>
                                 <CheckBox x:Name="ChkAdiarRecursos" Foreground="#e5e7eb" IsChecked="False" Content="Adiar versoes novas do Windows em 180 dias" ToolTip="Deixa o windows atualizar apenas com correcoes de seguranca enquanto a versao nova 'assenta'. Drivers e correcoes seguem normal."/>
                             </StackPanel>
-                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                            <WrapPanel Margin="0,14,0,0">
                                 <Button x:Name="BotaoAplicarAtualizacoes" Style="{StaticResource BotaoVerde}" Content="Aplicar" Margin="0,0,10,0" MinWidth="120"/>
                                 <Button x:Name="BotaoBuscarAtualizacoes" Content="Abrir Windows Update" Margin="0,0,10,0" MinWidth="150"/>
-                                <Button x:Name="BotaoResetUpdate2" Content="Resetar Windows Update" MinWidth="170" ToolTip="Se os updates travam ou dao erro, isso limpa o cache e reconstroi o servico."/>
-                            </StackPanel>
+                                <Button x:Name="BotaoResetUpdate2" Content="Resetar Windows Update" MinWidth="170" ToolTip="Se os updates travam ou dao erro, isso limpa o cache e reconstroi o servico." Margin="0,0,8,4"/>
+                            </WrapPanel>
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,14,0,0" Text="Essas duas opcoes podem ser revertidas voltando aqui e desmarcando, ou pela aba Desfazer."/>
                         </StackPanel>
                     </ScrollViewer>

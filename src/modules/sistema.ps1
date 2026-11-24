@@ -110,7 +110,7 @@ function Preencher-PaginaInicio {
 function Obter-InventarioLocal {
     $relatorio = [ordered]@{
         criado = (Get-Date -Format 'o')
-        windows = (Nome-Windows)
+        windows = ('{0} (build {1})' -f $(if ([Environment]::OSVersion.Version.Build -ge 22000) { 'Windows 11' } else { 'Windows 10' }),[Environment]::OSVersion.Version.Build)
         inicializacao = @()
         servicos = @()
         tarefas = @()
