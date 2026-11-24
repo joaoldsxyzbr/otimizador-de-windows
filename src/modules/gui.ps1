@@ -82,7 +82,8 @@ function Atualizar-RotuloAjuste {
     $Cb.Content=$t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (' + $rotulo + ')'
     if ($t.apenasManual) { $Cb.Content += ' [manual]' }
     $Cb.ToolTip=(Obter-GuiaAjuste $t).texto
-    if (-not $Cb.IsEnabled) { $Cb.Content+=' [indisponivel nesta instalacao]'; $Cb.IsChecked=$false }
+    if ($global:ModoProtegido) { $Cb.Content+=' [somente consulta]'; $Cb.IsChecked=$false; $Cb.IsEnabled=$false }
+    elseif (-not $Cb.IsEnabled) { $Cb.Content+=' [indisponivel nesta instalacao]'; $Cb.IsChecked=$false }
     $Cb.Foreground=switch ($Estado) {'aplicado' {Cor-Tema '#86efac'} 'parcial' {Cor-Tema '#fde047'} default {Cor-Tema '#e5e7eb'}}
     if ($Estado -eq 'aplicado') { $Cb.IsChecked=$false }
 }
@@ -140,7 +141,7 @@ function Montar-PaginaDebloat {
         }
         $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($info.instalado) {'instalado'} else {'nao instalado'}
         $cb=Nova-Checkbox -Texto ($p.nome + ' [' + $estado + ']') -Tag $p -Dica $info.texto
-        $cb.IsEnabled=($consultou -and $info.permitido)
+        $cb.IsEnabled=(-not $global:ModoProtegido -and $consultou -and $info.permitido)
         if (-not $cb.IsEnabled) {$cb.Foreground=Cor-Tema '#6b7280'}
         [void]$grupos[$titulo].Content.Children.Add($cb)
     }
@@ -158,7 +159,9 @@ function Montar-PaginaInstalar {
         }
         $fonte=if ($a.fonte -eq 'msstore') {'msstore'} else {'winget'}
         $dica=$a.desc+"`nID: "+$a.id+"`nFonte: "+$fonte+"`nInstalar nao solicita upgrade automatico. Use a consulta WinGet para identificar versoes instaladas/disponiveis."
-        [void]$grupos[$a.categoria].Content.Children.Add((Nova-Checkbox -Texto ($a.nome+' ['+$fonte+']') -Tag $a -Dica $dica))
+        $cb=Nova-Checkbox -Texto ($a.nome+' ['+$fonte+']') -Tag $a -Dica $dica
+        if ($global:ModoProtegido) { $cb.IsEnabled=$false }
+        [void]$grupos[$a.categoria].Content.Children.Add($cb)
     }
 }
 
@@ -175,13 +178,15 @@ function Montar-PaginaRecursos {
         [pscustomobject]@{ nome = 'Windows Media Player (legado)'; feat = 'WindowsMediaPlayer'; desc = 'WMP classico para midias antigas.' }
         [pscustomobject]@{ nome = 'Cliente Telnet'; feat = 'TelnetClient'; desc = 'Cliente telnet para testes de rede e equipamentos antigos.' }
     )
-    try { $estados=@(Get-WindowsOptionalFeature -Online -ErrorAction Stop); $consultou=$true }
-    catch { $estados=@(); $consultou=$false }
+    $estados=@(); $consultou=$false
+    if (-not $global:ModoProtegido) {
+        try { $estados=@(Get-WindowsOptionalFeature -Online -ErrorAction Stop); $consultou=$true } catch { }
+    }
     foreach ($r in $recursos) {
         $f=@($estados | Where-Object {$_.FeatureName -eq $r.feat})
         $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($f.Count -ne 1) {'indisponivel nesta instalacao'} else {$f[0].State.ToString()}
         $cb=Nova-Checkbox -Texto ($r.nome+' ['+$estado+']') -Tag $r -Dica ($r.desc+"`nEstado: "+$estado+". Dependencias e reinicio podem exigir recuperacao manual.")
-        $cb.IsEnabled=($consultou -and $f.Count -eq 1 -and $estado -eq 'Disabled')
+        $cb.IsEnabled=(-not $global:ModoProtegido -and $consultou -and $f.Count -eq 1 -and $estado -eq 'Disabled')
         [void]$painel.Children.Add($cb)
     }
 }
@@ -293,7 +298,9 @@ $global:PaginaAtual = 'PaginaInicio'
 
 function Trocar-Pagina {
     param([string]$Nome)
-    if ($global:ModoProtegido -and $Nome -ne 'PaginaInicio') { return }
+    if ($global:OperacaoUIAtiva -or $global:NavegacaoAtiva) { return }
+    $global:NavegacaoAtiva = $true
+    try {
     foreach ($p in @('PaginaInicio', 'PaginaAjustes', 'PaginaDebloat', 'PaginaDesinstalar', 'PaginaInstalar', 'PaginaConfig', 'PaginaAtualizacoes', 'PaginaManutencao', 'PaginaDesfazer')) {
         $pg = $global:Janela.FindName($p)
         if ($p -eq $Nome) { $pg.Visibility = 'Visible' } else { $pg.Visibility = 'Collapsed' }
@@ -319,7 +326,12 @@ function Trocar-Pagina {
     if ($Nome -eq 'PaginaAjustes') { Verificar-EstadoAjustes }
     if ($Nome -eq 'PaginaDebloat') { Verificar-EstadoUwp }
     if ($Nome -eq 'PaginaConfig') { Montar-PaginaRecursos }
-    if ($Nome -eq 'PaginaDesfazer') { Atualizar-ListaDesfazer }
+    if ($Nome -eq 'PaginaDesfazer') {
+        if ($global:ModoProtegido) {
+            $global:UI.ListaDesfazer.Items.Clear()
+            [void]$global:UI.ListaDesfazer.Items.Add('Historico indisponivel no modo protegido; nenhuma sessao sera alterada.')
+        } else { Atualizar-ListaDesfazer }
+    }
     if ($Nome -eq 'PaginaDesinstalar') {
         if ($null -eq $global:ProgramasInstalados) { Carregar-Programas }
         Atualizar-ListaProgramas
@@ -331,6 +343,14 @@ function Trocar-Pagina {
             $global:UI.ChkAdiarRecursos.IsChecked=($null -ne $atual -and $atual.DeferFeatureUpdates -eq 1)
             $global:UI.InfoPoliticasUpdate.Text=('Drivers: '+(Formatar-PoliticaAtualizacao $atual.ExcludeWUDriverInQualityUpdate)+"`nVersoes: "+(Formatar-PoliticaAtualizacao $atual.DeferFeatureUpdates)+"`nPeriodo registrado: "+$atual.DeferFeatureUpdatesPeriodInDays+"`nValores do registro nao comprovam politica efetiva.")
         } catch { $global:UI.InfoPoliticasUpdate.Text='Consulta de politicas indisponivel.' }
+    }
+    } catch {
+        Log ('falha ao carregar ' + $Nome + ': ' + $_.Exception.Message) -Erro
+        Status 'Falha na consulta; tente outra aba ou reabra esta aba.'
+    } finally {
+        if ($global:UI.ContainsKey('BarraProgresso')) { $global:UI.BarraProgresso.IsIndeterminate = $false }
+        if ($global:ModoProtegido) { Status 'Modo protegido: somente consulta; alteracoes e exportacoes bloqueadas.' }
+        $global:NavegacaoAtiva = $false
     }
 }
 
@@ -1163,22 +1183,6 @@ function Ajustar-TamanhoJanela {
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
     $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
-    if ($global:ModoProtegido) {
-        foreach ($nome in @('BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoCriarRestore','BotaoMedicoes','BotaoCarga','BotaoVerificarRelease')) {
-            $global:UI[$nome].IsEnabled=$false
-            $global:UI[$nome].ToolTip='Indisponivel no modo protegido.'
-        }
-        $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
-        $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
-    $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
-    $global:UI.BotaoResumoBateria.Add_Click({ Clique-ResumoBateria })
-    $global:UI.BotaoGargalosLocais.Add_Click({ Clique-GargalosLocais })
-    $global:UI.BotaoResumoDriversPnP.Add_Click({ Clique-ResumoDriversPnP })
-        Trocar-Pagina 'PaginaInicio'
-        Status 'Modo protegido: somente diagnostico local.'
-        return
-    }
-
     # navegacao da barra lateral
     $global:UI.BotaoNavInicio.Add_Click({ Trocar-Pagina 'PaginaInicio' })
     $global:UI.BotaoNavAjustes.Add_Click({ Trocar-Pagina 'PaginaAjustes' })
@@ -1189,6 +1193,41 @@ function Ligar-Tudo {
     $global:UI.BotaoNavAtualizacoes.Add_Click({ Trocar-Pagina 'PaginaAtualizacoes' })
     $global:UI.BotaoNavManutencao.Add_Click({ Trocar-Pagina 'PaginaManutencao' })
     $global:UI.BotaoNavDesfazer.Add_Click({ Trocar-Pagina 'PaginaDesfazer' })
+
+    if ($global:ModoProtegido) {
+        # Registra somente eventos de consulta. A lista de permissoes falha fechada
+        # para novos botoes; nenhuma acao administrativa e ligada neste modo.
+        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma')
+        foreach ($nome in $global:UI.Keys) {
+            $controle=$global:UI[$nome]
+            if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
+                $controle.IsEnabled=$false
+                $controle.ToolTip='Indisponivel no modo protegido.'
+                [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($controle,$true)
+            }
+        }
+        $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
+        $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
+        $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
+        $global:UI.BotaoResumoBateria.Add_Click({ Clique-ResumoBateria })
+        $global:UI.BotaoGargalosLocais.Add_Click({ Clique-GargalosLocais })
+        $global:UI.BotaoResumoDriversPnP.Add_Click({ Clique-ResumoDriversPnP })
+        $global:UI.FiltroAjustes.Add_TextChanged({ Aplicar-Filtro -Texto $this.Text -Painel $global:UI.ListaAjustes })
+        $global:UI.FiltroUwp.Add_TextChanged({ Aplicar-Filtro -Texto $this.Text -Painel $global:UI.ListaUwp })
+        $global:UI.FiltroApps.Add_TextChanged({ Aplicar-Filtro -Texto $this.Text -Painel $global:UI.ListaApps })
+        $global:UI.FiltroDesinstalar.Add_TextChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
+        $global:UI.CategoriaDesinstalar.Add_SelectionChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
+        $global:UI.OrdemDesinstalar.Add_SelectionChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
+        $global:UI.ListaProgramas.Add_SelectionChanged({ Atualizar-DetalhePrograma })
+        $global:UI.BotaoDetalhesPrograma.Add_Click({ Clique-DetalhesPrograma })
+        $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas; Atualizar-ListaProgramas })
+        Atualizar-DetalhePrograma
+        Montar-PaginaAjustes
+        Montar-PaginaInstalar
+        Trocar-Pagina 'PaginaInicio'
+        Status 'Modo protegido: somente consulta; alteracoes e exportacoes bloqueadas.'
+        return
+    }
 
     # filtros de busca das listas
     $global:UI.FiltroAjustes.Add_TextChanged({ Aplicar-Filtro -Texto $this.Text -Painel $global:UI.ListaAjustes })
