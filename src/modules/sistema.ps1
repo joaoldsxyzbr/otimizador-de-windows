@@ -235,63 +235,102 @@ function Inicializar-ModoOtimizador {
 }
 
 # Recomendacoes conservadoras, sem modificar configuracoes.
+# Interpretacao pura: dados ausentes nunca equivalem a zero ou estado saudavel.
+# Limites indicativos de triagem, nao diagnostico de causa.
+function Avaliar-SaudeLocal {
+    param($OS,$Disco,$Inicializacao,$Reinicio,$Bateria)
+    if ($OS -and $OS.TotalVisibleMemorySize -gt 0 -and $null -ne $OS.FreePhysicalMemory -and $OS.FreePhysicalMemory -ge 0 -and $OS.FreePhysicalMemory -le $OS.TotalVisibleMemorySize) {
+        $pct=100.0 * $OS.FreePhysicalMemory / $OS.TotalVisibleMemorySize
+        $ram=[math]::Round($OS.TotalVisibleMemorySize / 1MB,1)
+        if ($pct -lt 10) {
+            [pscustomobject]@{id='ram';estado='atencao';evidencia=('{0:N1}% de RAM disponivel nesta amostra ({1:N1} GB totais).' -f $pct,$ram);orientacao='Abra Amostras de CPU, memoria e disco para investigar pressao persistente; uma amostra nao identifica gargalo.'}
+        } elseif ($ram -lt 8) {
+            [pscustomobject]@{id='ram';estado='informacao';evidencia=('{0:N1} GB de RAM visivel; {1:N1}% disponivel.' -f $ram,$pct);orientacao='Capacidade limitada pode afetar cargas pesadas; confirme com amostras antes de ajustar.'}
+        } else {
+            [pscustomobject]@{id='ram';estado='informacao';evidencia=('{0:N1}% de RAM disponivel nesta amostra.' -f $pct);orientacao='Amostra instantanea; nao certifica ausencia de pressao de memoria.'}
+        }
+    } else {
+        [pscustomobject]@{id='ram';estado='indisponivel';evidencia='Dados de memoria ausentes ou inconsistentes.';orientacao='Tente atualizar a consulta; nao inferir falta de RAM.'}
+    }
+    if ($Disco -and $Disco.Size -gt 0 -and $null -ne $Disco.FreeSpace -and $Disco.FreeSpace -ge 0 -and $Disco.FreeSpace -le $Disco.Size) {
+        $pct=100.0 * $Disco.FreeSpace / $Disco.Size
+        $gb=$Disco.FreeSpace / 1GB
+        $estado=if ($pct -lt 15 -or $gb -lt 5) {'atencao'} else {'informacao'}
+        $orientacao=if ($estado -eq 'atencao') {'Abra Manutencao > Analisar armazenamento e revise a previa antes de limpar.'} else {'Espaco livre nao mede latencia nem integridade do disco.'}
+        [pscustomobject]@{id='disco';estado=$estado;evidencia=('{0:N1} GB livres ({1:N1}%) no disco do sistema.' -f $gb,$pct);orientacao=$orientacao}
+    } else {
+        [pscustomobject]@{id='disco';estado='indisponivel';evidencia='Espaco do disco do sistema nao confirmado.';orientacao='Tente novamente; nenhuma limpeza recomendada automaticamente.'}
+    }
+    if ($null -ne $Inicializacao -and $Inicializacao -ge 0) {
+        [pscustomobject]@{id='inicio';estado='informacao';evidencia=('{0} entradas de inicializacao detectadas nesta consulta.' -f $Inicializacao);orientacao='A quantidade nao mede impacto. Revise no Gerenciador de Tarefas (Aplicativos de inicializacao).'}
+    } else {
+        [pscustomobject]@{id='inicio';estado='indisponivel';evidencia='Entradas de inicializacao nao consultadas.';orientacao='Consulte o Gerenciador de Tarefas.'}
+    }
+    if ($Reinicio -eq $true) {
+        [pscustomobject]@{id='reinicio';estado='atencao';evidencia='Indicador de reinicio pendente encontrado no Windows.';orientacao='Salve o trabalho e reinicie quando autorizado, antes de novos ajustes.'}
+    } elseif ($null -eq $Reinicio) {
+        [pscustomobject]@{id='reinicio';estado='indisponivel';evidencia='Indicadores de reinicio nao confirmados.';orientacao='Verifique o Windows Update.'}
+    } else {
+        [pscustomobject]@{id='reinicio';estado='informacao';evidencia='Nenhum indicador de reinicio encontrado nas duas chaves consultadas.';orientacao='Isso nao exclui outras solicitacoes de reinicio.'}
+    }
+    if ($Bateria -eq $true) {
+        [pscustomobject]@{id='bateria';estado='informacao';evidencia='Bateria detectada.';orientacao='Consulte Bateria: capacidade e carga. Preserve autonomia; nao force alto desempenho.'}
+    } elseif ($null -eq $Bateria) {
+        [pscustomobject]@{id='bateria';estado='indisponivel';evidencia='Tipo de alimentacao nao confirmado.';orientacao='Consulte as configuracoes de energia do Windows.'}
+    } else {
+        [pscustomobject]@{id='bateria';estado='informacao';evidencia='Nenhuma bateria retornada pela consulta.';orientacao='Escolha o plano de energia conforme a carga; nao ha ganho de FPS garantido.'}
+    }
+}
+
 function Obter-DiagnosticoLocal {
-    param($OS, $Disco)
-    $avisos = @()
-    if ($OS.TotalVisibleMemorySize -gt 0) {
-        if ($OS.TotalVisibleMemorySize -lt 8MB) { $avisos += 'Menos de 8 GB de RAM visivel: priorize revisar inicializacao e processos; evite ajustes agressivos.' }
-        $livre = 100.0 * $OS.FreePhysicalMemory / $OS.TotalVisibleMemorySize
-        if ($livre -lt 10) { $avisos += 'Pouca RAM disponivel nesta amostra. Revise processos antes de aplicar ajustes.' }
-    }
-    if ($Disco.Size -gt 0) {
-        $livre = 100.0 * $Disco.FreeSpace / $Disco.Size
-        if ($livre -lt 15) { $avisos += 'Pouco espaco livre no disco do sistema. Revise arquivos e use a manutencao.' }
-    }
+    param($OS,$Disco)
+    $inicio=$null; $reinicio=$null; $bateria=$null
+    try { $inicio=@(Get-CimInstance Win32_StartupCommand -ErrorAction Stop).Count } catch { }
     try {
-        $inicio = @(Get-CimInstance Win32_StartupCommand -ErrorAction Stop)
-        $avisos += ('Entradas de inicializacao detectadas: {0}. Revise no Gerenciador de Tarefas.' -f $inicio.Count)
-    } catch { $avisos += 'Nao foi possivel consultar a inicializacao.' }
-    if ((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or
-        (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')) {
-        $avisos += 'Reinicio pendente detectado. Reinicie antes de aplicar ajustes.'
+        $cbs=Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending' -ErrorAction Stop
+        $wu=Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired' -ErrorAction Stop
+        $reinicio=($cbs -or $wu)
+    } catch { }
+    try { $bateria=(@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) } catch { }
+    $linhas=@(('Ultima analise local: '+(Get-Date -Format 'dd/MM/yyyy HH:mm:ss')+' | Somente leitura, sem nota de saude.'))
+    foreach ($item in @(Avaliar-SaudeLocal $OS $Disco $inicio $reinicio $bateria)) {
+        $linhas+=('[{0}] {1} {2}' -f $item.estado.ToUpperInvariant(),$item.evidencia,$item.orientacao)
     }
-    if ($global:ModoProtegido) { $avisos += 'Modo protegido: somente diagnostico. Consulte o TI antes de qualquer alteracao.' }
-    elseif (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) { $avisos += 'Possivel ambiente gerenciado. Consulte o administrador.' }
-    try {
-        if (@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) { $avisos += 'Bateria detectada: prefira o perfil Notebook e preserve economia de energia.' }
-        else { $avisos += 'Use o perfil Essencial como ponto de partida; nao ha ganho de FPS garantido.' }
-    } catch { $avisos += 'Tipo de alimentacao nao confirmado.' }
-    if ($avisos.Count -eq 0) { $avisos += 'Nenhum alerta nas verificacoes disponiveis.' }
-    return ($avisos -join [Environment]::NewLine)
+    if ($global:ModoProtegido) { $linhas+='Alteracoes indisponiveis no modo atual; consulte as permissoes e o administrador.' }
+    return ($linhas -join [Environment]::NewLine)
 }
 
 function Preencher-PaginaInicio {
     try {
-        $os = Get-CimInstance Win32_OperatingSystem
-        $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
-        $gpu = @(Get-CimInstance Win32_VideoController | Where-Object { $null -ne $_.Name })
-        $disco = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'"
+        $os=$null; $cpu=$null; $gpu=@(); $disco=$null
+        try { $os=Get-CimInstance Win32_OperatingSystem -ErrorAction Stop } catch { }
+        try { $cpu=Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1 } catch { }
+        try { $gpu=@(Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $null -ne $_.Name }) } catch { }
+        try { $disco=Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'" -ErrorAction Stop } catch { }
 
-        $ramTotal = [math]::Round($os.TotalVisibleMemorySize / 1MB, 1)
-        $ramLivre = [math]::Round($os.FreePhysicalMemory / 1MB, 1)
-        $discoTotal = [math]::Round($disco.Size / 1GB, 0)
-        $discoLivre = [math]::Round($disco.FreeSpace / 1GB, 1)
+        $ramTotal=[math]::Round([double]$os.TotalVisibleMemorySize / 1MB,1)
+        $ramLivre=[math]::Round([double]$os.FreePhysicalMemory / 1MB,1)
+        $discoTotal=[math]::Round([double]$disco.Size / 1GB,0)
+        $discoLivre=[math]::Round([double]$disco.FreeSpace / 1GB,1)
 
-        $uptime = (Get-Date) - $os.LastBootUpTime
-        $upTexto = ('{0}d {1}h {2}min' -f $uptime.Days, $uptime.Hours, $uptime.Minutes)
+        $upTexto='Indisponivel'
+        if ($os -and $os.LastBootUpTime) {
+            $uptime=(Get-Date)-$os.LastBootUpTime
+            $upTexto=('{0}d {1}h {2}min' -f $uptime.Days,$uptime.Hours,$uptime.Minutes)
+        }
 
         if ($global:UI.ContainsKey('InfoDiagnostico')) {
             $global:UI.InfoDiagnostico.Text = Obter-DiagnosticoLocal -OS $os -Disco $disco
         }
 
-        $gpuTexto = ($gpu | ForEach-Object { $_.Name }) -join ', '
+        $gpuTexto = if ($gpu.Count) { ($gpu | ForEach-Object { $_.Name }) -join ', ' } else { 'Indisponivel' }
 
         if ($global:UI.ContainsKey('InfoHost')) { $global:UI.InfoHost.Text = $env:COMPUTERNAME }
         if ($global:UI.ContainsKey('InfoSo')) { $global:UI.InfoSo.Text = (Nome-Windows) }
-        if ($global:UI.ContainsKey('InfoCpu')) { $global:UI.InfoCpu.Text = ('{0} ({1} nucleos / {2} threads)' -f $cpu.Name.Trim(), $cpu.NumberOfCores, $cpu.NumberOfLogicalProcessors) }
+        if ($global:UI.ContainsKey('InfoCpu')) { $global:UI.InfoCpu.Text = if ($cpu -and $cpu.Name) { ('{0} ({1} nucleos / {2} threads)' -f $cpu.Name.Trim(),$cpu.NumberOfCores,$cpu.NumberOfLogicalProcessors) } else { 'Indisponivel' } }
         if ($global:UI.ContainsKey('InfoGpu')) { $global:UI.InfoGpu.Text = $gpuTexto }
-        if ($global:UI.ContainsKey('InfoRam')) { $global:UI.InfoRam.Text = ('{0} GB (livre: {1} GB)' -f $ramTotal, $ramLivre) }
-        if ($global:UI.ContainsKey('InfoDisco')) { $global:UI.InfoDisco.Text = ('{0}: {1} GB livres de {2} GB' -f $env:SystemDrive, $discoLivre, $discoTotal) }
+        if ($global:UI.ContainsKey('InfoRam')) { $global:UI.InfoRam.Text = if ($os -and $os.TotalVisibleMemorySize -gt 0 -and $null -ne $os.FreePhysicalMemory -and $os.FreePhysicalMemory -ge 0 -and $os.FreePhysicalMemory -le $os.TotalVisibleMemorySize) { ('{0} GB (livre: {1} GB)' -f $ramTotal,$ramLivre) } else { 'Indisponivel' } }
+        if ($global:UI.ContainsKey('InfoDisco')) { $global:UI.InfoDisco.Text = if ($disco -and $disco.Size -gt 0 -and $null -ne $disco.FreeSpace -and $disco.FreeSpace -ge 0 -and $disco.FreeSpace -le $disco.Size) { ('{0}: {1} GB livres de {2} GB' -f $env:SystemDrive,$discoLivre,$discoTotal) } else { 'Indisponivel' } }
         if ($global:UI.ContainsKey('InfoUptime')) { $global:UI.InfoUptime.Text = $upTexto }
         if ($global:UI.ContainsKey('InfoRestore')) {
             try {

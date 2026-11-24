@@ -276,6 +276,29 @@ try {
         }
     }
     Passou 'presets e perfis respeitam compatibilidade e selecao manual'
+
+    foreach ($id in @('aplicativos-em-segundo-plano','efeitos-visuais','pastas-automaticas','caminhos-longos','numlock-inicializacao','bsod-detalhado','remover-home-galeria','mouse-precisao')) {
+        $item=@($catalogoTeste.tweaks | Where-Object {$_.id -eq $id})
+        if ($item.Count -ne 1 -or -not $item[0].apenasManual) {throw ('Ajuste contextual entrou em preset: '+$id)}
+    }
+    $barra=$catalogoTeste.tweaks | Where-Object {$_.id -eq 'limpar-barra-tarefas'}
+    if (@($barra.acoes | Where-Object {$_.nome -eq 'TaskbarAl'}).Count) {throw 'Ocultar icones nao deve alterar alinhamento.'}
+    $visual=$catalogoTeste.tweaks | Where-Object {$_.id -eq 'efeitos-visuais'}
+    if (@($visual.acoes | Where-Object {$_.nome -eq 'UserPreferencesMask'}).Count) {throw 'Mascara geral de preferencias sobrescrita.'}
+    foreach ($nivel in @('seguro','balanceado','agressivo')) {
+        $alvos=@{}
+        foreach ($item in @(Selecionar-TweaksPreset $nivel $catalogoTeste $true)) {
+            foreach ($acao in $item.acoes) {
+                if ($acao.tipo -ne 'registro') {continue}
+                $chave=([string]$acao.caminho+'|'+[string]$acao.nome).ToLowerInvariant()
+                $valor=ConvertTo-Json -InputObject $acao.dados -Compress
+                if ($alvos.ContainsKey($chave) -and $alvos[$chave] -cne $valor) {throw ('Preset com valores conflitantes: '+$nivel+' '+$chave)}
+                $alvos[$chave]=$valor
+            }
+        }
+    }
+    Passou 'auditoria inicial: presets sem ajustes contextuais e sem valores de registro contraditorios'
+
     # Usa executor simulado: nenhum ajuste real de registro ou servico.
     & {
         function Log { param([string]$Mensagem, [switch]$Erro) }
@@ -751,7 +774,7 @@ try {
                 @{nome='Microsoft Visual C++ 2015-2022 Redistributable (x64)';editor='Microsoft Corporation';cat='Dependencia';risco='Cautela'},
                 @{nome='NVIDIA Graphics Driver';editor='NVIDIA';cat='Driver';risco='Cautela'},
                 @{nome='Microsoft PowerToys';editor='Microsoft Corporation';cat='Opcional';risco='Normal'},
-                @{nome='Norton Antivirus';editor='Norton';cat='Seguranca';risco='Cautela'},
+                @{nome='Norton Antivirus';editor='Norton';cat='Seguranca';risco='Bloqueado'},
                 @{nome='Desconhecido';editor='Microsoft Corporation';cat='Desconhecido';risco='Revisar'}
             )
             $lista=@()
@@ -764,7 +787,7 @@ try {
             }
             $oculto=[pscustomobject]@{nome='Componente oculto';componenteSistema=$true;comando='teste.exe'}
             $protegido=[pscustomobject]@{nome='Programa';naoRemover=$true;comando='teste.exe'}
-            foreach ($pr in @($oculto,$protegido,$lista[1],$lista[2])) {
+            foreach ($pr in @($oculto,$protegido,$lista[1],$lista[2],$lista[6])) {
                 if ((Classificar-Programa $pr).risco -ne 'Bloqueado') { throw 'Protecao nao aplicada.' }
                 $recusou=$false
                 try { Desinstalar-Programa $pr } catch { $recusou=$_.Exception.Message -match 'Componente protegido' }
@@ -1021,6 +1044,40 @@ try {
             if (@(Get-Checkboxes $global:UI.ListaApps | Where-Object {$_.IsChecked}).Count) {throw 'Apps preselecionados.'}
             if (@(Get-Checkboxes $global:UI.ListaApps).Count -ne @($global:CatalogoApps.aplicativos).Count) {throw 'Catalogo incompleto.'}
             Passou 'interface pessoal ligada, sem apps preselecionados'
+            # Real runspace with synthetic data. No system AppX query or mutation.
+            $global:CatalogoUwp=[pscustomobject]@{pacotes=@([pscustomobject]@{nome='Teste';pacote='Example.Test';desc='Teste';remover=$true;so='ambos'})}
+            function Esperar-ConsultaUwp {
+                $sw=[Diagnostics.Stopwatch]::StartNew()
+                while ($global:ConsultaUwp.trabalho -and $sw.Elapsed.TotalSeconds -lt 15) {
+                    Start-Sleep -Milliseconds 50
+                    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+                }
+                if ($global:ConsultaUwp.trabalho) {throw 'Consulta nao encerrou.'}
+            }
+            Verificar-EstadoUwp -Codigo {Start-Sleep -Seconds 3; [pscustomobject]@{Name='Example.Test';PackageFullName='Example.Test_1'}}
+            $trabalho=$global:ConsultaUwp.trabalho
+            if (-not $trabalho -or $global:UI.BotaoRemoverUwp.IsEnabled) {throw 'Consulta nao iniciou ou permitiu remover durante carga.'}
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            foreach ($sufixo in @('Debloat','Instalar','Debloat')) {
+                $global:UI['BotaoNav'+$sufixo].RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+                if ($global:PaginaAtual -ne ('Pagina'+$sufixo)) {throw 'Navegacao travada durante consulta.'}
+            }
+            if ($sw.Elapsed.TotalSeconds -ge 2 -or -not [object]::ReferenceEquals($trabalho,$global:ConsultaUwp.trabalho)) {throw 'Navegacao aguardou ou duplicou consulta.'}
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'atualizado' -or @(Get-Checkboxes $global:UI.ListaUwp).Count -ne 1 -or -not $global:UI.BotaoRemoverUwp.IsEnabled) {throw 'Inventario sintetico nao exibido.'}
+            Verificar-EstadoUwp -Codigo {throw 'Cache nao reutilizado.'}
+            if ($global:ConsultaUwp.trabalho) {throw 'Cache ignorado.'}
+            Verificar-EstadoUwp -Forcar -Codigo {throw 'Falha simulada'}
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.BotaoRemoverUwp.IsEnabled -or @(Get-Checkboxes $global:UI.ListaUwp).Count) {throw 'Falha tratada como inventario valido.'}
+            Verificar-EstadoUwp -Forcar -Codigo {Start-Sleep -Seconds 10}
+            Cancelar-ConsultaUwp
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.BotaoRemoverUwp.IsEnabled) {throw 'Cancelamento nao bloqueou remocao.'}
+            Verificar-EstadoUwp -Forcar -Codigo {Start-Sleep -Seconds 10} -LimiteSegundos 1
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.InfoConsultaUwp.Text -notmatch 'Tempo limite') {throw 'Timeout nao sinalizado.'}
+            Passou 'Debloat assincrono: navegacao, deduplicacao, cache, erro, cancelamento e timeout'
             # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
             $global:Janela.Close()
             $global:ModoProtegido=$true
@@ -1056,6 +1113,131 @@ try {
         }
     }
 } catch { Falhou 'interface pessoal' $_.Exception.Message }
+
+# ---- triagem local pura, sem consultas ou alteracoes reais ----
+Secao 'saude do PC'
+try {
+    $os=[pscustomobject]@{TotalVisibleMemorySize=16MB;FreePhysicalMemory=512KB}
+    $disk=[pscustomobject]@{Size=200GB;FreeSpace=2GB}
+    $itens=@(Avaliar-SaudeLocal $os $disk 30 $true $true)
+    if ($itens.Count -ne 5) {throw 'Indicadores incompletos.'}
+    foreach ($id in @('ram','disco','reinicio')) {
+        if (($itens | Where-Object {$_.id -eq $id}).estado -ne 'atencao') {throw ('Alerta ausente: '+$id)}
+    }
+    if (($itens | Where-Object {$_.id -eq 'inicio'}).estado -ne 'informacao') {throw 'Quantidade de inicializacao confundida com impacto.'}
+    $itens=@(Avaliar-SaudeLocal $null $null $null $null $null)
+    if (@($itens | Where-Object {$_.estado -ne 'indisponivel'}).Count) {throw 'Dado ausente tratado como estado conhecido.'}
+    $os.FreePhysicalMemory=8MB; $disk.FreeSpace=100GB
+    $itens=@(Avaliar-SaudeLocal $os $disk 0 $false $false)
+    if (@($itens | Where-Object {$_.estado -ne 'informacao'}).Count) {throw 'Alerta falso em amostra normal.'}
+    $os.FreePhysicalMemory=$null; $disk.FreeSpace=$null
+    $itens=@(Avaliar-SaudeLocal $os $disk 0 $false $false)
+    if (@($itens | Where-Object {$_.estado -eq 'indisponivel'}).Count -ne 2) {throw 'Metadados parciais confundidos com zero.'}
+    Passou 'triagem local diferencia alerta, informacao e dado indisponivel'
+} catch { Falhou 'saude do PC' $_.Exception.Message }
+
+# ---- F2: barreiras por alvo; sem mutacoes no host de teste ----
+Secao 'protecao por alvo'
+try {
+    foreach ($caminho in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer','hklm:\SOFTWARE\Microsoft\PolicyManager\current\device\Power','HKLM:\SYSTEM\ControlSet001\Services\WinDefend','HKLM:\SYSTEM\CurrentControlSet\Control\Lsa','HKCU:\Software\..\Policies')) {
+        $a=[pscustomobject]@{tipo='registro';caminho=$caminho;nome='teste';dados=1;tipoValor='DWord'}
+        if ((Avaliar-ProtecaoAlvo $a).estado -ne 'bloqueado') {throw ('Alvo sensivel aceito: '+$caminho)}
+    }
+    $a=[pscustomobject]@{tipo='registro';caminho='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced';nome='HideFileExt';dados=0;tipoValor='DWord'}
+    if ((Avaliar-ProtecaoAlvo $a).estado -ne 'avaliacao-adicional') {throw 'Preferencia comum bloqueada pela barreira de alvo.'}
+    foreach ($nome in @('WinDefend','BFE','MpsSvc','wuauserv','Sense','IntuneManagementExtension','*')) {
+        if ((Avaliar-ProtecaoAlvo ([pscustomobject]@{tipo='servico';nome=$nome;inicio='Disabled'})).estado -ne 'bloqueado') {throw ('Servico protegido aceito: '+$nome)}
+    }
+    & {
+        function Get-Service {[CmdletBinding()]param([string]$Name) [pscustomobject]@{DependentServices=@([pscustomobject]@{Name='Dependente';Status='Stopped'})}}
+        $recusado=$false
+        try {Confirmar-DependenciasServico 'SysMain' 'Disabled'} catch {$recusado=$_.Exception.Message -match 'dependentes'}
+        if (-not $recusado) {throw 'Servico com dependente parado aceito.'}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $true}
+        $recusado=$false
+        try {Confirmar-PoliticaEnergiaLocal} catch {$recusado=$_.Exception.Message -match 'politica de energia'}
+        if (-not $recusado) {throw 'Politica de energia ignorada.'}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) throw 'acesso negado'}
+        $recusado=$false
+        try {Confirmar-PoliticaEnergiaLocal} catch {$recusado=$_.Exception.Message -match 'inconclusiva'}
+        if (-not $recusado) {throw 'Falha de consulta de energia aceita.'}
+    }
+    & {
+        $script:bloqueioAlvo=0
+        function Log {param($Mensagem,[switch]$Erro) if ($Erro -and $Mensagem -match 'politica') {$script:bloqueioAlvo++}}
+        function Registrar-Jornal {throw 'Nao deve iniciar journal para alvo bloqueado.'}
+        function Ler-ValorRegistro {throw 'Nao deve consultar registro antes de bloquear alvo.'}
+        Executar-Acao ([pscustomobject]@{tipo='registro';caminho='HKLM:\SOFTWARE\Policies\Microsoft\Edge';nome='teste';tipoValor='DWord';dados=1}) 'teste'
+        if ($script:bloqueioAlvo -ne 1) {throw 'Executor nao aplicou a barreira de alvo.'}
+    }
+    Passou 'barreira de alvo bloqueia politicas, servicos protegidos e consultas inconclusivas de energia'
+} catch { Falhou 'protecao por alvo' $_.Exception.Message }
+
+# ---- F3: identidade de novos journals e compatibilidade legada ----
+Secao 'contexto de journal'
+try {
+    $ctx=[pscustomobject]@{usuarioSid='S-1-5-21-1';maquina='11111111-1111-1111-1111-111111111111';registro64=$true}
+    $j=[pscustomobject]@{versaoEsquema=2;contexto=$ctx;itens=@()}
+    Confirmar-ContextoJournal $j $ctx
+    Confirmar-ContextoJournal ([pscustomobject]@{itens=@()}) $ctx
+    foreach ($outro in @(
+        [pscustomobject]@{usuarioSid='S-1-5-21-2';maquina=$ctx.maquina;registro64=$true},
+        [pscustomobject]@{usuarioSid=$ctx.usuarioSid;maquina='22222222-2222-2222-2222-222222222222';registro64=$true},
+        [pscustomobject]@{usuarioSid=$ctx.usuarioSid;maquina=$ctx.maquina;registro64=$false},
+        [pscustomobject]@{usuarioSid=$ctx.usuarioSid;maquina=$ctx.maquina;registro64='True'}
+    )) {
+        $recusou=$false
+        try {Confirmar-ContextoJournal $j $outro} catch {$recusou=$_.Exception.Message -match 'outro usuario'}
+        if (-not $recusou) {throw 'Contexto divergente aceito.'}
+    }
+    foreach ($invalido in @([pscustomobject]@{versaoEsquema=99;contexto=$ctx},[pscustomobject]@{versaoEsquema=2})) {
+        $recusou=$false
+        try {Confirmar-ContextoJournal $invalido $ctx} catch {$recusou=$_.Exception.Message -match 'Esquema'}
+        if (-not $recusou) {throw 'Esquema invalido aceito.'}
+    }
+    & {
+        function Log {param($Mensagem,[switch]$Erro)}
+        function Ler-JSON {param($Caminho) $j}
+        function Obter-ContextoJournal {[pscustomobject]@{usuarioSid='S-1-5-21-3';maquina=$ctx.maquina;registro64=$true}}
+        $script:escritasJournal=0
+        function Gravar-JSONAtomico {$script:escritasJournal++; throw 'Nao deve gravar.'}
+        function Desfazer-Item {$script:escritasJournal++; throw 'Nao deve reverter.'}
+        if ((Reverter-Sessao 'teste.json') -or $script:escritasJournal) {throw 'Reversao aceitou contexto divergente.'}
+        $recusou=$false
+        try {Confirmar-ReversaoManual 'teste.json' 0} catch {$recusou=$_.Exception.Message -match 'outro usuario'}
+        if (-not $recusou -or $script:escritasJournal) {throw 'Confirmacao manual aceitou contexto divergente.'}
+    }
+    Passou 'novos journals vinculados ao usuario, maquina e visao; esquema legado preservado'
+} catch {Falhou 'contexto de journal' $_.Exception.Message}
+
+# ---- identificador MSI e integridade do desinstalador ----
+Secao 'identidade de desinstalacao'
+try {
+    $id='{11111111-1111-1111-1111-111111111111}'
+    $p=[pscustomobject]@{msi=$true;codigoMsi=$id;chavePs=('HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\'+$id)}
+    if ((Obter-CodigoMsiDesinstalacao $p ('/I'+$id)) -ne $id) {throw 'Produto MSI valido recusado.'}
+    foreach ($argsMsi in @('/x {22222222-2222-2222-2222-222222222222}',('/x '+$id+' TRANSFORMS=outro.mst'),('/x '+$id+' /x '+$id),('/i '+$id+' /forcerestart'))) {
+        $recusou=$false
+        try {$null=Obter-CodigoMsiDesinstalacao $p $argsMsi} catch {$recusou=$true}
+        if (-not $recusou) {throw ('Comando MSI indevido aceito: '+$argsMsi)}
+    }
+    $p.codigoMsi='{22222222-2222-2222-2222-222222222222}'
+    $recusou=$false
+    try {$null=Obter-CodigoMsiDesinstalacao $p ('/x '+$p.codigoMsi)} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Produto MSI divergente da chave aceito.'}
+    & {
+        function Get-Item {[CmdletBinding()]param([string]$LiteralPath,[switch]$Force) [pscustomobject]@{Attributes=[IO.FileAttributes]::ReparsePoint}}
+        function Get-AuthenticodeSignature {throw 'Nao deve verificar assinatura de caminho redirecionado.'}
+        $recusou=$false
+        try {$null=Confirmar-ExecutavelDesinstalacao (Join-Path $env:ProgramFiles 'Teste\uninstall.exe')} catch {$recusou=$_.Exception.Message -match 'redirecionado'}
+        if (-not $recusou) {throw 'Caminho redirecionado aceito.'}
+    }
+    Passou 'produto MSI vinculado ao registro e redirecionamento de executavel recusado'
+} catch {Falhou 'identidade de desinstalacao' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

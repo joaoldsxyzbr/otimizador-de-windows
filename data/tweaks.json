@@ -188,7 +188,7 @@
     {
       "id": "wpbt",
       "nome": "Desativar WPBT (tabela binaria do fabricante)",
-      "desc": "WPBT permite que o fabricante do PC execute programas no boot (anti-roubo, bloatware, software sem consentimento). Riscos de seguranca conhecidos. Recomendado.",
+      "desc": "WPBT permite ao fabricante disponibilizar programas durante o boot. Desativar pode afetar software OEM legitimo. Nao e recomendacao geral.",
       "categoria": "Privacidade",
       "niveis": [
         "seguro",
@@ -375,7 +375,7 @@
     {
       "id": "sysmain",
       "nome": "Desativar SysMain (Superfetch)",
-      "desc": "Servico de pre-carregamento de apps. Em SSD normalmente nao faz diferenca positiva; em HD antigo pode ajudar a manter. Desative se o disco ficar 100% ocupado.",
+      "desc": "Somente considere alterar apos diagnosticar atividade persistente atribuida ao SysMain. Disco ocupado, por si so, nao comprova causa.",
       "categoria": "Desempenho",
       "niveis": [
         "agressivo"
@@ -398,7 +398,7 @@
     {
       "id": "pesquisa-indexacao",
       "nome": "Desativar indexacao de busca (WSearch)",
-      "desc": "AVISO: buscas de arquivos ficam muito mais lentas. Util principalmente em HD mecanico com disco sempre em 100%. Reversivel.",
+      "desc": "Pode tornar busca de arquivos e Outlook mais lentos. Revise o escopo da indexacao primeiro; nao desative apenas por uso elevado do disco.",
       "categoria": "Desempenho",
       "niveis": [
         "agressivo"
@@ -421,7 +421,7 @@
     {
       "id": "aplicativos-em-segundo-plano",
       "nome": "Desativar apps da Store em segundo plano",
-      "desc": "Impede apps da Microsoft Store de rodarem em segundo plano, economizando memoria e bateria.",
+      "desc": "Tenta restringir atividade em segundo plano de aplicativos da Store nas builds compativeis. Pode atrasar sincronizacao e notificacoes; prefira ajustes por aplicativo.",
       "categoria": "Desempenho",
       "niveis": [
         "balanceado",
@@ -441,13 +441,14 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "efeitos-visuais",
-      "nome": "Efeitos visuais: desempenho maximo",
-      "desc": "Remove transparencias, animacoes e sombras do Windows em troca de fluidez. O visual fica mais simples/estilo classico.",
-      "categoria": "Desempenho",
+      "nome": "Reduzir efeitos visuais selecionados",
+      "desc": "Altera algumas animacoes e efeitos visuais. Preserva a mascara geral de preferencias do usuario. O efeito depende da build; ganho de desempenho nao medido.",
+      "categoria": "Preferencias",
       "niveis": [
         "agressivo"
       ],
@@ -508,34 +509,19 @@
           "nome": "EnableAeroPeek",
           "tipoValor": "DWord",
           "dados": "0"
-        },
-        {
-          "tipo": "registro",
-          "caminho": "HKCU:\\Control Panel\\Desktop",
-          "nome": "UserPreferencesMask",
-          "tipoValor": "Binary",
-          "dados": [
-            144,
-            18,
-            3,
-            128,
-            16,
-            0,
-            0,
-            0
-          ]
         }
       ],
       "impacto": "Altera a aparencia e animacoes; ganho de desempenho nao medido.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "energia-alto-desempenho",
       "nome": "Plano de energia: alto desempenho",
-      "desc": "Ativa o plano de energia de alto desempenho do Windows. Em notebooks reduz a bateria; recomendado para desktops.",
+      "desc": "Tenta ativar o plano de alto desempenho quando disponivel. Pode aumentar consumo e temperatura; avalie a carga de trabalho, inclusive em desktops.",
       "categoria": "Desempenho",
       "niveis": [
         "balanceado",
@@ -582,8 +568,8 @@
     },
     {
       "id": "limpar-barra-tarefas",
-      "nome": "Limpar barra de tarefas (chat, Copilot, Task View)",
-      "desc": "Esconde os icones de chat/Teams, Copilot e Task View da barra de tarefas. Reversivel. Windows 11.",
+      "nome": "Ocultar chat e Visao de Tarefas",
+      "desc": "Tenta ocultar os icones de chat e Visao de Tarefas em builds compativeis do Windows 11. Nao altera o alinhamento nem promete ocultar Copilot.",
       "categoria": "Barra de tarefas e menu Iniciar",
       "niveis": [
         "balanceado",
@@ -602,13 +588,6 @@
           "tipo": "registro",
           "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
           "nome": "ShowTaskViewButton",
-          "tipoValor": "DWord",
-          "dados": "0"
-        },
-        {
-          "tipo": "registro",
-          "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-          "nome": "TaskbarAl",
           "tipoValor": "DWord",
           "dados": "0"
         }
@@ -747,12 +726,13 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "caminhos-longos",
       "nome": "Habilitar caminhos de arquivo longos",
-      "desc": "Permite caminhos com mais de 260 caracteres no Explorador e em apps que suportam.",
+      "desc": "Habilita suporte a caminhos longos para aplicativos compativeis com esse recurso. Nao garante suporte pelo Explorer ou por todos os aplicativos.",
       "categoria": "Sistema",
       "niveis": [
         "balanceado",
@@ -772,7 +752,8 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito. Windows 10 1607 ou posterior; aplicativos precisam suportar caminhos longos.",
       "buildMinima": 14393,
-      "compatNivel": "requisito-base"
+      "compatNivel": "requisito-base",
+      "apenasManual": true
     },
     {
       "id": "modo-escuro",
@@ -834,7 +815,8 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "bsod-detalhado",
@@ -865,7 +847,8 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "notificacoes",
@@ -1114,7 +1097,8 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "arquivos-ocultos",
@@ -1220,7 +1204,7 @@
     {
       "id": "mouse-precisao",
       "nome": "Desativar aceleracao do mouse",
-      "desc": "Cursor um-para-um com o movimento da mao, sem a curva de aceleracao do Windows. Padrao entre quem trabalha com precisao; reverta se sentir estranho.",
+      "desc": "Altera a aceleracao do ponteiro. E uma preferencia de entrada, nao uma melhoria universal de precisao.",
       "categoria": "Preferencias",
       "niveis": [
         "balanceado"
@@ -1253,12 +1237,13 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true
     },
     {
       "id": "bloquear-coinstaladores",
       "nome": "Bloquear instalacao automatica de software do fabricante",
-      "desc": "Ao plugar dispositivo (mouse, teclado, monitor), o Windows para de baixar e instalar sozinho os programas empacotados pelo fabricante (Razer, Logitech etc). O hardware funciona normalmente; driver especifico voce instala na hora que quiser.",
+      "desc": "Altera busca de drivers e coinstaladores. Pode impedir instalacao de componentes ou utilitarios necessarios; nao garante funcionamento do hardware.",
       "categoria": "Sistema",
       "niveis": [
         "balanceado"
