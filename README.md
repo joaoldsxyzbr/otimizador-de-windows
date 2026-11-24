@@ -12,7 +12,7 @@ irm https://raw.githubusercontent.com/joaoldsxyzbr/otimizador-de-windows/main/ab
 
 [Releases e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases) | [Codigo V2 em desenvolvimento](https://github.com/joaoldsxyzbr/otimizador-de-windows/tree/desenvolvimento-v2)
 
-O comando executa o launcher remoto da main sem assinatura digital; o SHA256 valida o arquivo do aplicativo, nao autentica o launcher. Revise a origem e o codigo. Em computador empresarial, solicite autorizacao do TI antes de executar. Para uso pessoal autorizado, baixe o script e o SHA256 da release indicada, confira o hash e execute com `-Pessoal` em Windows PowerShell elevado. Sinais de gerenciamento impedem alteracoes.
+O comando executa o launcher remoto da main sem assinatura digital; o SHA256 valida o arquivo do aplicativo, nao autentica o launcher. Revise a origem e o codigo. Em computador empresarial, solicite autorizacao do TI antes de executar. Para uso pessoal autorizado, baixe o script e o SHA256 da release indicada, confira o hash e execute com `-Pessoal` em Windows PowerShell elevado. Sinais fortes de gerenciamento ou consultas obrigatorias inconclusivas ainda impedem alteracoes. Antivirus comum e perfil VPN, isoladamente, nao classificam a maquina; seus componentes continuam protegidos na desinstalacao.
 
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
@@ -41,7 +41,7 @@ O botao Consultar e baixar versao oficial mostra releases estavel/candidata e pe
 
 1. baixe/clone o repo e abra a pasta
 2. (opcional, recomendado) rode a bateria de testes: `powershell -ExecutionPolicy Bypass -File .\testar.ps1`
-3. de dois cliques em `rodar-como-admin.bat` para diagnostico sem elevacao; para uso pessoal autorizado, abra Windows PowerShell como administrador e execute `.\otimizadorpc.ps1`.
+3. de dois cliques em `rodar-como-admin.bat` para diagnostico sem elevacao; para uso pessoal autorizado, abra Windows PowerShell como administrador e execute `.\otimizadorpc.ps1 -Pessoal`.
 
 nao quer janela? modo cli:
 
@@ -63,7 +63,7 @@ nao quer janela? modo cli:
 
 ## desenvolvimento v2 (pre-release)
 
-- perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (na interface, selecao essencial; CLI ainda usa a logica anterior). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
 - tema claro/escuro em Config, aplicado ao reabrir. Preferencia salva na pasta protegida do app, sem alterar tema do Windows.
 - progresso de ajustes, debloat, recursos e quarentena com cancelamento cooperativo entre acoes. Console de manutencao mantem o dispatcher responsivo enquanto aguarda o processo. Nao interrompe comandos administrativos em andamento.
 - inventario com oito abas pesquisaveis e ordenaveis: inicializacao, Run do usuario, servicos, tarefas, discos, rede, drivers e processos; exportacao JSON e atalhos nativos. Acoes com journal limitadas a remover Run do usuario, inicio manual de servicos do catalogo e desativar tarefas nao Microsoft em estado Ready. Alteracoes nativas nao entram no journal. Ajustes exibem rotulos de cautela.
@@ -97,7 +97,7 @@ nao quer janela? modo cli:
 - **nunca** desativa windows defender, firewall ou atualizacoes de seguranca
 - nao remove edge/onedrive
 - cria ponto de restauracao antes de aplicar (opcional, marcado por padrao)
-- detecta pc gerenciado por empresa (dominio/av corporativo) e avisa
+- preserva protecoes diante de dominio, MDM, agentes organizacionais e politicas; antivirus domestico isolado nao implica gerenciamento
 
 documentacao completa: [leia-me.md](leia-me.md)
 
@@ -121,7 +121,7 @@ Manutencao: limpeza rapida mostra estimativa, amostra de arquivos e confirmacao 
 
 Sem elevacao automatica. Abra o Windows PowerShell 5.1 normal para diagnostico; use -Diagnostico para forcar somente leitura mesmo elevado. Sinais de dominio, Entra, inscricao MDM, politica de atualizacao e agentes de gerenciamento/seguranca ou consultas inconclusivas bloqueiam operacoes mutaveis. O modo protegido mostra somente Inicio, inventario e monitor locais, sem exportacao, download de atualizacao, logs persistentes, journals ou criacao de pasta de estado. A deteccao nao e certificacao de ambiente pessoal; exige autorizacao da empresa. Nao altera nem contorna politicas de TI. Para uso pessoal autorizado, abra explicitamente PowerShell como administrador. O modo CLI -Simular nao grava estado; presets reais exigem modo pessoal e novo ponto de restauracao confirmado. O app nao ativa a protecao do sistema automaticamente.
 
-RC.7: diagnostico avancado local de edicao/build, discos fisicos, contadores de confiabilidade quando disponiveis, dispositivos com codigo PnP e eventos agregados limitados. VPN nativa, politica de proxy e autoinscricao de certificados sao sinais adicionais de protecao, sem coletar URLs ou certificados. Config mostra estado real dos recursos opcionais; Atualizacoes consulta historico local WUA e politicas registradas, sem editar politicas novas. Journals anteriores permanecem disponiveis no modo pessoal. Consultas indisponiveis nao equivalem a estado saudavel.
+RC.7: diagnostico avancado local de edicao/build, discos fisicos, contadores de confiabilidade quando disponiveis, dispositivos com codigo PnP e eventos agregados limitados. Politica de proxy e autoinscricao de certificados sao sinais adicionais de protecao, sem coletar URLs ou certificados. A presenca de VPN nativa deixou de ser sinal global; clientes VPN reconhecidos ficam protegidos no desinstalador. Config mostra estado real dos recursos opcionais; Atualizacoes consulta historico local WUA e politicas registradas, sem editar politicas novas. Journals anteriores permanecem disponiveis no modo pessoal. Consultas indisponiveis nao equivalem a estado saudavel.
 
 Instalar: nenhum app preselecionado. IDs e fontes explicitos, instalacao sem upgrade automatico e atualizacao apenas dos selecionados, com previa e confirmacao. Consulta WinGet nao executa upgrades; pode acessar fontes e solicitar aceite. Exige executavel do App Installer registrado e assinatura Microsoft valida; se indisponivel, use a Store. Nao executa instaladores de origem arbitraria. Energia: journal inclui plano anterior e alvo; preserva conflito posterior.
 

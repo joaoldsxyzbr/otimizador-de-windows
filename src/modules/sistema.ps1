@@ -1,6 +1,13 @@
 # sistema.ps1 - preenche a pagina inicial com informacoes do pc
 
 # detecta se o pc e gerenciado por empresa (dominio, azure ad, av corporativo)
+# Common antivirus brands alone do not establish organizational management.
+function Testar-AgenteGerenciamento {
+    param($Servico)
+    $texto=([string]$Servico.Name+' '+[string]$Servico.DisplayName)
+    return ($texto -match '(?i)crowdstrike|falcon sensor|sentinelone|sentinel agent|carbon black|intunemanagementextension|ccmexec|tanium|(?:^|\s)sense(?:\s|$)|defender for endpoint|configuration manager client|trellix agent|sophos management')
+}
+
 function Detectar-AmbienteTrabalho {
     $achados=@()
     try {
@@ -29,10 +36,8 @@ function Detectar-AmbienteTrabalho {
         }
     } catch { $achados+='Inconclusivo: consulta de gerenciamento/politicas indisponivel.' }
     try {
-        $avs=@(Get-Service -ErrorAction Stop | Where-Object {
-            ($_.Name+' '+$_.DisplayName) -match '(?i)mcafee|symantec|norton|crowdstrike|sentinel|sophos|trend micro|trendmicro|kaspersky|bitdefender|eset|malwarebytes|trellix|carbon black|cylance|f-secure|webroot|palo alto|intunemanagementextension|ccmexec|tanium|sense\b'
-        })
-        if ($avs.Count -gt 0) { $achados+='Sinal de seguranca de terceiros ou gerenciamento; pode ser PC pessoal.' }
+        $agentes=@(Get-Service -ErrorAction Stop | Where-Object {Testar-AgenteGerenciamento $_})
+        if ($agentes.Count -gt 0) { $achados+='Sinal de agente de gerenciamento ou seguranca de endpoint organizacional.' }
     } catch { $achados+='Inconclusivo: consulta de agentes/servicos indisponivel.' }
     $achados+=@(Obter-SinaisRedeGerenciada)
     return @($achados | Sort-Object -Unique)
@@ -55,12 +60,7 @@ function Obter-SinaisRedeGerenciada {
             if ($v.AEPolicy -gt 0) { $sinais+='Sinal de politica de inscricao automatica de certificados.' }
         }
     } catch { $sinais+='Inconclusivo: politicas de rede/certificados.' }
-    try {
-        if (Get-Command Get-VpnConnection -ErrorAction SilentlyContinue) {
-            $perfis=@(Get-VpnConnection -ErrorAction Stop)+@(Get-VpnConnection -AllUserConnection -ErrorAction Stop)
-            if ($perfis.Count -gt 0) { $sinais+='Perfil VPN nativo detectado; pode ser pessoal.' }
-        } else { $sinais+='Inconclusivo: consulta VPN nativa indisponivel.' }
-    } catch { $sinais+='Inconclusivo: consulta VPN nativa falhou.' }
+    # VPN pode ser pessoal; sua mera presenca nao classifica a maquina.
     return @($sinais | Sort-Object -Unique)
 }
 

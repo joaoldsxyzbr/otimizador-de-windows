@@ -20,6 +20,8 @@ function Classificar-Programa {
         $grupo='Sistema'; $risco='Bloqueado'; $finalidade='Componente, atualizacao ou entrada protegida'; $motivo='Indicador de sistema/nao remocao no registro ou nome de componente protegido conhecido.'
     } elseif ($n -match '(?i)\b(CrowdStrike|Falcon Sensor|SentinelOne|Microsoft Intune|Intune Management Extension|Configuration Manager Client|Microsoft Defender for Endpoint|Tanium|Carbon Black|Endpoint Detection|Endpoint Agent|EDR Agent)\b') {
         $grupo='Sistema'; $risco='Bloqueado'; $finalidade='Possivel agente de seguranca ou gerenciamento'; $motivo='Agente corporativo conhecido ou suspeito; remover pelo OtimizadorPC nao e permitido.'
+    } elseif ($n -match '(?i)\b(VPN|GlobalProtect|AnyConnect|Cisco Secure Client|FortiClient|Zscaler|WireGuard|OpenVPN|Tailscale|ZeroTier)\b') {
+        $grupo='Seguranca'; $risco='Bloqueado'; $finalidade='Conectividade ou acesso remoto'; $motivo='Cliente de rede/VPN reconhecido; preserve o acesso e use o fluxo autorizado do Windows ou fabricante.'
     } elseif ($n -match '\b(driver|drivers|driver package|chipset|graphics driver|audio driver|display driver|wireless driver)\b' -or $n -match '^(Realtek (?:High Definition Audio|Audio|Ethernet|PCIe)|NVIDIA Graphics Driver|AMD (?:Chipset|Software: Adrenalin Edition))\b') {
         $grupo='Driver'; $risco='Cautela'; $finalidade='Hardware, video, audio ou rede'; $motivo='Nome sugere driver ou pacote de hardware; remover pode prejudicar dispositivos.'
     } elseif ($n -match '\b(visual c\+\+|redistributable|runtime|directx|xna|physx|openal)\b' -or $n -match '^(Microsoft )?\.NET\b|^Microsoft ASP\.NET\b|^Java \d|^Microsoft Windows Desktop Runtime\b') {

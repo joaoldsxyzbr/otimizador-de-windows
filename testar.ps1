@@ -785,6 +785,9 @@ try {
                 $pr | Add-Member -NotePropertyName classificacao -NotePropertyValue $info
                 $lista += $pr
             }
+            foreach ($vpn in @('Cisco AnyConnect','FortiClient VPN','WireGuard','GlobalProtect')) {
+                if ((Classificar-Programa ([pscustomobject]@{nome=$vpn;comando='teste.exe'})).podeDesinstalar) {throw 'Cliente VPN reconhecido habilitado para remocao.'}
+            }
             $oculto=[pscustomobject]@{nome='Componente oculto';componenteSistema=$true;comando='teste.exe'}
             $protegido=[pscustomobject]@{nome='Programa';naoRemover=$true;comando='teste.exe'}
             foreach ($pr in @($oculto,$protegido,$lista[1],$lista[2],$lista[6])) {
@@ -906,6 +909,18 @@ try {
 Secao 'modo corporativo'
 try {
     if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Corporativo/Protetivo' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @() $true) -ne 'Pessoal (sem sinais detectados)' -or (Resolver-ModoOtimizador $true $false @('MDM') $true) -ne 'Corporativo/Protetivo') { throw 'Decisao de modo incorreta.' }
+    foreach ($nome in @('Norton Antivirus','ESET Service','Malwarebytes Service','Bitdefender','Kaspersky','Avast','McAfee','Sophos Home')) {
+        if (Testar-AgenteGerenciamento ([pscustomobject]@{Name=$nome;DisplayName=$nome})) {throw ('Antivirus comum tratado como gerenciamento: '+$nome)}
+    }
+    foreach ($nome in @('IntuneManagementExtension','CcmExec','Sense','CrowdStrike Falcon Sensor','SentinelOne','Tanium Client','Trellix Agent')) {
+        if (-not (Testar-AgenteGerenciamento ([pscustomobject]@{Name=$nome;DisplayName=$nome}))) {throw ('Agente organizacional nao reconhecido: '+$nome)}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $false}
+        function Get-VpnConnection {throw 'Consulta VPN nao deve classificar o computador.'}
+        if (@(Obter-SinaisRedeGerenciada).Count) {throw 'Perfil VPN isolado bloqueou o modo.'}
+    }
+    Passou 'antivirus comum e VPN isolada nao definem gerenciamento; agentes conhecidos preservados'
     $modoAntes=$global:ModoProtegido
     try {
         $global:ModoProtegido=$true
