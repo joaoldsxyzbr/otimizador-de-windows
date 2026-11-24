@@ -404,25 +404,6 @@
       ]
     },
     {
-      "id": "svchost-splitting",
-      "nome": "Desativar divisao do svchost.exe",
-      "desc": "Reduz o numero de processos svchost e o uso de memoria. Recomendado em PCs com 12 GB de RAM ou menos. Pode interferir em servicos Xbox. Precisa reiniciar. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
-      "verificar": "$v = (Get-ItemProperty 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -ErrorAction SilentlyContinue).SvcHostSplitThresholdInKB; ($null -ne $v) -and ($v -ne 3670016)",
-      "categoria": "Desempenho",
-      "niveis": [
-        "agressivo"
-      ],
-      "so": "ambos",
-      "acoes": [
-        {
-          "tipo": "comando",
-          "executar": "$mem = (Get-CimInstance Win32_PhysicalMemory | Measure-Object Capacity -Sum).Sum / 1KB; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -Value $mem -Type DWord",
-          "reverter": "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control' -Name SvcHostSplitThresholdInKB -Value 3670016 -Type DWord -Force"
-        }
-      ],
-      "apenasManual": true
-    },
-    {
       "id": "efeitos-visuais",
       "nome": "Efeitos visuais: desempenho maximo",
       "desc": "Remove transparencias, animacoes e sombras do Windows em troca de fluidez. O visual fica mais simples/estilo classico.",
@@ -589,7 +570,6 @@
       "id": "menu-contexto-classico",
       "nome": "Menu de contexto classico do Explorer",
       "desc": "Tenta restaurar o menu de clique-direito classico (com Copiar/Colar direto) do Windows 11. Em builds muito novas da Microsoft pode nao ter efeito.",
-      "verificar": "Test-Path 'HKCU:\\Software\\Classes\\CLSID\\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\\InprocServer32'",
       "categoria": "Barra de tarefas e menu Iniciar",
       "niveis": [
         "balanceado",
@@ -603,26 +583,6 @@
           "nome": "",
           "tipoValor": "String",
           "dados": ""
-        }
-      ],
-      "apenasManual": true
-    },
-    {
-      "id": "f8-menu-inicial",
-      "nome": "Habilitar menu de boot F8 (modo de seguranca)",
-      "desc": "Reativa a tecla F8 no boot para entrar em modo de seguranca, como no Windows 7. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
-      "verificar": "(bcdedit /enum `{current`} 2>&1 | Out-String) -match 'bootmenupolicy\\s+Legacy'",
-      "categoria": "Barra de tarefas e menu Iniciar",
-      "niveis": [
-        "balanceado",
-        "agressivo"
-      ],
-      "so": "ambos",
-      "acoes": [
-        {
-          "tipo": "comando",
-          "executar": "bcdedit /set `{current`} bootmenupolicy legacy",
-          "reverter": "bcdedit /set `{current`} bootmenupolicy standard"
         }
       ],
       "apenasManual": true
@@ -694,7 +654,6 @@
       "id": "pastas-automaticas",
       "nome": "Desativar deteccao automatica de pastas",
       "desc": "Define o tipo padrao de pasta sem apagar as configuracoes existentes do Explorer. Pode exigir relogar.",
-      "verificar": "Test-Path 'HKCU:\\Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\Shell\\Bags\\AllFolders\\Shell'",
       "categoria": "Explorador de arquivos",
       "niveis": [
         "balanceado",
@@ -808,38 +767,6 @@
           "dados": "1"
         }
       ]
-    },
-    {
-      "id": "hibernacao",
-      "nome": "Desativar hibernacao (libera GBs no disco)",
-      "desc": "AVISO: tambem desativa a inicializacao rapida. Recomendado para desktops; em notebook a hibernacao pode ser util. O arquivo hiberfil.sys e apagado, liberando espaco. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
-      "categoria": "Sistema",
-      "niveis": [
-        "agressivo"
-      ],
-      "so": "ambos",
-      "acoes": [
-        {
-          "tipo": "registro",
-          "caminho": "HKLM:\\System\\CurrentControlSet\\Control\\Session Manager\\Power",
-          "nome": "HibernateEnabled",
-          "tipoValor": "DWord",
-          "dados": "0"
-        },
-        {
-          "tipo": "registro",
-          "caminho": "HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FlyoutMenuSettings",
-          "nome": "ShowHibernateOption",
-          "tipoValor": "DWord",
-          "dados": "0"
-        },
-        {
-          "tipo": "comando",
-          "executar": "powercfg.exe /hibernate off",
-          "reverter": "powercfg.exe /hibernate on"
-        }
-      ],
-      "apenasManual": true
     },
     {
       "id": "notificacoes",
@@ -1076,34 +1003,6 @@
       ]
     },
     {
-      "id": "rdp-sem-aviso",
-      "nome": "Sem aviso em arquivos RDP nao assinados",
-      "apenasManual": true,
-      "desc": "AVISO: reduz avisos de seguranca ao abrir arquivos RDP nao assinados. Pode facilitar abertura de conexoes nao confiaveis. Nao recomendado; apenas selecao manual.",
-      "categoria": "Sistema",
-      "niveis": [
-        "balanceado",
-        "agressivo"
-      ],
-      "so": "ambos",
-      "acoes": [
-        {
-          "tipo": "registro",
-          "caminho": "HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\Terminal Services\\Client",
-          "nome": "RedirectionWarningDialogVersion",
-          "tipoValor": "DWord",
-          "dados": "1"
-        },
-        {
-          "tipo": "registro",
-          "caminho": "HKCU:\\SOFTWARE\\Microsoft\\Terminal Server Client",
-          "nome": "RdpLaunchConsentAccepted",
-          "tipoValor": "DWord",
-          "dados": "1"
-        }
-      ]
-    },
-    {
       "id": "verboso-logon",
       "nome": "Mensagens detalhadas no logon",
       "desc": "Mostra os passos detalhados de inicializacao e desligamento no lugar da tela giratoria Bem-vindo. Bom pra diagnosticar lentidao de boot.",
@@ -1239,24 +1138,6 @@
           "dados": "32"
         }
       ]
-    },
-    {
-      "id": "armazenamento-reservado-off",
-      "nome": "Desativar armazenamento reservado do Windows",
-      "desc": "O Windows guarda de 7 a 10 GB so para updates e temporarios; isso devolve o espaco pra voce. Demora alguns segundos (DISM) e convem religar antes de grandes atualizacoes de versao. Somente manual: a reversao deste comando nao garante o estado anterior exato.",
-      "categoria": "Sistema",
-      "niveis": [
-        "agressivo"
-      ],
-      "so": "ambos",
-      "acoes": [
-        {
-          "tipo": "comando",
-          "executar": "DISM /Online /Set-ReservedStorageState /State:Disabled",
-          "reverter": "DISM /Online /Set-ReservedStorageState /State:Enabled"
-        }
-      ],
-      "apenasManual": true
     },
     {
       "id": "ia-copilot",

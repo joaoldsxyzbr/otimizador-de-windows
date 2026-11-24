@@ -78,7 +78,7 @@ try {
 
 if ($null -ne $tweaks) {
     $problemas = @()
-    $tiposAcao = @('registro','servico','comando','appx','recurso','energia')
+    $tiposAcao = @('registro','servico','appx','recurso','energia')
     $tiposValor = @('DWord','QWord','String','ExpandString','Binary','MultiString')
     foreach ($t in $tweaks.tweaks) {
         $nome = [string]$t.nome
@@ -106,9 +106,6 @@ if ($null -ne $tweaks) {
                 'servico' {
                     if ([string]::IsNullOrWhiteSpace([string]$a.nome)) { $problemas += ($nome + ': acao de servico sem nome') }
                     if (@('Automatic','Manual','Disabled') -notcontains [string]$a.inicio) { $problemas += ($nome + ': inicio de servico invalido: ' + $a.inicio) }
-                }
-                'comando' {
-                    if ([string]::IsNullOrWhiteSpace([string]$a.executar)) { $problemas += ($nome + ': acao de comando sem campo executar') }
                 }
                 'appx' {
                     if ([string]::IsNullOrWhiteSpace([string]$a.pacote)) { $problemas += ($nome + ': acao appx sem pacote') }
@@ -489,15 +486,24 @@ try {
 } catch { Falhou 'selecao WPF' $_.Exception.Message }
 finally { $global:UI = $uiAnterior }
 
-# ---- catalogo: comandos de reversao aproximada nunca entram em presets ----
+# ---- catalogo: nenhuma expressao executavel livre ----
 Secao 'reversibilidade dos presets'
 try {
     foreach ($ajuste in $tweaks.tweaks) {
-        if (@($ajuste.acoes | Where-Object { $_.tipo -eq 'comando' }).Count -gt 0 -and -not $ajuste.apenasManual) {
-            throw ('Comando sem snapshot em preset: ' + $ajuste.id)
+        if (@($ajuste.acoes | Where-Object { $_.tipo -eq 'comando' }).Count -gt 0 -or $ajuste.verificar) {
+            throw ('Expressao executavel livre no catalogo: ' + $ajuste.id)
         }
     }
-    Passou 'comandos com reversao aproximada sao exclusivamente manuais'
+    Passou 'catalogo nao contem comandos livres'
+    & {
+        function Log { param($Mensagem,[switch]$Erro) }
+        $global:TesteComandoLivre = $false
+        Executar-Acao ([pscustomobject]@{ tipo='comando'; executar='$global:TesteComandoLivre = $true' }) 'teste de seguranca'
+        if ($global:TesteComandoLivre) { throw 'Comando livre de aplicacao executado.' }
+        if ((Desfazer-Item ([pscustomobject]@{ tipo='comando'; reverter='$global:TesteComandoLivre = $true' })) -or $global:TesteComandoLivre) { throw 'Comando livre de reversao executado.' }
+        Remove-Variable -Name TesteComandoLivre -Scope Global
+    }
+    Passou 'motor rejeita comandos livres na aplicacao e reversao'
 } catch { Falhou 'reversibilidade dos presets' $_.Exception.Message }
 
 # ---- propagacao de falhas do console, sem executar manutencao real ----

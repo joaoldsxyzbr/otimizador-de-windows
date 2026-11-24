@@ -17,7 +17,7 @@ pronto. nao precisa instalar nada.
 | aba | o que faz |
 | --- | --- |
 | **inicio** | informacoes do pc (cpu, ram, disco, uptime) e criacao de ponto de restauracao |
-| **ajustes e tweaks** | 47 tweaks em catalogo com 3 presets (seguro / balanceado / agressivo): telemetria, privacidade (inclusive copilot/ia), desempenho, barra de tarefas, explorer, edge (sem remover o navegador), energia e rede |
+| **ajustes e tweaks** | 42 tweaks em catalogo com 3 presets (seguro / balanceado / agressivo): telemetria, privacidade (inclusive copilot/ia), desempenho, barra de tarefas, explorer, edge (sem remover o navegador), energia e rede |
 | **debloat** | remove apps uwp pre-instalados da microsoft (clima bing, 3d viewer, cortana, etc.), com lista de cautela pra nao apagar nada util |
 | **desinstalar** | lista os programas instalados, desinstala via comando silencioso (msi/inno/nsis) e varre os rastros que sobram (pastas, registro, atalhos); tudo vai pra quarantena e desfaz |
 | **instalar apps** | instalacao em massa via winget (66 apps com ids WinGet; essenciais vem marcados) |
@@ -82,7 +82,7 @@ isso valida offline (sem abrir a janela): os 3 catalogos json campo a campo, enc
 - **privacidade**: edge-debloat (13 politicas do edge: desativa telemetria, autopreenchimento, sugestoes de follow e afins, sem remover o navegador)
 - **barra de tarefas**: bateria-porcentagem (icone com %), barra a esquerda (win11), remover home/galeria do explorer (win11)
 - **explorer**: arquivos ocultos e extensoes sempre visiveis
-- **preferencias**: rdp sem aviso, logon verboso, tela de bloqueio off (direto pro login), teclas de aderencia sem popup, mouse sem aceleracao (precisao bruta)
+- **preferencias**: logon verboso, tela de bloqueio off (direto pro login), teclas de aderencia sem popup, mouse sem aceleracao (precisao bruta)
 - **sistema**: bloquear coinstaladores de driver via windows update, preferir ipv4, armazenamento reservado off (dism)
 
 os mesmos niveis de antes valem: tweaks "agressivo" nao entram no preset seguro/balanceado; quem mexe em rede/energia avisa no log. o detalhe que importa: tudo com journal de desfazer igual aos outros.
@@ -138,3 +138,5 @@ o winutil e MIT licenciado e foi a referencia: arquitetura de catalogos json, mo
 ## abrir sem instalar
 
 Veja o comando PowerShell de uma linha no [README](README.md#abrir-sem-instalar-previa-v2). O launcher baixa e monta a versao portatil temporariamente; nao e um instalador.
+
+Nota da RC.4: cinco ajustes foram retirados do catalogo por reversao aproximada ou reducao de protecao (hibernacao, svchost, F8, armazenamento reservado e avisos RDP). As referencias historicas acima descrevem versoes anteriores.

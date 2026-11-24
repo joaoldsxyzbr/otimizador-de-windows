@@ -309,19 +309,7 @@ function Executar-Acao {
             }
 
             'comando' {
-                Registrar-Jornal ([pscustomobject]@{
-                    tipo     = 'comando'
-                    contexto = $desc
-                    reverter = $Acao.reverter
-                })
-                $global:LASTEXITCODE = 0
-                $saida = (Invoke-Expression $Acao.executar | Out-String).Trim()
-                if ($LASTEXITCODE -ne 0) { throw ('Comando terminou com codigo ' + $LASTEXITCODE) }
-                if ($saida.Length -gt 0) {
-                    $resumo = $saida.Substring(0, [Math]::Min(220, $saida.Length))
-                    Log ("  saida: " + $resumo)
-                }
-                Log ("comando: {0}" -f $desc)
+                throw 'Comandos livres nao sao suportados nesta versao.'
             }
 
             'appx' {
@@ -459,12 +447,7 @@ function Desfazer-Item {
             }
 
             'comando' {
-                if (-not [string]::IsNullOrWhiteSpace($Item.reverter)) {
-                    $global:LASTEXITCODE = 0
-                    Invoke-Expression $Item.reverter | Out-Null
-                    if ($LASTEXITCODE -ne 0) { throw ('Reversao terminou com codigo ' + $LASTEXITCODE) }
-                    Log ("comando de reversao executado (estado anterior pode ser aproximado): {0}" -f $Item.contexto)
-                } else { throw 'Comando sem reversao automatica.' }
+                throw 'Journal antigo com comando livre: recupere manualmente e registre a confirmacao.'
             }
 
             'energia' {
@@ -736,12 +719,6 @@ function Verificar-Acao {
 # estado de um tweak: 'aplicado', 'parcial', 'nao' ou 'desconhecido'
 function Verificar-Tweak {
     param($Tweak)
-    if (-not [string]::IsNullOrWhiteSpace($Tweak.verificar)) {
-        try {
-            if (Invoke-Expression $Tweak.verificar) { return 'aplicado' }
-            return 'nao'
-        } catch { return 'desconhecido' }
-    }
     $verificaveis = 0
     $ativos = 0
     foreach ($acao in $Tweak.acoes) {

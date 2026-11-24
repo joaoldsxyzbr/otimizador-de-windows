@@ -50,7 +50,7 @@ nao quer janela? modo cli:
 
 ## o que tem dentro
 
-- **47 tweaks** em catalogo (3 presets: seguro / balanceado / agressivo): telemetria, privacidade (copilot/ia inclusos), desempenho, barra de tarefas, explorer, energia e rede
+- **42 tweaks** em catalogo (3 presets: seguro / balanceado / agressivo): telemetria, privacidade (copilot/ia inclusos), desempenho, barra de tarefas, explorer, energia e rede
 - **66 apps** pra instalar via winget e **34 pacotes** da store pra debloat
 - **desinstalador com limpeza de rastros**: pastas, registro, servicos orfaos, tarefas agendadas, regras locais de permissao do firewall (desativadas, nao removidas), entradas run e path morto; journal antes das alteracoes e backups de arquivos/chaves
 - **journal de desfazer**: cada acao grava o valor anterior; a aba desfazer reverte sessao inteira; o journal e gravado atomicamente antes das acoes registradas, com copia anterior e progresso de reversao; falhas podem exigir revisao manual
@@ -69,8 +69,8 @@ nao quer janela? modo cli:
 - manutencao: erros nativos e PowerShell propagados ao console; reset de Windows Update preserva caches com nomes unicos e tenta reiniciar somente os servicos que estavam ativos. Limpeza rapida de temporarios limitada a arquivos na raiz, sem seguir links. Reset de rede exige confirmacao.
 - uma trava exclusiva em pasta protegida impede GUI/CLI/portatil v2 simultaneos; fechar a janela durante operacao mutavel e bloqueado. Versoes antigas nao respeitam a trava.
 - operacoes mutaveis da interface passam por um controlador que evita reentrada; codigos de saida de desinstaladores e comandos sao verificados.
-- ajustes com reversao aproximada ficam fora dos presets (hibernacao, svchost, F8 e armazenamento reservado). Efeitos visuais, telemetria do PowerShell e tipo padrao de pastas usam valores de registro com snapshot.
-- os perfis novos sao conservadores; nao garantem FPS ou autonomia. O ajuste de avisos RDP fica exclusivamente manual por reduzir protecoes contra conexoes nao confiaveis.
+- RC.4 retira cinco ajustes: hibernacao, svchost, F8, armazenamento reservado e desativacao de avisos RDP. Comandos livres nao sao executados pelo motor nem pelo journal. Recuperacao de comandos antigos exige revisao manual. Efeitos visuais, telemetria do PowerShell e tipo padrao de pastas usam valores de registro com snapshot.
+- os perfis novos sao conservadores; nao garantem FPS ou autonomia.
 
 - comparativo antes/depois na pagina inicial: salva referencia JSON e compara medias de CPU, RAM, processos e espaco livre. Nao e benchmark; repita sob condicoes semelhantes. O arquivo inclui nome do PC. Consultas de medicao e armazenamento usam runspace separado, com cancelamento.
 - analisador de arquivos grandes na aba Manutencao: somente leitura, ate 30 maiores arquivos, limite de tempo e itens, sem seguir links/junctions; resultados parciais identificados.
