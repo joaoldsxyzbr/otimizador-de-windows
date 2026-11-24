@@ -84,3 +84,5 @@ RC.7 adicional: diagnostico por padrao mesmo elevado; -Pessoal e explicito e nao
 - Merge na main e release estavel somente apos aceite e verificacao dos artefatos.
 
 RC.8: validar capacidade da bateria em notebook, contadores ausentes, Otimizar Unidades nativo (modo pessoal), matriz de builds e edicoes, consulta MSI de produto real em cache e ausencia de reparos MSI. A consulta MSI e parcial e nao mapeia todas as dependencias. Validar Windows cliente e ambiente corporativo autorizado; nenhuma coleta ETW automatica.
+
+RC.8: verificar inventario PnP de dispositivos reais, incluindo driver sem associacao unica, dispositivo desabilitado e assinatura indisponivel. Nao remover automaticamente pacotes de driver.

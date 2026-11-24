@@ -1096,6 +1096,18 @@ try {
     Passou 'metadados MSI sem usar Win32_Product'
 } catch { Falhou 'compatibilidade minima/MSI' $_.Exception.Message }
 
+# ---- associacao de dispositivos e drivers sem expor identificadores ----
+Secao 'inventario PnP'
+try {
+    & {
+        function Get-PnpDevice {[CmdletBinding()]param([switch]$PresentOnly) if (-not $PresentOnly) {throw 'Esperava apenas presentes.'}; [pscustomobject]@{FriendlyName='Audio';InstanceId='ID-INTERNO';Status='Error';ConfigManagerErrorCode=28};[pscustomobject]@{FriendlyName='Video';InstanceId='ID-OUTRO';Status='OK'}}
+        function Get-CimInstance {[CmdletBinding()]param([Parameter(Position=0)]$ClassName) [pscustomobject]@{DeviceID='ID-INTERNO';DriverProviderName='Fornecedor';DriverVersion='1.2';IsSigned=$true}}
+        $msg=Obter-ResumoDriversPnP
+        if ($msg -notmatch 'presentes: 2' -or $msg -notmatch 'OK: 1' -or $msg -notmatch 'Fornecedor' -or $msg -match 'ID-INTERNO|ID-OUTRO' -or $msg -notmatch 'associacao unica a driver: 1') {throw 'Correlacao PnP ou privacidade incorreta.'}
+    }
+    Passou 'dispositivos presentes correlacionados sem expor identificadores'
+} catch {Falhou 'inventario PnP' $_.Exception.Message}
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

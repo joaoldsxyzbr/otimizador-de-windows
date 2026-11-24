@@ -175,6 +175,42 @@ function Medir-GargalosLocais {
     return [pscustomobject]@{serie=$serie;avisos=$avisos}
 }
 
+# Inventario de dispositivos presentes; nao remove, atualiza ou reinstala drivers.
+function Obter-ResumoDriversPnP {
+    try {
+        $devs=@(Get-PnpDevice -PresentOnly -ErrorAction Stop)
+        $drivers=@(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop)
+        $mapa=@{}
+        foreach ($d in $drivers) {
+            if (-not $d.DeviceID) {continue}
+            if (-not $mapa.ContainsKey([string]$d.DeviceID)) {$mapa[[string]$d.DeviceID]=@()}
+            $mapa[[string]$d.DeviceID]+=$d
+        }
+        $linhas=@('Dispositivos presentes: '+$devs.Count)
+        $problemas=@($devs | Where-Object {$_.Status -ne 'OK'})
+        $linhas+=('Estado diferente de OK: '+$problemas.Count+' (inclui desabilitados e desconhecidos).')
+        $semAssoc=0;$assinaturaNaoConfirmada=0
+        foreach ($dev in $devs) {
+            $ds=@()
+            if ($dev.InstanceId -and $mapa.ContainsKey([string]$dev.InstanceId)) {$ds=@($mapa[[string]$dev.InstanceId])}
+            if ($ds.Count -ne 1) {$semAssoc++;continue}
+            if ($ds[0].IsSigned -ne $true) {$assinaturaNaoConfirmada++}
+        }
+        $linhas+=('Sem associacao unica a driver: '+$semAssoc+' | driver associado sem indicador de assinatura positiva: '+$assinaturaNaoConfirmada)
+        foreach ($dev in @($problemas | Select-Object -First 15)) {
+            $nome=if ($dev.FriendlyName) {$dev.FriendlyName} else {'Dispositivo sem nome'}
+            $linhas+=($nome+' | estado '+$dev.Status+' | codigo '+$dev.ConfigManagerErrorCode)
+            if ($dev.InstanceId -and $mapa.ContainsKey([string]$dev.InstanceId) -and $mapa[[string]$dev.InstanceId].Count -eq 1) {
+                $d=$mapa[[string]$dev.InstanceId][0]
+                $linhas+=('  Driver: '+$d.DriverProviderName+' | versao '+$d.DriverVersion+' | assinatura reportada '+$d.IsSigned)
+            } else {$linhas+='  Associacao de driver indisponivel ou ambigua.'}
+        }
+        if ($problemas.Count -gt 15) {$linhas+='Lista de detalhes limitada a 15 dispositivos.'}
+        $linhas+='Metadados do Windows, nao verificacao criptografica de cada arquivo. Nao identifica pacotes dispensaveis. Use o Gerenciador de Dispositivos ou consulte TI.'
+        return ($linhas -join [Environment]::NewLine)
+    } catch {return 'Inventario PnP ou drivers indisponivel. Nenhuma conclusao de saude.'}
+}
+
 function Resolver-ModoOtimizador {
     param([bool]$Admin,[bool]$Diagnostico,$Sinais,[bool]$Pessoal=$false)
     if ($Diagnostico -or -not $Admin) { return 'Diagnostico' }

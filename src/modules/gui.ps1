@@ -101,8 +101,8 @@ function Montar-PaginaAjustes {
             [void]$painel.Children.Add($grupos[$t.categoria])
         }
         $cb=Nova-Checkbox -Texto $t.nome -Tag $t -Dica (Obter-GuiaAjuste $t).texto
-        Atualizar-RotuloAjuste $cb 'desconhecido'
         $cb.IsEnabled=(Testar-CompatibilidadeAjuste $t $ctx)
+        Atualizar-RotuloAjuste $cb 'desconhecido'
         [void]$grupos[$t.categoria].Content.Children.Add($cb)
     }
 }
@@ -1074,6 +1074,13 @@ function Clique-CargaPadronizada {
     } catch { Avisar 'Teste indisponivel' $_.Exception.Message }
 }
 
+function Clique-ResumoDriversPnP {
+    try {
+        $res=@(Executar-ConsultaLocal -Titulo 'Consultando dispositivos presentes e drivers' -Codigo ${function:Obter-ResumoDriversPnP})
+        if ($res.Count -eq 1 -and $res[0]) {Avisar 'Dispositivos e drivers - somente leitura' ([string]$res[0])}
+    } catch {Avisar 'Consulta indisponivel' $_.Exception.Message}
+}
+
 function Clique-ResumoBateria {
     try {
         $res=@(Executar-ConsultaLocal -Titulo 'Consultando bateria' -Codigo ${function:Obter-ResumoBateria})
@@ -1166,6 +1173,7 @@ function Ligar-Tudo {
     $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
     $global:UI.BotaoResumoBateria.Add_Click({ Clique-ResumoBateria })
     $global:UI.BotaoGargalosLocais.Add_Click({ Clique-GargalosLocais })
+    $global:UI.BotaoResumoDriversPnP.Add_Click({ Clique-ResumoDriversPnP })
         Trocar-Pagina 'PaginaInicio'
         Status 'Modo protegido: somente diagnostico local.'
         return
@@ -1276,6 +1284,7 @@ function Ligar-Tudo {
     $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })
     $global:UI.BotaoResumoBateria.Add_Click({ Clique-ResumoBateria })
     $global:UI.BotaoGargalosLocais.Add_Click({ Clique-GargalosLocais })
+    $global:UI.BotaoResumoDriversPnP.Add_Click({ Clique-ResumoDriversPnP })
     $global:UI.BotaoCarga.Add_Click({ Clique-CargaPadronizada })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({

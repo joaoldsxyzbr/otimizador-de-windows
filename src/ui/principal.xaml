@@ -315,6 +315,7 @@
                                     <Button x:Name="BotaoCarga" Content="Teste de carga padronizado (CPU e memoria)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoDiagnosticoAvancado" Content="Diagnostico de discos, dispositivos e eventos" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoResumoBateria" Content="Bateria: capacidade e carga" HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                                    <Button x:Name="BotaoResumoDriversPnP" Content="Dispositivos presentes e drivers" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoGargalosLocais" Content="Amostras de CPU, memoria e disco" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMonitor" Content="Monitor de recursos (10 amostras)" HorizontalAlignment="Left" Margin="0,6,0,0"/>
                                     <Button x:Name="BotaoMedicoes" Content="Comparar antes e depois dos ajustes" HorizontalAlignment="Left" Margin="0,6,0,0"/>

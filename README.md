@@ -132,3 +132,5 @@ Revisao final do catalogo RC.7: remove gravacao direta em PolicyManager e desati
 RC.8 em desenvolvimento: estimativas locais de capacidade de bateria quando correlacionaveis, amostras de CPU/RAM/paginacao/fila e I/O de disco sem ETW nem exportacao, e acesso a Otimizar Unidades nativo apenas no modo pessoal. Nao confundir contadores ausentes com zero; nenhuma operacao de disco automatica.
 
 RC.8: matriz de requisitos minimos de build e suporte a allowlist de edicoes; bloqueia aplicacao em contexto desconhecido, Windows Server ou abaixo do limite. Nao certifica efetividade de cada tweak. Simulacao CLI em ambiente nao compativel e hipotetica. Detalhes MSI consultam o cache local em modo leitura e ComponentClients em amostra limitada, sem Win32_Product. Resultado parcial/indisponivel nao autoriza remocao.
+
+RC.8: inventario PnP dos dispositivos presentes correlaciona InstanceId com driver reportado pelo Windows, mostrando versao, fornecedor, codigo de problema e indicador de assinatura sem expor identificadores internos. Nao substitui verificacao de assinatura de arquivos nem autoriza remocao de drivers.
