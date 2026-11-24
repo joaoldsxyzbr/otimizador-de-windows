@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: publicar-otimizadorpc-${{ inputs.tag }}
+  group: publicar-otimizadorpc
   cancel-in-progress: false
 
 jobs:
@@ -67,10 +67,8 @@ jobs:
           set -euo pipefail
           sha=$(git rev-parse HEAD)
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
-          if [[ "$CANAL" == 'estavel' ]]; then
-            # Uma release estavel nao pode carregar a versao interna preview.
-            grep -Fx "\$global:VersaoOtimizador = '${TAG#v}'" src/modules/comum.ps1 >/dev/null || { echo 'Versao interna diferente da tag; atualize e revise a main.'; exit 1; }
-          fi
+          # A versao interna deve corresponder a tag em ambos os canais.
+          grep -Fx "\$global:VersaoOtimizador = '${TAG#v}'" src/modules/comum.ps1 >/dev/null || { echo 'Versao interna diferente da tag; atualize o codigo antes de publicar.'; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   compilar:
@@ -133,7 +131,7 @@ jobs:
           $codigo = [IO.File]::ReadAllText((Resolve-Path 'dist\otimizadorpc.ps1').Path)
           & ([scriptblock]::Create($codigo)) -Cli essencial -Simular
           & ([scriptblock]::Create($codigo)) -ValidarInterface
-          $journals = @(Get-ChildItem "$env:ProgramData\otimizadorpc\desfazer" -Filter '*.json' -ErrorAction SilentlyContinue)
+          $journals = @(Get-ChildItem "$env:ProgramData\otimizadorpc-v2\desfazer" -Filter '*.json' -ErrorAction SilentlyContinue)
           if ($journals.Count -gt 0) { throw 'A simulacao criou journals.' }
         timeout-minutes: 10
 
@@ -210,3 +208,12 @@ jobs:
             --notes "Compilacao e testes automatizados aprovados. Commit: $SOURCE_SHA. Canal: $CANAL." \
             "${flags[@]}"
           echo "Release: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
+          # O comando fixo usa apenas a ultima publicacao aprovada.
+          # Se a atualizacao falhar, a versao anterior continua indicada.
+          pointer_sha=$(gh api "repos/$GITHUB_REPOSITORY/contents/versao-atual.txt?ref=main" --jq .sha)
+          [[ "$pointer_sha" =~ ^[0-9a-f]{40}$ ]]
+          encoded=$(printf '%s\n' "$TAG" | base64 -w0)
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/versao-atual.txt" \
+            -f message="chore: selecionar $TAG no comando oficial" \
+            -f content="$encoded" -f sha="$pointer_sha" -f branch=main >/dev/null
+          echo "Comando fixo atualizado para $TAG." >> "$GITHUB_STEP_SUMMARY"
