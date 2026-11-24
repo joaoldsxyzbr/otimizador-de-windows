@@ -1057,6 +1057,47 @@ try {
     }
 } catch { Falhou 'interface pessoal' $_.Exception.Message }
 
+# ---- F2: barreiras por alvo; sem mutacoes no host de teste ----
+Secao 'protecao por alvo'
+try {
+    foreach ($caminho in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge','HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer','hklm:\SOFTWARE\Microsoft\PolicyManager\current\device\Power','HKLM:\SYSTEM\ControlSet001\Services\WinDefend','HKLM:\SYSTEM\CurrentControlSet\Control\Lsa','HKCU:\Software\..\Policies')) {
+        $a=[pscustomobject]@{tipo='registro';caminho=$caminho;nome='teste';dados=1;tipoValor='DWord'}
+        if ((Avaliar-ProtecaoAlvo $a).estado -ne 'bloqueado') {throw ('Alvo sensivel aceito: '+$caminho)}
+    }
+    $a=[pscustomobject]@{tipo='registro';caminho='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced';nome='HideFileExt';dados=0;tipoValor='DWord'}
+    if ((Avaliar-ProtecaoAlvo $a).estado -ne 'avaliacao-adicional') {throw 'Preferencia comum bloqueada pela barreira de alvo.'}
+    foreach ($nome in @('WinDefend','BFE','MpsSvc','wuauserv','Sense','IntuneManagementExtension','*')) {
+        if ((Avaliar-ProtecaoAlvo ([pscustomobject]@{tipo='servico';nome=$nome;inicio='Disabled'})).estado -ne 'bloqueado') {throw ('Servico protegido aceito: '+$nome)}
+    }
+    & {
+        function Get-Service {[CmdletBinding()]param([string]$Name) [pscustomobject]@{DependentServices=@([pscustomobject]@{Name='Dependente';Status='Stopped'})}}
+        $recusado=$false
+        try {Confirmar-DependenciasServico 'SysMain' 'Disabled'} catch {$recusado=$_.Exception.Message -match 'dependentes'}
+        if (-not $recusado) {throw 'Servico com dependente parado aceito.'}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $true}
+        $recusado=$false
+        try {Confirmar-PoliticaEnergiaLocal} catch {$recusado=$_.Exception.Message -match 'politica de energia'}
+        if (-not $recusado) {throw 'Politica de energia ignorada.'}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) throw 'acesso negado'}
+        $recusado=$false
+        try {Confirmar-PoliticaEnergiaLocal} catch {$recusado=$_.Exception.Message -match 'inconclusiva'}
+        if (-not $recusado) {throw 'Falha de consulta de energia aceita.'}
+    }
+    & {
+        $script:bloqueioAlvo=0
+        function Log {param($Mensagem,[switch]$Erro) if ($Erro -and $Mensagem -match 'politica') {$script:bloqueioAlvo++}}
+        function Registrar-Jornal {throw 'Nao deve iniciar journal para alvo bloqueado.'}
+        function Ler-ValorRegistro {throw 'Nao deve consultar registro antes de bloquear alvo.'}
+        Executar-Acao ([pscustomobject]@{tipo='registro';caminho='HKLM:\SOFTWARE\Policies\Microsoft\Edge';nome='teste';tipoValor='DWord';dados=1}) 'teste'
+        if ($script:bloqueioAlvo -ne 1) {throw 'Executor nao aplicou a barreira de alvo.'}
+    }
+    Passou 'barreira de alvo bloqueia politicas, servicos protegidos e consultas inconclusivas de energia'
+} catch { Falhou 'protecao por alvo' $_.Exception.Message }
+
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
 try {

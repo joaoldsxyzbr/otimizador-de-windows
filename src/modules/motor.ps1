@@ -211,6 +211,7 @@ function Definir-InicioServico {
     param([string]$Nome,[string]$Tipo,[bool]$Atraso)
     Confirmar-PermissaoAlteracao
     if ($Nome -notmatch '^[A-Za-z0-9_.-]+$' -or $Tipo -notin @('Automatic','Manual','Disabled')) { throw 'Configuracao de servico invalida.' }
+    Confirmar-DependenciasServico $Nome $Tipo
     $modo = switch ($Tipo) {
         'Automatic' { if ($Atraso) { 'delayed-auto' } else { 'auto' } }
         'Manual' { 'demand' }
@@ -224,8 +225,8 @@ function Definir-InicioServico {
 function Alterar-ServicoComJournal {
     param([string]$Nome,[string]$Inicio)
     Confirmar-PermissaoAlteracao
+    Confirmar-DependenciasServico $Nome $Inicio
     $ant = Obter-EstadoServico $Nome
-    if ($Inicio -notin @('Automatic','Manual','Disabled')) { throw 'Tipo de inicio invalido.' }
     if ($ant.tipo -eq $Inicio -and ($Inicio -ne 'Disabled' -or $ant.estado -eq 'Stopped')) { return }
     $depois = if ($Inicio -eq 'Disabled') { 'Stopped' } else { $ant.estado }
     Registrar-Jornal ([pscustomobject]@{
@@ -347,9 +348,81 @@ function Definir-PlanoEnergia {
     Confirmar-PermissaoAlteracao
     $id=[guid]::Empty
     if (-not [guid]::TryParse($Guid,[ref]$id) -or $id -eq [guid]::Empty) { throw 'GUID de energia invalido.' }
+    Confirmar-PoliticaEnergiaLocal
     $exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
     & $exe /setactive $id.ToString() | Out-Null
     if ($LASTEXITCODE -ne 0 -or (Obter-PlanoEnergiaAtivo) -ne $id.ToString()) { throw 'Plano de energia nao confirmado.' }
+}
+
+# F2: barreira adicional, nao um detector completo de politica efetiva.
+# A ausencia de bloqueio nesta etapa nunca significa autorizacao para alterar.
+function Avaliar-ProtecaoAlvo {
+    param($Acao)
+    $motivo=$null
+    switch ([string]$Acao.tipo) {
+        'registro' {
+            $caminho=([string]$Acao.caminho).Trim()
+            if ($caminho -notmatch '^(HKLM:|HKCU:|HKU:|HKCR:|HKEY_LOCAL_MACHINE|HKEY_CURRENT_USER|HKEY_USERS|HKEY_CLASSES_ROOT)\\[^\\]+(?:\\[^\\]+)*$' -or $caminho -match '(^|\\)\.{1,2}(\\|$)') {
+                $motivo='Caminho de registro invalido ou ambiguo.'
+            } elseif ($caminho -match '(?i)\\(?:Policies|PolicyManager|Group Policy)(\\|$)') {
+                $motivo='Chave de politica: somente consulta nesta versao. Use a ferramenta administrativa autorizada.'
+            } elseif ($caminho -match '(?i)\\(?:Windows Defender|Windows Defender Security Center|WindowsFirewall|BitLocker|FVE|Enrollments|EnterpriseResourceManager)(\\|$)' -or
+                $caminho -match '(?i)\\SYSTEM\\(?:CurrentControlSet|ControlSet[0-9]+)\\(?:Services|Control\\(?:Lsa|SecurityProviders|SecureBoot))(\\|$)' -or
+                $caminho -match '(?i)\\Microsoft\\Windows\\CurrentVersion\\(?:Authentication|WindowsUpdate)(\\|$)') {
+                $motivo='Alvo sensivel de seguranca, servicos, identidade ou atualizacoes: escrita direta indisponivel.'
+            }
+        }
+        'servico' {
+            # Lista explicita de alvos existentes na V2; catalogo editado nao amplia permissao.
+            $nomes=@('MapsBroker','StorSvc','SharedAccess','CscService','Fax','RemoteRegistry','RetailDemo','SysMain','WSearch','lfsvc','WSAIFabricSvc')
+            if ([string]$Acao.nome -notin $nomes) { $motivo='Servico fora da lista de alvos revisados.' }
+            elseif ([string]$Acao.inicio -notin @('Automatic','Manual','Disabled')) { $motivo='Tipo de inicio invalido.' }
+        }
+        'energia' {
+            $id=[guid]::Empty
+            if (-not [guid]::TryParse([string]$Acao.guid,[ref]$id) -or $id -eq [guid]::Empty) { $motivo='GUID de energia invalido.' }
+        }
+        'appx' { }
+        'recurso' { }
+        default { $motivo='Tipo de acao nao suportado para nova aplicacao.' }
+    }
+    if ($motivo) { return [pscustomobject]@{estado='bloqueado';motivo=$motivo} }
+    return [pscustomobject]@{estado='avaliacao-adicional';motivo='Nenhum bloqueio de alvo nesta etapa; permissoes, compatibilidade e politicas efetivas ainda precisam ser respeitadas.'}
+}
+
+function Confirmar-ProtecaoAlvo {
+    param($Acao)
+    $r=Avaliar-ProtecaoAlvo $Acao
+    if ($r.estado -ne 'avaliacao-adicional') { throw $r.motivo }
+}
+
+function Obter-BloqueioAjuste {
+    param($Ajuste)
+    foreach ($acao in @($Ajuste.acoes)) {
+        $r=Avaliar-ProtecaoAlvo $acao
+        if ($r.estado -eq 'bloqueado') { return $r.motivo }
+    }
+    return $null
+}
+
+function Confirmar-DependenciasServico {
+    param([string]$Nome,[string]$Inicio)
+    Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='servico';nome=$Nome;inicio=$Inicio})
+    if ($Inicio -eq 'Disabled') {
+        $svc=Get-Service -Name $Nome -ErrorAction Stop
+        # Mesmo um dependente parado pode precisar iniciar posteriormente.
+        if (@($svc.DependentServices | Where-Object {$_}).Count -gt 0) { throw 'Servico possui dependentes; desativacao recusada.' }
+    }
+}
+
+function Confirmar-PoliticaEnergiaLocal {
+    # Indicadores conservadores: uma chave de politica presente, mesmo vazia,
+    # exige revisao. Nao prova ausencia de GPO/MDM quando nao encontrada.
+    foreach ($chave in @('HKLM:\SOFTWARE\Policies\Microsoft\Power','HKCU:\SOFTWARE\Policies\Microsoft\Power','HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Power')) {
+        try { $presente=Test-Path -LiteralPath $chave -ErrorAction Stop }
+        catch { throw 'Consulta de politica de energia inconclusiva; alteracao recusada.' }
+        if ($presente) { throw 'Indicador de politica de energia presente; alteracao recusada.' }
+    }
 }
 
 function Executar-Acao {
@@ -366,6 +439,7 @@ function Executar-Acao {
     Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     try {
+        Confirmar-ProtecaoAlvo $Acao
         switch ($Acao.tipo) {
 
             'registro' {
@@ -475,6 +549,7 @@ function Executar-Acao {
             }
 
             'energia' {
+                Confirmar-PoliticaEnergiaLocal
                 $anterior=Obter-PlanoEnergiaAtivo
                 $alvo=[guid]::Parse([string]$Acao.guid).ToString()
                 if ($anterior -eq $alvo) { return }
@@ -513,6 +588,7 @@ function Desfazer-Item {
                         throw ('Conflito: valor mudou desde a aplicacao. Preservado: ' + $Item.caminho + '\\' + $Item.nome)
                     }
                 }
+                Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='registro';caminho=$Item.caminho;nome=$Item.nome})
                 if ($Item.existia) {
                     $kind = Converter-Kind $Item.tipoAnterior
                     if ($null -ne $Item.valorAnteriorEstruturado) { $valor = $Item.valorAnteriorEstruturado.valor }
@@ -946,6 +1022,10 @@ function Aplicar-Preset {
     }
 
     Confirmar-PermissaoAlteracao
+    foreach ($t in $selecionados) {
+        $bloqueio=Obter-BloqueioAjuste $t
+        if ($bloqueio) { Log ('Preset real interrompido: '+$t.nome+' - '+$bloqueio) -Erro; return $false }
+    }
     if (-not (Criar-PontoRestauracao)) { Log 'Preset real interrompido: ponto de restauracao novo nao confirmado.' -Erro; return $false }
     Iniciar-Sessao 'ajustes'
     $i = 0

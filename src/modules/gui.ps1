@@ -72,7 +72,9 @@ function Obter-GuiaAjuste {
     $notaCompat=if ($Tweak.compatibilidade) {$Tweak.compatibilidade} else {'Compatibilidade especifica nao confirmada.'}
     if ($Tweak.buildMinima) {$notaCompat+=' Build minima conservadora: '+$Tweak.buildMinima+'.'}
     $reinicio=if ($Tweak.reinicio) {$Tweak.reinicio} else {'Pode exigir relogon ou reinicio.'}
-    return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat. $notaCompat","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio) -join "`n") }
+    $bloqueio=Obter-BloqueioAjuste $Tweak
+    $protecao=if ($bloqueio) { 'Somente consulta: '+$bloqueio } else { 'Protecao por alvo: verificacoes adicionais no executor.' }
+    return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat. $notaCompat","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio,$protecao) -join "`n") }
 }
 
 function Atualizar-RotuloAjuste {
@@ -81,6 +83,7 @@ function Atualizar-RotuloAjuste {
     $rotulo=switch ($Estado) {'aplicado' {'ja aplicado'} 'parcial' {'parcial'} 'nao' {'nao aplicado'} default {'estado nao confirmado'}}
     $Cb.Content=$t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (' + $rotulo + ')'
     if ($t.apenasManual) { $Cb.Content += ' [manual]' }
+    if (Obter-BloqueioAjuste $t) { $Cb.Content += ' [apenas simulacao]' }
     $Cb.ToolTip=(Obter-GuiaAjuste $t).texto
     if ($global:ModoProtegido) { $Cb.Content+=' [somente consulta]'; $Cb.IsChecked=$false; $Cb.IsEnabled=$false }
     elseif (-not $Cb.IsEnabled) { $Cb.Content+=' [indisponivel nesta instalacao]'; $Cb.IsChecked=$false }
@@ -380,6 +383,10 @@ function Clique-AplicarAjustes {
         Log 'SIMULACAO concluida: o pc NAO foi alterado. pra aplicar de vez, desmarque "simular" e clique em aplicar.'
         Status 'simulacao concluida (nada foi alterado).'
         return
+    }
+    foreach ($cb in $selecionados) {
+        $bloqueio=Obter-BloqueioAjuste $cb.Tag
+        if ($bloqueio) { Avisar 'Ajuste indisponivel' ($cb.Tag.nome+': '+$bloqueio); return }
     }
     $manuais = @($selecionados | Where-Object { $_.Tag.apenasManual -or (Classificar-RiscoAjuste $_.Tag) -eq 'cautela alta' })
     if ($manuais.Count -gt 0 -and -not (Perguntar 'Ajustes de cautela' ('Ajustes manuais podem reduzir funcionalidades ou ter reversao aproximada: ' + (($manuais | ForEach-Object { $_.Tag.nome }) -join ', ') + '. Continuar?'))) { return }
