@@ -539,6 +539,18 @@ try {
     } else { Write-Host '  [info]   teste de ACL requer administrador.' }
 } catch { Falhou 'protecao do estado' $_.Exception.Message }
 
+# ---- filtros conservadores de rastros ----
+Secao 'limites da varredura'
+try {
+    if (-not (Nome-RastroExato 'Meu App' 'meuapp') -or (Nome-RastroExato 'Meu App Backup' 'meuapp')) { throw 'Correspondencia de nome ampla demais.' }
+    if (Chave-RastroSegura 'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft' ) { throw 'Chave de sistema aceita.' }
+    if (Chave-RastroSegura 'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet') { throw 'Chave SYSTEM aceita.' }
+    if (-not (Chave-RastroSegura 'HKEY_CURRENT_USER\Software\MeuApp')) { throw 'Chave de aplicativo recusada.' }
+    if (Caminho-LocalAusente $env:SystemRoot) { throw 'Diretorio existente considerado ausente.' }
+    if (Caminho-LocalAusente '\\servidor\pasta') { throw 'Rede considerada ausente.' }
+    Passou 'varredura conservadora protege chaves e caminhos ambiguos'
+} catch { Falhou 'limites da varredura' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

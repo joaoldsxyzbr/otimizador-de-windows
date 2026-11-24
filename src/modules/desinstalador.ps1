@@ -99,64 +99,37 @@ function Analisar-LinhaComando {
 function Desinstalar-Programa {
     param($Prog)
     $nome = [string]$Prog.nome
-    $linha = [string]$Prog.quiet
-    if ([string]::IsNullOrWhiteSpace($linha)) { $linha = [string]$Prog.comando }
-    $linha = $linha.Trim()
-    Log ('desinstalando: ' + $nome)
-
-    # sem comando de desinstalacao no registro? tenta o winget antes de desistir
-    if ([string]::IsNullOrWhiteSpace($linha)) {
-        Log ('sem linha de desinstalacao no registro; tentando winget pelo nome: ' + $nome)
-        if (Get-Command winget -ErrorAction SilentlyContinue) {
-            $argNome = '--name="' + $nome + '"'
-            $proc = Start-Process -FilePath 'winget.exe' -ArgumentList @('uninstall', $argNome, '--silent', '--accept-source-agreements', '--disable-interactivity') -Wait -PassThru -WindowStyle Hidden
-            if ($proc.ExitCode -eq 0) {
-                Log ('winget desinstalou com sucesso: ' + $nome)
-                return
-            }
-            Log ('winget nao conseguiu (codigo de saida ' + $proc.ExitCode + ')')
-        } else {
-            Log ('winget nao encontrado no sistema; sem linha de desinstalacao para rodar.')
+    # Preferir o desinstalador normal; nao inventar flags silenciosas pelo nome.
+    $linha = [string]$Prog.comando
+    if ([string]::IsNullOrWhiteSpace($linha)) { $linha = [string]$Prog.quiet }
+    if ([string]::IsNullOrWhiteSpace($linha)) { throw 'Desinstalador ausente. Use Aplicativos instalados do Windows.' }
+    $an = Analisar-LinhaComando ([Environment]::ExpandEnvironmentVariables($linha))
+    if (-not $an) { throw 'Comando nao reconhecido. Use Aplicativos instalados do Windows.' }
+    $folha = [IO.Path]::GetFileName($an.exe)
+    if ($folha -ieq 'msiexec.exe') {
+        $m = [regex]::Match($an.args, '(\{[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\})')
+        if (-not $m.Success) { throw 'MSI sem identificador valido.' }
+        $exe = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+        $argumentos = '/x ' + $m.Groups[1].Value + ' /norestart'
+    } else {
+        if ($folha -in @('cmd.exe','powershell.exe','pwsh.exe','wscript.exe','cscript.exe','mshta.exe','rundll32.exe','regsvr32.exe')) {
+            throw 'Desinstalador usa interpretador generico. Use o desinstalador oficial pelo Windows.'
         }
-        throw 'Nenhum desinstalador concluiu a operacao.'
-    }
-
-    # pacote msi: refaz na mao em modo silencioso
-    if ($linha -match 'msiexec') {
-        $m = [regex]::Match($linha, '(\{[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}\})')
-        if ($m.Success) {
-            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList @('/x', $m.Groups[1].Value, '/qn', '/norestart') -Wait -PassThru
-            if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('MSI falhou: ' + $proc.ExitCode) }
-            Log ('msi finalizado, codigo de saida: ' + $proc.ExitCode + ' (0 = ok, 3010 = ok com reinicio pendente)')
-            return
+        if ($an.exe -notmatch '^[A-Za-z]:\\' -or [IO.Path]::GetExtension($an.exe) -ine '.exe' -or -not (Test-Path -LiteralPath $an.exe -PathType Leaf)) {
+            throw 'Executavel local do desinstalador nao encontrado. Use Aplicativos instalados do Windows.'
         }
-        Log ('msiexec sem guid reconhecido; tentando a linha original: ' + $linha)
+        $exe = $an.exe
+        $argumentos = $an.args
     }
-
-    $an = Analisar-LinhaComando $linha
-    if ($null -eq $an -or -not (Test-Path $an.exe)) {
-        Log ('linha de desinstalacao nao padrao, executando via cmd: ' + $linha)
-        $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', $linha) -Wait -PassThru
-        if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('Desinstalador falhou: ' + $proc.ExitCode) }
+    $msg = ('Executar o desinstalador de {0}?{1}{1}{2}{1}{3}{1}{1}Confirme que reconhece este arquivo.' -f $nome,[Environment]::NewLine,$exe,$argumentos)
+    if (-not (Perguntar 'Confirmar desinstalador' $msg)) { throw 'Desinstalacao cancelada pelo usuario.' }
+    $params = @{ FilePath=$exe; Wait=$true; PassThru=$true; ErrorAction='Stop' }
+    if ($argumentos) { $params.ArgumentList = $argumentos }
+    $proc = Start-Process @params
+    try {
+        if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('Desinstalador falhou ou foi cancelado: ' + $proc.ExitCode) }
         Log ('desinstalador finalizado, codigo de saida: ' + $proc.ExitCode)
-        return
-    }
-
-    $argsLista = @()
-    if ($an.args -ne '') { $argsLista += $an.args }
-    $folha = (Split-Path -Leaf $an.exe).ToLower()
-    $modo = 'o desinstalador pode abrir janelas proprias; siga as telas dele'
-    if ($folha -match '^unins\d*\.exe$') {
-        $argsLista += @('/VERYSILENT', '/NORESTART')
-        $modo = 'inno setup: silencioso'
-    } elseif ($folha -match '^(uninstall|uninst)[a-z0-9]*\.exe$') {
-        $argsLista += '/S'
-        $modo = 'nsis: silencioso na maioria dos casos'
-    }
-    Log ('executando: ' + $an.exe + ' ' + ($argsLista -join ' ') + '  (' + $modo + ')')
-    $proc = Start-Process -FilePath $an.exe -ArgumentList $argsLista -Wait -PassThru
-    if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('Desinstalador falhou: ' + $proc.ExitCode) }
-    Log ('desinstalador finalizado, codigo de saida: ' + $proc.ExitCode)
+    } finally { $proc.Dispose() }
 }
 
 # apps que pedem confirmacao extra antes de desinstalar: drivers, runtimes
@@ -261,12 +234,67 @@ function Bater-Nome {
     return $false
 }
 
-function Medir-Pasta {
+# Correspondencia conservadora para pastas e chaves. Versoes/sufixos ambiguos
+# deixam de ser candidatos automaticos; uma correspondencia nao prova propriedade.
+function Nome-RastroExato {
+    param([string]$Candidato,[string]$Compacto)
+    if ($Compacto.Length -lt 4) { return $false }
+    $normal = ($Candidato.ToLower() -replace '[^a-z0-9]','')
+    return ($normal -eq $Compacto)
+}
+
+function Caminho-LocalAusente {
     param([string]$Caminho)
     try {
-        $m = Get-ChildItem -Path $Caminho -Recurse -File -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum
-        return ('{0} arquivo(s), {1} mb' -f $m.Count, [math]::Round($m.Sum / 1MB, 1))
-    } catch { return 'tamanho desconhecido' }
+        $p = [Environment]::ExpandEnvironmentVariables($Caminho.Trim().Trim('"'))
+        if ($p -notmatch '^[A-Za-z]:\\' -or $p.Contains('%')) { return $false }
+        $raiz = [IO.Path]::GetPathRoot($p)
+        if (([IO.DriveInfo]::new($raiz)).DriveType -ne [IO.DriveType]::Fixed) { return $false }
+        return (-not (Test-Path -LiteralPath $p -ErrorAction Stop))
+    } catch { return $false }
+}
+
+function Executavel-RastroAusente {
+    param([string]$Comando)
+    if ([string]::IsNullOrWhiteSpace($Comando)) { return $false }
+    $an = Analisar-LinhaComando ([Environment]::ExpandEnvironmentVariables($Comando))
+    if (-not $an -or [IO.Path]::GetExtension($an.exe) -ine '.exe') { return $false }
+    return (Caminho-LocalAusente $an.exe)
+}
+
+function Caminho-RastroSeguro {
+    param([string]$Caminho)
+    try {
+        if ($Caminho -notmatch '^[A-Za-z]:\\') { return $false }
+        $full = [IO.Path]::GetFullPath($Caminho).TrimEnd('\')
+        foreach ($bloqueado in @($env:SystemRoot,(Join-Path $env:ProgramData 'otimizadorpc'),$global:RaizEstado,$global:PastaApp)) {
+            if (-not $bloqueado) { continue }
+            $p = [IO.Path]::GetFullPath($bloqueado).TrimEnd('\')
+            if ($full -ieq $p -or $full.StartsWith($p + '\',[StringComparison]::OrdinalIgnoreCase)) { return $false }
+        }
+        if ($full -match '\\(WindowsApps|Common Files|Microsoft\\Windows|Microsoft\\Windows Defender)(\\|$)') { return $false }
+        $permitido = $false
+        foreach ($base in @($env:APPDATA,$env:LOCALAPPDATA,$env:ProgramData,$env:ProgramFiles,${env:ProgramFiles(x86)},(Join-Path $env:USERPROFILE 'Desktop'),(Join-Path $env:PUBLIC 'Desktop'))) {
+            if ($base -and $full.StartsWith(([IO.Path]::GetFullPath($base).TrimEnd('\') + '\'),[StringComparison]::OrdinalIgnoreCase)) { $permitido = $true; break }
+        }
+        if (-not $permitido) { return $false }
+        $atual = $full
+        while ($atual) {
+            $item = Get-Item -LiteralPath $atual -Force -ErrorAction Stop
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
+            $pai = Split-Path -Parent $atual
+            if (-not $pai -or $pai -eq $atual) { break }
+            $atual = $pai
+        }
+        return $true
+    } catch { return $false }
+}
+
+function Chave-RastroSegura {
+    param([string]$Nativa)
+    if ($Nativa -match '^HKEY_(LOCAL_MACHINE|CURRENT_USER)\\SOFTWARE\\(?:WOW6432Node\\)?Microsoft\\Windows\\CurrentVersion\\Uninstall\\[^\\]+$') { return $true }
+    if ($Nativa -notmatch '^HKEY_(LOCAL_MACHINE|CURRENT_USER)\\SOFTWARE\\(?:WOW6432Node\\)?[^\\]+(?:\\[^\\]+)?$') { return $false }
+    return ($Nativa -notmatch '^HKEY_(LOCAL_MACHINE|CURRENT_USER)\\SOFTWARE\\(?:WOW6432Node\\)?(Microsoft|Classes|Policies|Clients|RegisteredApplications|WOW6432Node)(\\|$)')
 }
 
 # le o PATH bruto do registro (variaveis nao expandidas), junto com o tipo do valor
@@ -327,8 +355,8 @@ function Varrer-Rastros {
             $pastas = @(Get-ChildItem -Path $raiz -Directory -Depth $prof -ErrorAction SilentlyContinue)
         } catch { $pastas = @() }
         foreach ($d in $pastas) {
-            if (Bater-Nome $d.Name $alvoBase $compacto) {
-                [void]$achados.Add([pscustomobject]@{ tipo = 'pasta'; caminho = $d.FullName; extra = (Medir-Pasta $d.FullName) })
+            if ((Nome-RastroExato $d.Name $compacto) -and (Caminho-RastroSeguro $d.FullName)) {
+                [void]$achados.Add([pscustomobject]@{ tipo = 'pasta'; caminho = $d.FullName; extra = 'pasta com nome correspondente; confira o conteudo' })
             }
         }
         Atualizar-UI
@@ -347,7 +375,7 @@ function Varrer-Rastros {
             $itens = @(Get-ChildItem -Path $menu -Recurse -Depth 1 -ErrorAction SilentlyContinue)
         } catch { $itens = @() }
         foreach ($f in $itens) {
-            if (-not (Bater-Nome $f.Name $alvoBase $compacto)) { continue }
+            if (-not (Nome-RastroExato $f.BaseName $compacto) -or -not (Caminho-RastroSeguro $f.FullName)) { continue }
             if ($f.PSIsContainer) {
                 [void]$achados.Add([pscustomobject]@{ tipo = 'pasta'; caminho = $f.FullName; extra = 'pasta do menu iniciar' })
             } elseif ($f.Extension -eq '.lnk') {
@@ -371,7 +399,7 @@ function Varrer-Rastros {
             $chs = @(Get-ChildItem -Path $raiz -Depth $prof -ErrorAction SilentlyContinue)
         } catch { $chs = @() }
         foreach ($k in $chs) {
-            if (Bater-Nome $k.PSChildName $alvoBase $compacto) {
+            if ((Nome-RastroExato $k.PSChildName $compacto) -and (Chave-RastroSegura $k.Name)) {
                 [void]$achados.Add([pscustomobject]@{ tipo = 'chave'; caminho = $k.PSPath; extra = 'chave de registro' })
             }
         }
@@ -380,7 +408,7 @@ function Varrer-Rastros {
 
     # 5. servicos que apontam pro programa (vao ficar orfaos)
     try {
-        $servicos = @(Get-CimInstance -ClassName Win32_Service -ErrorAction SilentlyContinue | Where-Object { Bater-Nome ([string]$_.PathName) $alvoBase $compacto })
+        $servicos = @(Get-CimInstance -ClassName Win32_Service -ErrorAction SilentlyContinue | Where-Object { (Bater-Nome ([string]$_.PathName) $alvoBase $compacto) -and (Executavel-RastroAusente $_.PathName) })
         foreach ($s in $servicos) {
             if ([string]::IsNullOrWhiteSpace([string]$s.Name)) { continue }
             [void]$achados.Add([pscustomobject]@{ tipo = 'servico'; caminho = [string]$s.Name; extra = ('servico orfao: ' + [string]$s.State + ' - ' + [string]$s.PathName) })
@@ -391,6 +419,7 @@ function Varrer-Rastros {
     # 6. tarefas agendadas que executam o programa
     try {
         foreach ($t in @(Get-ScheduledTask -ErrorAction SilentlyContinue)) {
+            if (@($t.Actions).Count -ne 1 -or $t.TaskPath -like '\\Microsoft\\*') { continue }
             $exe = ''
             $casou = $false
             foreach ($a in @($t.Actions)) {
@@ -399,7 +428,7 @@ function Varrer-Rastros {
                 if (Bater-Nome ([string]$a.Arguments) $alvoBase $compacto) { $casou = $true }
                 if ($exe -eq '' -and -not [string]::IsNullOrWhiteSpace([string]$a.Execute)) { $exe = [string]$a.Execute }
             }
-            if (-not $casou) { continue }
+            if (-not $casou -or -not (Caminho-LocalAusente $exe)) { continue }
             [void]$achados.Add([pscustomobject]@{ tipo = 'tarefa'; caminho = ([string]$t.TaskPath + [string]$t.TaskName); tarefaPath = [string]$t.TaskPath; tarefaNome = [string]$t.TaskName; extra = ('tarefa agendada: ' + $exe) })
         }
     } catch { }
@@ -414,7 +443,7 @@ function Varrer-Rastros {
             if ($l -match '^(Rule Name|Nome da Regra)\s*:\s*(.+)$') { $nomeRegra = $Matches[2].Trim(); continue }
             if ($nomeRegra -ne '' -and $l -match '^(Program|Programa)\s*:\s*(.*)$') {
                 $prog = $Matches[2].Trim()
-                if (Bater-Nome $prog $alvoBase $compacto) {
+                if ((Bater-Nome $prog $alvoBase $compacto) -and (Caminho-LocalAusente $prog)) {
                     [void]$achados.Add([pscustomobject]@{ tipo = 'firewall'; caminho = $nomeRegra; programa = $prog; extra = ('regra de firewall: ' + $prog) })
                 }
             }
@@ -434,7 +463,7 @@ function Varrer-Rastros {
         if ($null -eq $item) { continue }
         foreach ($vn in @($item.GetValueNames())) {
             $dado = [string]$item.GetValue($vn)
-            if ((Bater-Nome $vn $alvoBase $compacto) -or (Bater-Nome $dado $alvoBase $compacto)) {
+            if (((Bater-Nome $vn $alvoBase $compacto) -or (Bater-Nome $dado $alvoBase $compacto)) -and (Executavel-RastroAusente $dado)) {
                 [void]$achados.Add([pscustomobject]@{ tipo = 'run'; caminho = ($ck2 + ' :: ' + $vn); chave = $ck2; valor = [string]$vn; extra = ('inicializacao: ' + $dado) })
             }
         }
@@ -446,7 +475,7 @@ function Varrer-Rastros {
         if ($null -eq $bruto -or $null -eq $bruto.valor) { continue }
         foreach ($ent in @($bruto.valor -split ';')) {
             if ([string]::IsNullOrWhiteSpace($ent)) { continue }
-            if (Bater-Nome $ent $alvoBase $compacto) {
+            if ((Bater-Nome $ent $alvoBase $compacto) -and (Caminho-LocalAusente $ent)) {
                 [void]$achados.Add([pscustomobject]@{ tipo = 'path'; caminho = ('PATH ' + $escopo + ' :: ' + $ent.Trim()); escopo = $escopo; entrada = $ent; extra = 'entrada do PATH' })
             }
         }
@@ -483,10 +512,13 @@ function Executar-Varredura {
         $marca = New-Object System.Windows.Controls.CheckBox
         $marca.Content = ('[{0}]  {1}{2}' -f $r.tipo, $mostro, $extra)
         $marca.IsChecked = $false
+        $marca.Add_Checked({ Atualizar-ContagemRastros })
+        $marca.Add_Unchecked({ Atualizar-ContagemRastros })
         $item.Content = $marca
         $item.Tag = $r
         [void]$lb.Items.Add($item)
     }
+    Atualizar-ContagemRastros
     if ($rastros.Count -eq 0) {
         $global:UI.RotuloRastros.Text = ('varredura de "{0}": nenhum rastro encontrado (limpo!).' -f $Prog.nome)
         Log ('varredura de "' + $Prog.nome + '": nenhum rastro encontrado.')
@@ -518,6 +550,8 @@ function Apagar-Rastro {
 
     # servico orfao: para e desativa (nunca apaga; desfazer restaura tipo e estado)
     if ($Rastro.tipo -eq 'servico') {
+        $detalhes = @(Get-CimInstance Win32_Service -ErrorAction Stop | Where-Object { $_.Name -eq $Rastro.caminho })
+        if ($detalhes.Count -ne 1 -or -not (Executavel-RastroAusente $detalhes[0].PathName)) { throw 'Servico nao confirmado como candidato orfao.' }
         $svc = Get-Service -Name $Rastro.caminho -ErrorAction Stop
         $estadoAnt = [string]$svc.Status
         $tipoAnt = [string]$svc.StartType
@@ -531,6 +565,7 @@ function Apagar-Rastro {
     # tarefa agendada: so desativa (nunca apaga; desfazer reativa)
     if ($Rastro.tipo -eq 'tarefa') {
         $t = Get-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop
+        if ($t.TaskPath -like '\\Microsoft\\*' -or @($t.Actions).Count -ne 1 -or -not (Caminho-LocalAusente ([string]$t.Actions[0].Execute))) { throw 'Tarefa nao confirmada como candidata orfa.' }
         $estadoAnt = [string]$t.State
         Registrar-Jornal ([pscustomobject]@{ tipo = 'tarefa'; tarefaPath = $Rastro.tarefaPath; tarefaNome = $Rastro.tarefaNome; estadoAnterior = $estadoAnt })
         Disable-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop | Out-Null
@@ -543,7 +578,7 @@ function Apagar-Rastro {
         $regras = @(Get-NetFirewallRule -PolicyStore PersistentStore -ErrorAction Stop | Where-Object { $_.DisplayName -eq $Rastro.caminho })
         foreach ($regra in $regras) {
             $app = $regra | Get-NetFirewallApplicationFilter -ErrorAction Stop
-            if ([string]$app.Program -ne $Rastro.programa) { continue }
+            if ([string]$app.Program -ne $Rastro.programa -or -not (Caminho-LocalAusente ([string]$app.Program))) { continue }
             if ([string]$regra.Enabled -ne 'True') { continue }
             # Nao desative bloqueios: isso poderia enfraquecer a protecao.
             if ([string]$regra.Action -ne 'Allow') { continue }
@@ -558,6 +593,7 @@ function Apagar-Rastro {
     if ($Rastro.tipo -eq 'run') {
         $leitura = Ler-ValorRegistro -CaminhoPS $Rastro.chave -Nome $Rastro.valor
         if (-not $leitura.existia) { Log ('ja sumiu: ' + $Rastro.caminho); return }
+        if (-not (Executavel-RastroAusente ([string]$leitura.valor))) { throw 'Entrada de inicializacao ainda aponta para executavel existente ou incerto.' }
         Registrar-Jornal ([pscustomobject]@{
             tipo = 'registro'; caminho = $Rastro.chave; nome = $Rastro.valor
             existia = $true; tipoAnterior = $leitura.tipo
@@ -573,6 +609,7 @@ function Apagar-Rastro {
 
     # entrada do PATH: tira so a entrada morta, mantendo o resto e o tipo do valor
     if ($Rastro.tipo -eq 'path') {
+        if (-not (Caminho-LocalAusente $Rastro.entrada)) { throw 'Entrada PATH existente ou incerta; preservada.' }
         $bruto = Obter-PathBruto $Rastro.escopo
         if ($null -eq $bruto -or $null -eq $bruto.valor) { Log ('nao consegui ler o PATH ' + $Rastro.escopo); return }
         $lista = @($bruto.valor -split ';')
@@ -596,7 +633,7 @@ function Apagar-Rastro {
         if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
         $chaveReg = Get-Item -LiteralPath $Rastro.caminho -ErrorAction Stop
         try { $nativa = [string]$chaveReg.Name } finally { $chaveReg.Close() }
-        if ($nativa -notmatch '^HKEY_(LOCAL_MACHINE|CURRENT_USER)\\.+') { throw 'Chave de registro fora dos escopos suportados.' }
+        if (-not (Chave-RastroSegura $nativa)) { throw 'Chave protegida ou fora dos escopos suportados.' }
         $folha = ($nativa -replace '\\', '_')
         $folha = ($folha -replace '[^a-zA-Z0-9_.{}-]', '')
         if ($folha.Length -gt 70) { $folha = $folha.Substring($folha.Length - 70) }
@@ -606,15 +643,16 @@ function Apagar-Rastro {
         Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg })
         Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
         Log ('chave apagada (backup .reg na quarantena): ' + $nativa)
-    } else {
+    } elseif ($Rastro.tipo -in @('arquivo','pasta')) {
         if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
+        if (-not (Caminho-RastroSeguro $Rastro.caminho)) { throw 'Caminho protegido, redirecionado ou fora dos locais permitidos.' }
         $folha = Split-Path -Leaf $Rastro.caminho
         $destino = Join-Path $PastaSessao ('{0:00}_{1}' -f $Num, $folha)
         if (Test-Path -LiteralPath $destino) { throw 'Destino da quarentena ja existe.' }
         Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino })
         Move-Item -LiteralPath $Rastro.caminho -Destination $destino -ErrorAction Stop
         Log ('rastro movido pra quarantena: ' + $Rastro.caminho)
-    }
+    } else { throw ('Tipo de rastro desconhecido: ' + $Rastro.tipo) }
 }
 
 # A caixa marcada e a unica fonte de verdade; o realce azul nao seleciona rastros.
@@ -628,11 +666,18 @@ function Obter-RastrosMarcados {
     }
 }
 
+function Atualizar-ContagemRastros {
+    if ($global:UI.ContainsKey('InfoMarcadosRastros') -and $global:UI.InfoMarcadosRastros) {
+        $global:UI.InfoMarcadosRastros.Text = ('{0} marcado(s)' -f @(Obter-RastrosMarcados $global:UI.ListaRastros).Count)
+    }
+}
+
 function Marcar-Rastros {
     param([bool]$Marcar)
     foreach ($linha in $global:UI.ListaRastros.Items) {
         if ($linha.Content -is [System.Windows.Controls.CheckBox]) { $linha.Content.IsChecked = $Marcar }
     }
+    Atualizar-ContagemRastros
 }
 
 function Clique-ApagarRastros {
@@ -688,6 +733,7 @@ function Clique-ApagarRastros {
     } else {
         $lb.Items.Clear()
         $global:RastrosExibidos = @()
+        Atualizar-ContagemRastros
         $global:UI.RotuloRastros.Text = 'rastros: selecione um programa e clique em varrer.'
     }
 }

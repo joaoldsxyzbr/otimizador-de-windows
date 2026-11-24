@@ -892,6 +892,7 @@ function Ligar-Tudo {
     $global:UI.BotaoDesinstalarProg.Add_Click({ Executar-OperacaoUI { Clique-DesinstalarProg } })
     $global:UI.BotaoVarrerRastros.Add_Click({ Executar-OperacaoUI { Clique-VarrerRastros } })
     $global:UI.BotaoMarcarRastros.Add_Click({ Marcar-Rastros $true })
+    $global:UI.BotaoDesmarcarRastros.Add_Click({ Marcar-Rastros $false })
     $global:UI.BotaoApagarRastros.Add_Click({ Executar-OperacaoUI { Clique-ApagarRastros } })
 
     # pagina instalar

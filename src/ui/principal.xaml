@@ -414,6 +414,8 @@
                         <TextBlock x:Name="RotuloRastros" Text="rastros: selecione um programa acima e clique em varrer." Foreground="#9ca3af" FontSize="13" VerticalAlignment="Center" TextWrapping="Wrap"/>
                         <WrapPanel Margin="0,6,0,0">
                         <Button x:Name="BotaoMarcarRastros" Content="Marcar todos" Margin="0,0,0,0" MinWidth="110" VerticalAlignment="Center"/>
+                        <Button x:Name="BotaoDesmarcarRastros" Content="Desmarcar todos" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="InfoMarcadosRastros" Text="0 marcado(s)" Foreground="#93c5fd" Margin="12,0,0,0" VerticalAlignment="Center"/>
                         <Button x:Name="BotaoApagarRastros" Style="{StaticResource BotaoVermelho}" Content="Apagar selecionados (pra quarantena)" Margin="12,0,0,0" MinWidth="270" VerticalAlignment="Center"/>
                         </WrapPanel>
                     </StackPanel>
