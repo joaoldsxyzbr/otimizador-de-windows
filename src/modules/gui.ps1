@@ -376,7 +376,7 @@ function Clique-InstalarRecursos {
         Avisar 'Nada selecionado' 'Marque os recursos do Windows que quer habilitar.'
         return
     }
-    $conf = Perguntar 'Habilitar recursos' ('Habilitar {0} recurso(s) do Windows? Alguns pedem reinicializacao e internet.' -f $selecionados.Count)
+    $conf = Perguntar 'Habilitar recursos' ('Habilitar {0} recurso(s) do Windows? Alguns pedem reinicializacao e internet. Se dependencias forem alteradas, a reversao exigira revisao manual.' -f $selecionados.Count)
     if (-not $conf) { return }
     Status 'habilitando recursos...'
     Ocupado $true

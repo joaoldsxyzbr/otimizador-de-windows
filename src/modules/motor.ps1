@@ -262,7 +262,7 @@ function Ler-PlanoRegRestrito {
             $acao.tipoValor='DWord'
             $acao.dados=[Convert]::ToInt32($Matches[1],16)
         } elseif ($dado -match '^"((?:[^"\\]|\\["\\])*)"$') {
-            $acao.dados=$Matches[1].Replace('\\"','"').Replace('\\\\','\')
+            $acao.dados=[regex]::Replace($Matches[1],'\\(["\\])','$1')
         } else { throw 'Tipo .reg nao suportado. Use string, DWORD ou exclusao de valor.' }
         $acoes += [pscustomobject]$acao
     }
@@ -359,23 +359,23 @@ function Executar-Acao {
             }
 
             'recurso' {
-                $feat = Get-WindowsOptionalFeature -Online -FeatureName $Acao.nome -ErrorAction SilentlyContinue
-                if ($null -eq $feat) {
-                    Log ("recurso do windows '{0}' nao encontrado, pulando." -f $Acao.nome)
-                    return
-                }
-                Registrar-Jornal ([pscustomobject]@{
-                    tipo           = 'recurso'
-                    nome           = $Acao.nome
-                    estadoAnterior = $feat.State.ToString()
-                })
-                if ($Acao.ativar) {
-                    Enable-WindowsOptionalFeature -Online -FeatureName $Acao.nome -All -NoRestart -ErrorAction Stop | Out-Null
-                    Log ("recurso habilitado: {0}" -f $Acao.nome)
-                } else {
-                    Disable-WindowsOptionalFeature -Online -FeatureName $Acao.nome -NoRestart -ErrorAction Stop | Out-Null
-                    Log ("recurso desabilitado: {0}" -f $Acao.nome)
-                }
+                $antes = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ nome=$_.FeatureName; estado=$_.State.ToString() } })
+                $feat = @($antes | Where-Object { $_.nome -eq $Acao.nome })
+                if ($feat.Count -ne 1) { throw 'Recurso nao encontrado.' }
+                $alvo = if ($Acao.ativar) { 'Enabled' } else { 'Disabled' }
+                if ($feat[0].estado -eq $alvo) { Log 'Recurso ja configurado.'; return }
+                if ($feat[0].estado -notin @('Enabled','Disabled')) { throw 'Recurso em estado pendente ou payload removido; revise pelo Windows.' }
+                $entrada = [pscustomobject]@{ tipo='recurso'; nome=$Acao.nome; estadoAnterior=$feat[0].estado; estadoDepois=$alvo; alteracoes=$null }
+                Registrar-Jornal $entrada
+                if ($Acao.ativar) { $resultado = Enable-WindowsOptionalFeature -Online -FeatureName $Acao.nome -All -NoRestart -ErrorAction Stop }
+                else { $resultado = Disable-WindowsOptionalFeature -Online -FeatureName $Acao.nome -NoRestart -ErrorAction Stop }
+                $depois = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop)
+                $mapa = @{}
+                foreach ($f in $depois) { $mapa[$f.FeatureName]=$f.State.ToString() }
+                $entrada.alteracoes = @($antes | Where-Object { $mapa[$_.nome] -ne $_.estado } | ForEach-Object { [pscustomobject]@{ nome=$_.nome; antes=$_.estado; depois=$mapa[$_.nome] } })
+                [void](Gravar-SessaoArquivo)
+                if ($resultado.RestartNeeded -or $mapa[$Acao.nome] -ne $alvo) { Log 'Recurso processado; reinicio ou revisao necessarios.' }
+                else { Log ('recurso verificado: ' + $Acao.nome) }
             }
 
             'energia' {
@@ -478,12 +478,15 @@ function Desfazer-Item {
             }
 
             'recurso' {
-                if ($Item.estadoAnterior -eq 'Enabled') {
-                    Enable-WindowsOptionalFeature -Online -FeatureName $Item.nome -All -NoRestart -ErrorAction Stop | Out-Null
-                } else {
-                    Disable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null
-                }
-                Log ("recurso restaurado: {0}" -f $Item.nome)
+                if ($null -eq $Item.alteracoes -or @($Item.alteracoes).Count -ne 1 -or $Item.alteracoes[0].nome -ne $Item.nome) { throw 'Dependencias ou estado incerto: revise os recursos do Windows manualmente.' }
+                $atual = (Get-WindowsOptionalFeature -Online -FeatureName $Item.nome -ErrorAction Stop).State.ToString()
+                if ($atual -eq $Item.estadoAnterior) { return $true }
+                if ($atual -ne $Item.estadoDepois -or $atual -notin @('Enabled','Disabled')) { throw 'Recurso em estado pendente ou alterado posteriormente.' }
+                if ($Item.estadoAnterior -eq 'Enabled') { Enable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null }
+                elseif ($Item.estadoAnterior -eq 'Disabled') { Disable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null }
+                else { throw 'Estado anterior nao suportado.' }
+                if ((Get-WindowsOptionalFeature -Online -FeatureName $Item.nome -ErrorAction Stop).State.ToString() -ne $Item.estadoAnterior) { throw 'Reversao pendente; confira apos reiniciar.' }
+                Log ('recurso restaurado e verificado: ' + $Item.nome)
             }
 
             'appx' {
@@ -714,6 +717,7 @@ function Verificar-Acao {
         switch ($Acao.tipo) {
             'registro' {
                 $leitura = Ler-ValorRegistro -CaminhoPS $Acao.caminho -Nome $Acao.nome
+                if ($Acao.remover) { return (-not $leitura.existia) }
                 if (-not $leitura.existia) { return $false }
                 if ($leitura.tipo -ne (Converter-Kind $Acao.tipoValor).ToString()) { return $false }
                 if ($leitura.tipo -eq 'DWord') { return ([int]$leitura.valor -eq [int]$Acao.dados) }
@@ -756,7 +760,7 @@ function Verificar-Tweak {
         }
     }
     if ($verificaveis -eq 0) { return 'desconhecido' }
-    if ($ativos -eq $verificaveis) { return 'aplicado' }
+    if ($ativos -eq $verificaveis -and $verificaveis -eq @($Tweak.acoes).Count) { return 'aplicado' }
     if ($ativos -eq 0) { return 'nao' }
     return 'parcial'
 }

@@ -612,6 +612,18 @@ Windows Registry Editor Version 5.00
     Passou 'parser aceita valores simples e recusa arquivo inteiro invalido'
 } catch { Falhou 'custom por valor' $_.Exception.Message }
 
+# ---- recursos com dependencias nao podem ser revertidos automaticamente ----
+Secao 'recursos com dependencias'
+try {
+    & {
+        function Log { param($Mensagem,[switch]$Erro) }
+        function Disable-WindowsOptionalFeature { throw 'Nao deveria chamar DISM.' }
+        $item = [pscustomobject]@{ tipo='recurso'; nome='Teste'; estadoAnterior='Disabled'; estadoDepois='Enabled'; alteracoes=@([pscustomobject]@{nome='Teste'},[pscustomobject]@{nome='Dependencia'}) }
+        if (Desfazer-Item $item) { throw 'Reversao de dependencias aceita.' }
+    }
+    Passou 'reversao de recursos com dependencias exige revisao manual'
+} catch { Falhou 'recursos com dependencias' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

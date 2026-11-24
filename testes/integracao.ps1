@@ -99,6 +99,11 @@ if (-not (Reverter-Sessao $arquivo)) { Log 'FALHOU: reversao do preset' -Erro; e
 # ---- 5. confere todos os valores originais (primeiro snapshot de cada valor) ----
 $vistos = @{}
 foreach ($it in $itens) {
+    if ($it.tipo -eq 'servico') {
+        $svc = Obter-EstadoServico $it.nome
+        if ($svc.tipo -ne $it.tipoAnterior -or $svc.estado -ne $it.estadoAnterior -or $svc.atraso -ne $it.atrasoAnterior) { throw ('Servico nao restaurado: ' + $it.nome) }
+        Log ('CI ok: servico restaurado: ' + $it.nome)
+    }
     if ($it.tipo -ne 'registro') { continue }
     $id = $it.caminho + '|' + $it.nome
     if ($vistos.ContainsKey($id)) { continue }

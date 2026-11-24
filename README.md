@@ -56,6 +56,7 @@ nao quer janela? modo cli:
 - **journal de desfazer**: cada acao grava o valor anterior; a aba desfazer reverte sessao inteira; o journal e gravado atomicamente antes das acoes registradas, com copia anterior e progresso de reversao; falhas podem exigir revisao manual
 - **planos**: exporte os ajustes marcados num .json e importe em outro pc
 - **arquivo unico**: `.\montar-portatil.ps1` gera `dist\otimizadorpc-portatil.ps1`, o app inteiro num arquivo so pro pendrive
+- servicos: snapshot de inicio normal/atrasado e estado, verificacao de conflitos e restauracao. Recursos opcionais registram dependencias alteradas; reversao automatica somente quando o alvo foi a unica alteracao confirmada, sem estado pendente.
 - **tweaks custom locais**: arquivos REGEDIT5 em `custom\` somente com valores string/DWORD/exclusao de valor em HKCU Software, fora de chaves reservadas. Arquivos nao suportados sao recusados por inteiro; cada valor aceito tem journal individual. Importacao integral antiga exige recuperacao manual.
 
 ## desenvolvimento v2 (pre-release)
