@@ -94,7 +94,7 @@ jobs:
           sha=$(git rev-parse HEAD)
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
           # A versao interna deve corresponder a tag em ambos os canais.
-          grep -Fx "\$global:VersaoOtimizador = '${TAG#v}'" src/modules/comum.ps1 >/dev/null || { echo 'Versao interna diferente da tag; atualize o codigo antes de publicar.'; exit 1; }
+          tr -d '\r' < src/modules/comum.ps1 | grep -Fx "\$global:VersaoOtimizador = '${TAG#v}'" >/dev/null || { echo 'Versao interna diferente da tag; atualize o codigo antes de publicar.'; exit 1; }
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
   compilar:
