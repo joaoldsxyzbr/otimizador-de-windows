@@ -405,8 +405,18 @@ try {
     try {
         & {
             $ErrorActionPreference = 'Stop'
+            $estadoRaiz=Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)) 'otimizadorpc-v2'
+            $existia=Test-Path -LiteralPath $estadoRaiz
+            $antes=@()
+            if ($existia) { $antes=@(Get-ChildItem -LiteralPath $estadoRaiz -File -Recurse -ErrorAction Stop | ForEach-Object { $_.FullName+'|'+$_.Length+'|'+$_.LastWriteTimeUtc.Ticks } | Sort-Object) }
             & ([scriptblock]::Create($codigoOnline)) -Cli essencial -Simular
             & ([scriptblock]::Create($codigoOnline)) -Diagnostico -ValidarInterface
+            if (-not $global:ModoProtegido -or $global:UI.BotaoNavAjustes.IsEnabled -or $global:UI.BotaoCriarRestore.IsEnabled -or $global:UI.BotaoVerificarRelease.IsEnabled -or -not $global:UI.BotaoInventario.IsEnabled) { throw 'Interface protegida incorreta.' }
+            if ((Test-Path -LiteralPath $estadoRaiz) -ne $existia) { throw 'Diagnostico criou pasta de estado.' }
+            $depois=@()
+            if ($existia) { $depois=@(Get-ChildItem -LiteralPath $estadoRaiz -File -Recurse -ErrorAction Stop | ForEach-Object { $_.FullName+'|'+$_.Length+'|'+$_.LastWriteTimeUtc.Ticks } | Sort-Object) }
+            if (($antes -join "`n") -cne ($depois -join "`n")) { throw 'Diagnostico alterou arquivos de estado.' }
+            Passou 'interface protegida e simulacao sem arquivos de estado'
         }
         Passou 'script em memoria simula perfil e carrega controles WPF'
     } finally { $global:ModoProtegido=$modoAnterior; $global:ModoOtimizador=$nomeModoAnterior }
@@ -892,6 +902,27 @@ try {
     } finally { $global:ModoProtegido=$modoAntes }
     Passou 'modo protegido bloqueia mutacoes, permite simulacao'
 } catch { Falhou 'modo corporativo' $_.Exception.Message }
+
+# ---- restauracao: nao ativar protecao nem presumir sucesso ----
+Secao 'ponto de restauracao confirmado'
+try {
+    & {
+        function Log { param($Mensagem,[switch]$Erro) }
+        function Get-ComputerRestorePoint { [CmdletBinding()] param() [pscustomobject]@{SequenceNumber=1;Description='anterior'} }
+        function Enable-ComputerRestore { throw 'Nao deve ativar protecao.' }
+        function Checkpoint-Computer { [CmdletBinding()] param($Description,$RestorePointType) }
+        if (Criar-PontoRestauracao) { throw 'Ponto inexistente foi aceito.' }
+        $script:sessaoIniciada=$false
+        function Iniciar-Sessao { $script:sessaoIniciada=$true }
+        function Executar-Acao { throw 'Nao deve executar acao.' }
+        $catalogoAntes=$global:CatalogoTweaks
+        try {
+            $global:CatalogoTweaks=[pscustomobject]@{tweaks=@([pscustomobject]@{id='extensoes-de-arquivo';nome='teste';so='ambos';acoes=@([pscustomobject]@{tipo='registro'})})}
+            if ((Aplicar-Preset 'essencial') -or $script:sessaoIniciada) { throw 'Preset real continuou sem ponto.' }
+        } finally { $global:CatalogoTweaks=$catalogoAntes }
+    }
+    Passou 'ponto nao confirmado interrompe preset antes do journal'
+} catch { Falhou 'ponto de restauracao confirmado' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

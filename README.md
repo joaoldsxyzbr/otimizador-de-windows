@@ -27,7 +27,7 @@ Para testar a variante em memoria em uma copia local, abra Windows PowerShell 5.
 & ([scriptblock]::Create([IO.File]::ReadAllText((Resolve-Path 'dist\otimizadorpc.ps1')))) -Cli essencial -Simular
 ```
 
-Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O modo remoto nao carrega tweaks customizados locais; os logs, journals e backups permanecem em ProgramData\otimizadorpc-v2.
+Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O modo remoto nao carrega tweaks customizados locais; no modo pessoal, logs, journals e backups permanecem em ProgramData\otimizadorpc-v2. No modo protegido nao cria estado persistente.
 
 O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/latest/download/otimizadorpc.ps1 | iex` **somente depois de uma release estavel contendo esse asset ser publicada**. A publicacao automatica esta configurada e a primeira pre-release foi publicada. O comando direto executa codigo remoto sem conferir o hash automaticamente: revise a origem e a versao antes de executar como administrador.
 
@@ -39,7 +39,7 @@ O botao Consultar e baixar versao oficial mostra releases estavel/candidata e pe
 
 1. baixe/clone o repo e abra a pasta
 2. (opcional, recomendado) rode a bateria de testes: `powershell -ExecutionPolicy Bypass -File .\testar.ps1`
-3. de dois cliques em `rodar-como-admin.bat` (o app pede elevacao sozinho)
+3. de dois cliques em `rodar-como-admin.bat` para diagnostico sem elevacao; para uso pessoal autorizado, abra Windows PowerShell como administrador e execute ` .\otimizadorpc.ps1`.
 
 nao quer janela? modo cli:
 

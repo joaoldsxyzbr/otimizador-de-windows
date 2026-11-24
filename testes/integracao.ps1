@@ -61,8 +61,14 @@ Log ('CI integracao: pasta do journal = ' + $global:PastaDesfazer)
 
 # ---- 1. aplica o preset seguro de verdade ----
 Log 'CI: aplicando preset seguro DE VERDADE...'
-$ok = Aplicar-Preset -Nivel 'seguro'
-Log ('CI: Aplicar-Preset terminou com retorno = ' + $ok + ' (ponto de restauracao costuma nao existir em runner; nao e falha deste teste)')
+# Windows Server dos runners nao suporta System Restore. O stub e local
+# a este teste descartavel; o produto continua exigindo ponto confirmado.
+$ok = & {
+    function Criar-PontoRestauracao { Log 'CI: stub de ponto de restauracao; teste apenas do motor e journal.'; return $true }
+    Aplicar-Preset -Nivel 'seguro'
+}
+if (-not $ok) { throw 'Preset do teste descartavel terminou com falhas.' }
+Log 'CI: preset aplicado; verificando journal e reversao reais.'
 
 # ---- 2. journal crash-safe gravado a cada acao ----
 $journals = @(Get-ChildItem -Path $global:PastaDesfazer -Filter '*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)

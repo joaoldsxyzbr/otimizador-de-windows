@@ -78,9 +78,8 @@ function Obter-DiagnosticoLocal {
         (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')) {
         $avisos += 'Reinicio pendente detectado. Reinicie antes de aplicar ajustes.'
     }
-    if (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) {
-        $avisos += 'Possivel ambiente gerenciado. Consulte o administrador antes de alterar politicas.'
-    }
+    if ($global:ModoProtegido) { $avisos += 'Modo protegido: somente diagnostico. Consulte o TI antes de qualquer alteracao.' }
+    elseif (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) { $avisos += 'Possivel ambiente gerenciado. Consulte o administrador.' }
     try {
         if (@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) { $avisos += 'Bateria detectada: prefira o perfil Notebook e preserve economia de energia.' }
         else { $avisos += 'Use o perfil Essencial como ponto de partida; nao ha ganho de FPS garantido.' }
