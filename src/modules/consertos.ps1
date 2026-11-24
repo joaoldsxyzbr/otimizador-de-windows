@@ -253,20 +253,7 @@ function Instalar-Aplicativos {
         $fonte = ''
         if ($app.fonte -eq 'msstore') { $fonte = '-s msstore' }
         [void]$linhas.AppendLine("Write-Host ''")
-        if ([string]$app.id -notmatch '^[A-Za-z0-9._-]+
-    }
-    Executar-NoConsole -Titulo 'Instalacao de aplicativos' -Bloco $linhas.ToString()
-}
-
-function Atualizar-Tudo {
-    if (-not (Testar-Winget)) { Log 'winget nao encontrado; use a instalacao do winget na aba Config.' -Erro; return }
-    $blocovo = @'
-Write-Host '== Atualizando todos os aplicativos ==' -ForegroundColor Cyan
-Executar-Nativo winget.exe @('upgrade','--all','--silent','--accept-package-agreements','--accept-source-agreements')
-'@
-    Executar-NoConsole -Titulo 'Atualizar todos os apps (winget)' -Bloco $blocovo
-}
-) { throw 'ID de aplicativo invalido.' }
+        if ([string]$app.id -notmatch '^[A-Za-z0-9._-]+$') { throw 'ID de aplicativo invalido.' }
         $nomeSeguro = ([string]$app.nome).Replace("'","''")
         [void]$linhas.AppendLine("Write-Host ('### ' + '$nomeSeguro') -ForegroundColor Cyan")
         $argsFonte = ''
