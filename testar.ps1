@@ -634,6 +634,20 @@ try {
     Passou 'filtro literal e classificacao de cautela'
 } catch { Falhou 'gerenciador e rotulos' $_.Exception.Message }
 
+# ---- cancelamento cooperativo sem janela nem efeitos ----
+Secao 'progresso em lote'
+try {
+    & {
+        . (Join-Path $raiz 'src\modules\comum.ps1')
+        $estado = @{ cancelado=$false; atual=0; total=2; janela=$null }
+        if (-not (Continuar-ProgressoLote $estado 'primeiro') -or $estado.atual -ne 1) { throw 'Progresso inicial incorreto.' }
+        $estado.cancelado=$true
+        if ((Continuar-ProgressoLote $estado 'segundo') -or $estado.atual -ne 1) { throw 'Acao apos cancelamento aceita.' }
+        Fechar-ProgressoLote $estado
+    }
+    Passou 'cancelamento impede proxima acao sem interromper a anterior'
+} catch { Falhou 'progresso em lote' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

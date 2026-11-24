@@ -318,19 +318,23 @@ function Clique-AplicarAjustes {
     Ocupado $true
     if ($global:UI.ChkPontoRestore.IsChecked) { [void](Criar-PontoRestauracao) }
     Iniciar-Sessao 'ajustes'
-    $i = 0
-    foreach ($cb in $selecionados) {
-        $i++
-        $t = $cb.Tag
-        Status ('aplicando {0}/{1}: {2}' -f $i, $selecionados.Count, $t.nome)
-        Log ('== ajuste: ' + $t.nome)
-        foreach ($acao in $t.acoes) {
-            Executar-Acao $acao $t.nome
-            Atualizar-UI
+    $total = 0
+    foreach ($cb in $selecionados) { $total += @($cb.Tag.acoes).Count }
+    $progresso = Iniciar-ProgressoLote 'Aplicando ajustes' $total
+    try {
+        :ajustes foreach ($cb in $selecionados) {
+            $t = $cb.Tag
+            Log ('== ajuste: ' + $t.nome)
+            foreach ($acao in $t.acoes) {
+                if (-not (Continuar-ProgressoLote $progresso $t.nome)) { break ajustes }
+                Executar-Acao $acao $t.nome
+                Atualizar-UI
+            }
         }
-    }
+    } finally { Fechar-ProgressoLote $progresso }
     $arq = Salvar-Sessao
     Ocupado $false
+    if ($progresso.cancelado) { Log 'lote interrompido a pedido; journal preservado.'; Status 'lote interrompido.'; return }
     if ($global:ErrosSessao -gt 0) {
         Log ('ajustes concluidos com ' + $global:ErrosSessao + ' erro(s); veja as linhas [ERRO] acima.') -Erro
     } else {
@@ -357,16 +361,18 @@ function Clique-RemoverUwp {
     Ocupado $true
     if ($global:UI.ChkPontoRestoreUwp.IsChecked) { [void](Criar-PontoRestauracao) }
     Iniciar-Sessao 'debloat'
-    $i = 0
-    foreach ($cb in $selecionados) {
-        $i++
-        $p = $cb.Tag
-        Status ('removendo {0}/{1}: {2}' -f $i, $selecionados.Count, $p.nome)
-        Executar-Acao ([pscustomobject]@{ tipo = 'appx'; pacote = $p.pacote }) $p.nome
-        Atualizar-UI
-    }
+    $progresso = Iniciar-ProgressoLote 'Removendo aplicativos' $selecionados.Count
+    try {
+        foreach ($cb in $selecionados) {
+            $p = $cb.Tag
+            if (-not (Continuar-ProgressoLote $progresso $p.nome)) { break }
+            Executar-Acao ([pscustomobject]@{ tipo='appx'; pacote=$p.pacote }) $p.nome
+            Atualizar-UI
+        }
+    } finally { Fechar-ProgressoLote $progresso }
     $arq = Salvar-Sessao
     Ocupado $false
+    if ($progresso.cancelado) { Log 'debloat interrompido; journal preservado.'; Status 'debloat interrompido.'; Verificar-EstadoUwp; return }
     Log ('debloat concluido' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { ' (nada foi removido)' }))
     if ($global:ErrosSessao -gt 0) { Status 'debloat com falhas; consulte o log.' }
     else { Status 'debloat concluido; relogar pode ser necessario.' }
@@ -389,13 +395,18 @@ function Clique-InstalarRecursos {
     Status 'habilitando recursos...'
     Ocupado $true
     Iniciar-Sessao 'recursos'
-    foreach ($cb in $selecionados) {
-        $r = $cb.Tag
-        Executar-Acao ([pscustomobject]@{ tipo = 'recurso'; nome = $r.feat; ativar = $true }) $r.nome
-        Atualizar-UI
-    }
+    $progresso = Iniciar-ProgressoLote 'Habilitando recursos' $selecionados.Count
+    try {
+        foreach ($cb in $selecionados) {
+            $r = $cb.Tag
+            if (-not (Continuar-ProgressoLote $progresso $r.nome)) { break }
+            Executar-Acao ([pscustomobject]@{ tipo='recurso'; nome=$r.feat; ativar=$true }) $r.nome
+            Atualizar-UI
+        }
+    } finally { Fechar-ProgressoLote $progresso }
     $arq = Salvar-Sessao
     Ocupado $false
+    if ($progresso.cancelado) { Log 'recursos interrompidos; journal preservado.'; Status 'lote interrompido.'; return }
     Log ('recursos processados; confira erros e reinicio pendente.' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { '' }))
     if ($global:ErrosSessao -gt 0) { Status 'recursos com falhas; consulte o log.' } else { Status 'recursos processados; confira reinicio pendente.' }
 }

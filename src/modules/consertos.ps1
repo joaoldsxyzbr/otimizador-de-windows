@@ -42,8 +42,11 @@ function Executar-NoConsole {
         $bytes = [Text.Encoding]::Unicode.GetBytes($cmd)
         $enc = [Convert]::ToBase64String($bytes)
         $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $proc = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -Wait -ErrorAction Stop
-        try { $codigo = $proc.ExitCode } finally { $proc.Dispose() }
+        $proc = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -ErrorAction Stop
+        try {
+            while (-not $proc.WaitForExit(100)) { Atualizar-UI }
+            $codigo = $proc.ExitCode
+        } finally { $proc.Dispose() }
     } catch { Log ('falha ao abrir console: ' + $_.Exception.Message) -Erro }
     finally { Ocupado $false }
     if ($codigo -eq 0) { Log ('comandos concluidos: ' + $Titulo); Status 'pronto; confira os avisos.' }

@@ -713,7 +713,9 @@ function Clique-ApagarRastros {
     Iniciar-Sessao 'limpar-rastros'
     $apagados = 0
     $i = 0
-    foreach ($r in $selecionados) {
+    $progresso = Iniciar-ProgressoLote 'Quarentena de rastros' $selecionados.Count
+    try { foreach ($r in $selecionados) {
+        if (-not (Continuar-ProgressoLote $progresso $r.caminho)) { break }
         $i++
         Status ('limpando {0}/{1}...' -f $i, $selecionados.Count)
         try {
@@ -723,9 +725,10 @@ function Clique-ApagarRastros {
             Log ('falha ao apagar {0}: {1}' -f $r.caminho, $_.Exception.Message) -Erro
         }
         Atualizar-UI
-    }
+    } } finally { Fechar-ProgressoLote $progresso }
     $arq = Salvar-Sessao
     Ocupado $false
+    if ($progresso.cancelado) { Log 'limpeza interrompida; journal preservado.'; Status 'limpeza interrompida.'; return }
     $res = ('limpeza: {0} rastro(s) processado(s) sem excecao; consulte o log para confirmar as alteracoes.' -f $apagados)
     if ($arq) { $res = $res + ' journal: ' + (Split-Path -Leaf $arq) }
     Log $res

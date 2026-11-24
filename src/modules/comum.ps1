@@ -150,6 +150,52 @@ function Atualizar-UI {
     [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
 }
 
+# Cancelamento cooperativo: nunca interrompe uma alteracao em andamento.
+function Iniciar-ProgressoLote {
+    param([string]$Titulo,[int]$Total)
+    $estado = @{ cancelado=$false; atual=0; total=$Total; janela=$null; barra=$null; texto=$null; fechando=$false }
+    if (-not $global:Janela -or -not $global:Janela.IsLoaded) { return $estado }
+    $dlg = New-Object System.Windows.Window
+    $dlg.Owner=$global:Janela; $dlg.Title=$Titulo; $dlg.Width=460; $dlg.Height=180
+    $dlg.WindowStartupLocation='CenterOwner'; $dlg.ResizeMode='NoResize'
+    $painel=New-Object System.Windows.Controls.StackPanel
+    $painel.Margin='16'
+    $texto=New-Object System.Windows.Controls.TextBlock
+    $texto.TextWrapping='Wrap'; $texto.Text='Preparando...'
+    [void]$painel.Children.Add($texto)
+    $barra=New-Object System.Windows.Controls.ProgressBar
+    $barra.Minimum=0; $barra.Maximum=[math]::Max(1,$Total); $barra.Height=14; $barra.Margin='0,12,0,12'
+    [void]$painel.Children.Add($barra)
+    $cancelar=New-Object System.Windows.Controls.Button
+    $cancelar.Content='Parar apos a acao atual'
+    $cancelar.Tag=$estado
+    $cancelar.Add_Click({ $this.Tag.cancelado=$true; $this.IsEnabled=$false; $this.Tag.texto.Text='Parando no proximo ponto seguro...' })
+    [void]$painel.Children.Add($cancelar)
+    $estado.janela=$dlg; $estado.barra=$barra; $estado.texto=$texto
+    $dlg.Tag=$estado
+    $dlg.Add_Closing({ param($sender,$eventArgs) if (-not $sender.Tag.fechando) { $sender.Tag.cancelado=$true; $eventArgs.Cancel=$true } })
+    $dlg.Content=$painel
+    $dlg.Show()
+    return $estado
+}
+
+function Continuar-ProgressoLote {
+    param($Estado,[string]$Descricao)
+    if ($Estado.janela) {
+        $Estado.barra.Value=$Estado.atual
+        if (-not $Estado.cancelado) { $Estado.texto.Text=('{0}/{1}: {2}' -f ($Estado.atual+1),$Estado.total,$Descricao) }
+        Atualizar-UI
+    }
+    if ($Estado.cancelado) { return $false }
+    $Estado.atual++
+    return $true
+}
+
+function Fechar-ProgressoLote {
+    param($Estado)
+    if ($Estado.janela) { $Estado.fechando=$true; $Estado.janela.Close() }
+}
+
 function Perguntar {
     param([string]$Tituloo, [string]$Mensagem)
     $r = [System.Windows.MessageBox]::Show($Mensagem, $Tituloo, [System.Windows.MessageBoxButton]::YesNo, [System.Windows.MessageBoxImage]::Question)
