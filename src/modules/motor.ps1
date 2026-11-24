@@ -97,6 +97,7 @@ function Registro-Corresponde {
 
 function Iniciar-Sessao {
     param([string]$Rotulo)
+    Confirmar-PermissaoAlteracao
     $global:SessaoItens = New-Object System.Collections.ArrayList
     $global:RotuloSessao = $Rotulo
     $global:ErrosSessao = 0
@@ -130,6 +131,7 @@ function Gravar-SessaoArquivo {
 
 function Gravar-JSONAtomico {
     param([string]$Arquivo, $Objeto)
+    Confirmar-PermissaoAlteracao
     $json = ConvertTo-Json -InputObject $Objeto -Depth 12
     # Grava no mesmo volume e publica somente apos fechar e sincronizar.
     $temporario = $arquivo + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
@@ -154,6 +156,7 @@ function Gravar-JSONAtomico {
 
 function Registrar-Jornal {
     param($Item)
+    Confirmar-PermissaoAlteracao
     if ($null -eq $global:SessaoItens) { throw 'Sessao de journal nao iniciada.' }
     [void]$global:SessaoItens.Add($Item)
     try {
@@ -206,6 +209,7 @@ function Obter-EstadoServico {
 
 function Definir-InicioServico {
     param([string]$Nome,[string]$Tipo,[bool]$Atraso)
+    Confirmar-PermissaoAlteracao
     if ($Nome -notmatch '^[A-Za-z0-9_.-]+$' -or $Tipo -notin @('Automatic','Manual','Disabled')) { throw 'Configuracao de servico invalida.' }
     $modo = switch ($Tipo) {
         'Automatic' { if ($Atraso) { 'delayed-auto' } else { 'auto' } }
@@ -219,6 +223,7 @@ function Definir-InicioServico {
 
 function Alterar-ServicoComJournal {
     param([string]$Nome,[string]$Inicio)
+    Confirmar-PermissaoAlteracao
     $ant = Obter-EstadoServico $Nome
     if ($Inicio -notin @('Automatic','Manual','Disabled')) { throw 'Tipo de inicio invalido.' }
     if ($ant.tipo -eq $Inicio -and ($Inicio -ne 'Disabled' -or $ant.estado -eq 'Stopped')) { return }
@@ -291,6 +296,7 @@ function Obter-AssinaturaTarefa {
 
 function Desativar-TarefaComJournal {
     param([string]$Caminho,[string]$Nome)
+    Confirmar-PermissaoAlteracao
     if (-not $Caminho.StartsWith('\') -or $Caminho.StartsWith('\Microsoft\',[StringComparison]::OrdinalIgnoreCase) -or $Caminho -ieq '\Microsoft') { throw 'Tarefa de sistema ou caminho invalido.' }
     if ($Nome -match '[*?\[\]]' -or $Caminho -match '[*?\[\]]') { throw 'Identificador ambiguo.' }
     $tarefas = @(Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop)
@@ -326,6 +332,7 @@ function Executar-Acao {
         return
     }
 
+    Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     try {
         switch ($Acao.tipo) {
@@ -460,6 +467,7 @@ function Executar-Acao {
 
 function Desfazer-Item {
     param($Item)
+    Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     try {
         switch ($Item.tipo) {
@@ -667,6 +675,7 @@ function Desfazer-Item {
 
 function Reverter-Sessao {
     param([string]$Arquivo, [switch]$UmaAcao)
+    Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     try {
         $json = Ler-JSON $Arquivo
@@ -707,6 +716,7 @@ function Reverter-Sessao {
 # Atestado manual: registra a verificacao feita pelo usuario, sem repetir a acao.
 function Confirmar-ReversaoManual {
     param([string]$Arquivo, [int]$Indice)
+    Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     $json = Ler-JSON $Arquivo
     $itens = @($json.itens)
@@ -728,17 +738,17 @@ function Confirmar-ReversaoManual {
 # ---- ponto de restauracao ----
 
 function Criar-PontoRestauracao {
+    Confirmar-PermissaoAlteracao
     try {
-        try { $temPonto = @(Get-ComputerRestorePoint -ErrorAction Stop) } catch { $temPonto = @() }
-        if ($temPonto.Count -eq 0) {
-            Enable-ComputerRestore -Drive "$env:SystemDrive\" -ErrorAction Stop
-        }
-        Checkpoint-Computer -Description "OtimizadorPC - antes de aplicar ajustes" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
-        Log 'ponto de restauracao criado.'
+        $antes=@(Get-ComputerRestorePoint -ErrorAction Stop)
+        $descricao='OtimizadorPC '+[guid]::NewGuid().ToString('N').Substring(0,12)
+        Checkpoint-Computer -Description $descricao -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        $novos=@(Get-ComputerRestorePoint -ErrorAction Stop | Where-Object { $_.Description -eq $descricao -and $_.SequenceNumber -notin @($antes | ForEach-Object {$_.SequenceNumber}) })
+        if ($novos.Count -ne 1) { throw 'Novo ponto nao confirmado (limite diario ou protecao indisponivel).' }
+        Log 'novo ponto de restauracao confirmado.'
         return $true
     } catch {
-        Log ("nao foi possivel criar ponto de restauracao: {0}" -f $_.Exception.Message) -Erro
-        Log 'voce pode ativar a protecao do sistema em: este computador > propriedades > protecao do sistema.'
+        Log ('Ponto de restauracao nao confirmado: '+$_.Exception.Message) -Erro
         return $false
     }
 }
@@ -881,7 +891,8 @@ function Aplicar-Preset {
         return $true
     }
 
-    [void](Criar-PontoRestauracao)
+    Confirmar-PermissaoAlteracao
+    if (-not (Criar-PontoRestauracao)) { Log 'Preset real interrompido: ponto de restauracao novo nao confirmado.' -Erro; return $false }
     Iniciar-Sessao 'ajustes'
     $i = 0
     foreach ($t in $selecionados) {

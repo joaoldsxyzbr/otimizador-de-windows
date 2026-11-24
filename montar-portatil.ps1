@@ -121,9 +121,12 @@ Add-Texto '# ---- pastas do app (arquivo unico) ----'
 Add-Texto '$global:PastaDados = $global:PastaApp'
 Add-Texto '$travaInstancia = $null'
 Add-Texto 'try {'
-Add-Texto '    Garantir-Pastas'
-Add-Texto '    $travaInstancia = Obter-TravaInstancia'
-Add-Texto '$global:AmbienteTrabalho = Detectar-AmbienteTrabalho'
+Add-Texto '    Inicializar-ModoOtimizador -Diagnostico:($Diagnostico -or ($Cli -and $Simular))'
+Add-Texto '    if ($Cli -and -not $Simular -and $global:ModoProtegido) { throw ''Preset real indisponivel no modo protegido. Use -Cli essencial -Simular.'' }'
+Add-Texto '    if (-not $global:ModoProtegido) {'
+Add-Texto '        Garantir-Pastas'
+Add-Texto '        $travaInstancia = Obter-TravaInstancia'
+Add-Texto '    }'
 Add-Texto ''
 
 # catalogos embutidos (nao precisa da pasta data ao lado)
@@ -153,7 +156,7 @@ Add-Texto '    exit 1'
 Add-Texto '}'
 Add-Texto ''
 Add-Texto '# ---- tweaks custom (arquivos .reg na pasta custom\ ao lado do app) ----'
-Add-Texto '$tweaksCustom = @(Carregar-TweaksCustom)'
+Add-Texto '$tweaksCustom = if ($global:ModoProtegido) { @() } else { @(Carregar-TweaksCustom) }'
 Add-Texto '$global:CatalogoTweaks.tweaks = @($global:CatalogoTweaks.tweaks) + $tweaksCustom'
 Add-Texto ''
 Add-Texto $blocoCli.TrimEnd()
@@ -193,18 +196,9 @@ $inicioElev = $memoria.IndexOf('# ---- auto-elevacao para administrador ----')
 $fimElev = $memoria.IndexOf('# ---- assemblies do wpf ----')
 if ($inicioElev -lt 0 -or $fimElev -le $inicioElev) { throw 'Marcadores de elevacao ausentes.' }
 $novoCabecalho = @'
-# ---- execucao em memoria: exige console ja elevado ----
-if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5) {
-    throw 'Abra o Windows PowerShell 5.1 como administrador.'
-}
-$identidade = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identidade)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Abra o Windows PowerShell como administrador.'
-}
-if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') {
-    throw 'Abra o Windows PowerShell em modo STA.'
-}
+# ---- execucao em memoria: sem elevacao automatica ----
+if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5) { throw 'Use Windows PowerShell 5.1.' }
+if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') { throw 'Use Windows PowerShell em modo STA.' }
 $ErrorActionPreference = 'Continue'
 
 '@
@@ -215,7 +209,7 @@ $memoria = $memoria.Replace('if ($ok) { exit 0 } else { exit 1 }', 'if (-not $ok
 $memoria = $memoria.Replace('exit 1', 'throw ''Falha na inicializacao do OtimizadorPC.''')
 $memoria = $memoria.Replace('# ---- monta a interface e mostra ----', 'if ($ValidarInterface) { Ligar-Tudo; $global:Janela.Close(); Write-Host ''Interface WPF e ligacoes validadas.''; return }' + [Environment]::NewLine + '# ---- monta a interface e mostra ----')
 # O modo remoto nao carrega arquivos .reg locais; use o portatil para custom.
-$memoria = $memoria.Replace('$tweaksCustom = @(Carregar-TweaksCustom)', '$tweaksCustom = @()')
+$memoria = $memoria.Replace('$tweaksCustom = if ($global:ModoProtegido) { @() } else { @(Carregar-TweaksCustom) }', '$tweaksCustom = @()')
 $arquivoOnline = Join-Path $destino 'otimizadorpc.ps1'
 [IO.File]::WriteAllText($arquivoOnline, $memoria, (New-Object Text.UTF8Encoding($false)))
 $errosOnline = $null
@@ -227,7 +221,7 @@ Write-Host ('OK: ' + $arquivoOnline + ' (execucao em memoria)')
 
 # bat de atalho: dois cliques e o app abre (pede uac e abre a janela)
 $bat = Join-Path $destino 'rodar-portatil.bat'
-$batConteudo = "@echo off`r`npowershell.exe -NoProfile -ExecutionPolicy Bypass -File ""%~dp0otimizadorpc-portatil.ps1""`r`nif errorlevel 1 pause`r`n"
+$batConteudo = "@echo off`r`npowershell.exe -NoProfile -File ""%~dp0otimizadorpc-portatil.ps1""`r`nif errorlevel 1 pause`r`n"
 Set-Content -Path $bat -Value $batConteudo -Encoding ASCII
 Write-Host ('OK: ' + $bat) -ForegroundColor Green
 Write-Host ''

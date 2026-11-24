@@ -9,31 +9,14 @@ param(
     # modo cli: aplica um preset (seguro/balanceado/agressivo) sem abrir janela
     [string]$Cli,
     # junto com -Cli: so descreve o que faria, nao altera nada
+    [switch]$Diagnostico,
     [switch]$Simular
 )
 
 # ---- auto-elevacao para administrador ----
-$identidade = [Security.Principal.WindowsIdentity]::GetCurrent()
-$principal = New-Object Security.Principal.WindowsPrincipal($identidade)
-if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    try {
-        # repassa os parametros pro processo elevado; no modo cli deixa o console
-        # visivel e aberto no fim (-NoExit, sempre ANTES do -File, senao o
-        # powershell trata como parametro do script) pra ler o resultado
-        $argsElev = @('-NoProfile', '-ExecutionPolicy', 'Bypass')
-        if ($Cli) { $argsElev += '-NoExit' }
-        $argsElev += @('-File', ('"{0}"' -f $PSCommandPath))
-        if ($Cli)     { $argsElev += @('-Cli', ('"{0}"' -f $Cli)) }
-        if ($Simular) { $argsElev += '-Simular' }
-        if ($Cli) {
-            Start-Process powershell.exe -Verb RunAs -ArgumentList $argsElev
-        } else {
-            Start-Process powershell.exe -Verb RunAs -WindowStyle Hidden -ArgumentList $argsElev
-        }
-    } catch { }
-    exit
-}
-
+# Nenhuma elevacao automatica. Sem admin, abre somente diagnostico.
+if ($PSVersionTable.PSEdition -ne 'Desktop' -or $PSVersionTable.PSVersion.Major -ne 5) { throw 'Use Windows PowerShell 5.1.' }
+if ([Threading.Thread]::CurrentThread.GetApartmentState() -ne 'STA') { throw 'Use Windows PowerShell em modo STA.' }
 $ErrorActionPreference = 'Continue'
 
 # ---- assemblies do wpf ----
@@ -57,9 +40,12 @@ $pastaModulos = Join-Path $PSScriptRoot 'src\modules'
 
 $travaInstancia = $null
 try {
-    Garantir-Pastas
-    $travaInstancia = Obter-TravaInstancia
-    $global:AmbienteTrabalho = Detectar-AmbienteTrabalho
+    Inicializar-ModoOtimizador -Diagnostico:($Diagnostico -or ($Cli -and $Simular))
+    if ($Cli -and -not $Simular -and $global:ModoProtegido) { throw 'Preset real indisponivel no modo protegido. Use -Cli essencial -Simular.' }
+    if (-not $global:ModoProtegido) {
+        Garantir-Pastas
+        $travaInstancia = Obter-TravaInstancia
+    }
 
 # ---- catalogos ----
 try {
@@ -75,7 +61,7 @@ try {
 }
 
 # ---- tweaks custom (arquivos .reg na pasta custom\ ao lado do app) ----
-$tweaksCustom = @(Carregar-TweaksCustom)
+$tweaksCustom = if ($global:ModoProtegido) { @() } else { @(Carregar-TweaksCustom) }
 $global:CatalogoTweaks.tweaks = @($global:CatalogoTweaks.tweaks) + $tweaksCustom
 
 # ---- modo cli: aplica o preset e sai, sem carregar a janela ----
@@ -91,16 +77,16 @@ if ($Cli) {
         }
         $linha = ("{0}[{1}] {2}" -f $prefixo, (Get-Date -Format 'HH:mm:ss'), $Mensagem)
         Write-Host $linha
-        try { Add-Content -Path $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { }
+        if (-not $global:ModoProtegido) { try { Add-Content -LiteralPath $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { } }
     }
 
     Log ('otimizadorpc modo cli - ' + (Nome-Windows))
-    Log ('log desta execucao: ' + $global:ArquivoLog)
+    if (-not $global:ModoProtegido) { Log ('log desta execucao: ' + $global:ArquivoLog) } else { Log 'Diagnostico/simulacao: sem log persistente.' }
     if ($global:AmbienteTrabalho.Count -gt 0) {
         Log 'AMBIENTE: este pc parece gerenciado pela empresa; revise o log com atencao.'
     }
     $ok = Aplicar-Preset -Nivel $Cli -Simular:$Simular
-    Log ('log completo salvo em: ' + $global:ArquivoLog)
+    if (-not $global:ModoProtegido) { Log ('log completo salvo em: ' + $global:ArquivoLog) }
     if ($ok) { exit 0 } else { exit 1 }
 }
 
@@ -150,23 +136,15 @@ foreach ($nome in $controles) {
 Ligar-Tudo
 
 Log ('otimizadorpc iniciado - ' + (Nome-Windows))
-Log ('usuario: ' + $env:USERNAME + ' | maquina: ' + $env:COMPUTERNAME)
-Log ('pasta do app: ' + $global:PastaApp)
-Log 'dica: crie um ponto de restauracao antes do primeiro uso (aba inicio).'
-if ($tweaksCustom.Count -gt 0) {
-    Log ('tweaks custom carregados da pasta custom\: ' + $tweaksCustom.Count + ' (categoria Customizadas; presets ignoram, so manual).')
-} else {
-    Log 'dica: coloque seus arquivos .reg em custom\ que eles viram ajustes com journal e desfazer.'
-}
-if ($global:AmbienteTrabalho.Count -gt 0) {
-    Log 'AMBIENTE: este pc parece gerenciado pela empresa:'
+Log ('modo: ' + $global:ModoOtimizador)
+if ($global:ModoProtegido) {
+    Log 'Somente diagnostico local. Sem elevacao automatica, alteracoes, exportacao ou log persistente.'
     foreach ($a in $global:AmbienteTrabalho) { Log ('  - ' + $a) }
-    Log '  recomendacao: use o preset Seguro, rode o modo Simular antes, e evite mexer em rede/telemetria aqui.'
 } else {
-    Log 'ambiente: pc pessoal (sem dominio, sem antivirus corporativo).'
+    Log 'Nenhum sinal consultado de gerenciamento; isso nao prova que o PC seja pessoal.'
+    Log 'Revise ajustes e pontos de restauracao antes de aplicar.'
 }
-
-$global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - modo administrador')
+$global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - ' + $global:ModoOtimizador)
 [void]$global:Janela.ShowDialog()
 
 } finally {

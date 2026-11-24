@@ -2,29 +2,59 @@
 
 # detecta se o pc e gerenciado por empresa (dominio, azure ad, av corporativo)
 function Detectar-AmbienteTrabalho {
-    $achados = @()
-    $dominio = ''
+    $achados=@()
     try {
-        $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
-        if ($cs.PartOfDomain) { $dominio = [string]$cs.Domain }
-    } catch { }
-    if ($dominio -ne '') {
-        $achados += ('ingressado no dominio: ' + $dominio)
-    } elseif ($env:USERDNSDOMAIN) {
-        $achados += ('variavel de dominio presente: ' + $env:USERDNSDOMAIN)
-    }
+        $cs=Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
+        if ($null -eq $cs.PartOfDomain) { throw 'Estado de dominio ausente.' }
+        if ($cs.PartOfDomain -or $env:USERDNSDOMAIN) { $achados+='Dominio ou conta de dominio detectado.' }
+    } catch { $achados+='Inconclusivo: consulta de dominio indisponivel.' }
     try {
-        $saidaDs = (dsregcmd /status) 2>&1 | Out-String
-        if ($saidaDs -match 'AzureAdJoined\s*:\s*YES') { $achados += 'ingressado no azure ad (entra da empresa)' }
-    } catch { }
+        $exe=Join-Path $env:SystemRoot 'System32\dsregcmd.exe'
+        $saida=(& $exe /status 2>&1 | Out-String)
+        if ($LASTEXITCODE -ne 0 -or $saida -notmatch 'AzureAdJoined\s*:\s*(YES|NO)' -or $saida -notmatch 'DomainJoined\s*:\s*(YES|NO)') { throw 'Estado de registro indisponivel.' }
+        if ($saida -match '(AzureAdJoined|DomainJoined|EnterpriseJoined|WorkplaceJoined)\s*:\s*YES') { $achados+='Registro ou ingresso organizacional detectado.' }
+    } catch { $achados+='Inconclusivo: registro Entra/organizacional nao confirmado.' }
     try {
-        $avs = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -match '(?i)mcafee|symantec|norton|crowdstrike|sentinel|sophos|trend micro|trendmicro|kaspersky|bitdefender|eset|malwarebytes|trellix|carbon black|cylance|f-secure|webroot|palo alto' })
-        if ($avs.Count -gt 0) {
-            $nomesAv = ($avs | Select-Object -First 3 | ForEach-Object { $_.DisplayName }) -join ', '
-            $achados += ('antivirus de terceiros ativo: ' + $nomesAv)
+        $raiz='HKLM:\SOFTWARE\Microsoft\Enrollments'
+        if (Test-Path -LiteralPath $raiz -ErrorAction Stop) {
+            foreach ($ch in @(Get-ChildItem -LiteralPath $raiz -ErrorAction Stop | Where-Object {$_.PSChildName -match '^\{?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}?$'})) {
+                $v=Get-ItemProperty -LiteralPath $ch.PSPath -ErrorAction Stop
+                if ($v.EnrollmentState -eq 1 -and ($v.ProviderID -or $v.EnrollmentType)) { $achados+='Sinal de inscricao de gerenciamento de dispositivo (MDM).'; break }
+            }
         }
-    } catch { }
-    return @($achados)
+        $wu='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+        if (Test-Path -LiteralPath $wu -ErrorAction Stop) {
+            $v=Get-ItemProperty -LiteralPath $wu -ErrorAction Stop
+            if ($v.WUServer -or $v.WUStatusServer -or $v.SetPolicyDrivenUpdateSourceForQualityUpdates -eq 1) { $achados+='Sinal de politica de atualizacao organizacional.' }
+        }
+    } catch { $achados+='Inconclusivo: consulta de gerenciamento/politicas indisponivel.' }
+    try {
+        $avs=@(Get-Service -ErrorAction Stop | Where-Object {
+            ($_.Name+' '+$_.DisplayName) -match '(?i)mcafee|symantec|norton|crowdstrike|sentinel|sophos|trend micro|trendmicro|kaspersky|bitdefender|eset|malwarebytes|trellix|carbon black|cylance|f-secure|webroot|palo alto|intunemanagementextension|ccmexec|tanium|sense\b'
+        })
+        if ($avs.Count -gt 0) { $achados+='Sinal de seguranca de terceiros ou gerenciamento; pode ser PC pessoal.' }
+    } catch { $achados+='Inconclusivo: consulta de agentes/servicos indisponivel.' }
+    return @($achados | Sort-Object -Unique)
+}
+
+function Resolver-ModoOtimizador {
+    param([bool]$Admin,[bool]$Diagnostico,$Sinais)
+    if ($Diagnostico -or -not $Admin) { return 'Diagnostico' }
+    if (@($Sinais | Where-Object {$_}).Count -gt 0) { return 'Corporativo/Protetivo' }
+    return 'Pessoal (sem sinais detectados)'
+}
+
+function Inicializar-ModoOtimizador {
+    param([switch]$Diagnostico)
+    $global:ModoProtegido=$true
+    $global:AmbienteTrabalho=@(Detectar-AmbienteTrabalho)
+    $id=[Security.Principal.WindowsIdentity]::GetCurrent()
+    try {
+        $principal=New-Object Security.Principal.WindowsPrincipal($id)
+        $admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    } finally { $id.Dispose() }
+    $global:ModoOtimizador=Resolver-ModoOtimizador -Admin $admin -Diagnostico ([bool]$Diagnostico) -Sinais $global:AmbienteTrabalho
+    $global:ModoProtegido=($global:ModoOtimizador -ne 'Pessoal (sem sinais detectados)')
 }
 
 # Recomendacoes conservadoras, sem modificar configuracoes.
@@ -96,14 +126,14 @@ function Preencher-PaginaInicio {
                     $global:UI.InfoRestore.Text = 'sem pontos de restauracao ainda'
                 }
             } catch {
-                $global:UI.InfoRestore.Text = 'protecao do sistema desativada'
+                $global:UI.InfoRestore.Text = 'estado da restauracao indisponivel'
             }
         }
         if ($global:UI.ContainsKey('InfoAmbiente')) {
             if ($null -ne $global:AmbienteTrabalho -and $global:AmbienteTrabalho.Count -gt 0) {
-                $global:UI.InfoAmbiente.Text = ('gerenciado: ' + ($global:AmbienteTrabalho -join ' | '))
+                $global:UI.InfoAmbiente.Text = ($global:ModoOtimizador + ': ' + ($global:AmbienteTrabalho -join ' | '))
             } else {
-                $global:UI.InfoAmbiente.Text = 'pc pessoal (sem dominio, sem av corporativo)'
+                $global:UI.InfoAmbiente.Text = ($global:ModoOtimizador + ' - nenhum sinal consultado; nao comprova ausencia de gerenciamento.')
             }
         }
     } catch {

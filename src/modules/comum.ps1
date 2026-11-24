@@ -8,9 +8,15 @@ $global:PastaLog = Join-Path $global:RaizEstado 'logs'
 $global:PastaDesfazer = Join-Path $global:RaizEstado 'desfazer'
 $global:PastaQuarantena = Join-Path $global:RaizEstado 'quarentena'
 $global:ArquivoLog    = Join-Path $global:PastaLog ("otimizadorpc-" + (Get-Date -Format 'yyyy-MM-dd') + ".log")
-$global:VersaoOtimizador = '2.0.0-rc.6'
+$global:VersaoOtimizador = '2.0.0-rc.7'
 $global:ErrosSessao   = 0
 $global:UI            = @{}
+
+# A protecao e uma regra do app, nao uma fronteira de seguranca do Windows.
+# O entrypoint inicializa o modo antes de qualquer operacao de estado.
+function Confirmar-PermissaoAlteracao {
+    if ($global:ModoProtegido) { throw 'Modo protegido: alteracoes e exportacoes indisponiveis. Consulte o TI.' }
+}
 
 # Estado novo com ACL explicita. Nao confia retroativamente em journals antigos.
 function Nova-ACLPrivada {
@@ -60,6 +66,7 @@ function Garantir-PastaPrivada {
 }
 
 function Garantir-Pastas {
+    Confirmar-PermissaoAlteracao
     Garantir-PastaPrivada $global:RaizEstado
     foreach ($p in @($global:PastaLog, $global:PastaDesfazer, $global:PastaQuarantena)) {
         Garantir-PastaPrivada $p
@@ -107,6 +114,7 @@ function Converter-TemaXaml {
 
 function Ler-TemaOtimizador {
     $global:TemaOtimizador='escuro'
+    if ($global:ModoProtegido) { return }
     $arquivo=Join-Path $global:RaizEstado 'preferencias.json'
     if (Test-Path -LiteralPath $arquivo -PathType Leaf) {
         try {
@@ -141,7 +149,7 @@ function Log {
         Cor-Status 'vermelho'
     }
     $linha = ("{0}[{1}] {2}" -f $prefixo, (Get-Date -Format 'HH:mm:ss'), $Mensagem)
-    try { Add-Content -Path $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { }
+    if (-not $global:ModoProtegido) { try { Add-Content -LiteralPath $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { } }
     if ($global:UI.ContainsKey('LogBox') -and $null -ne $global:UI.LogBox) {
         $global:UI.LogBox.AppendText($linha + "`r`n")
         $global:UI.LogBox.ScrollToEnd()
@@ -242,6 +250,7 @@ function Avisar {
 
 # reinicia o explorador de arquivos (aplica tweaks visuais sem reiniciar o pc)
 function Reiniciar-Explorer {
+    Confirmar-PermissaoAlteracao
     Log 'Reiniciando o Explorador de Arquivos...'
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
     Log 'Explorador reiniciado.'
@@ -251,6 +260,7 @@ function Reiniciar-Explorer {
 # Executa somente utilitarios nativos conhecidos e decide pelo codigo de saida.
 function Executar-RegNativo {
     param([ValidateSet('export','import','delete')][string]$Operacao, [string]$Alvo, [string]$Arquivo)
+    Confirmar-PermissaoAlteracao
     foreach ($valor in @($Alvo,$Arquivo)) {
         if ($valor -match '["\r\n]') { throw 'Argumento de registro invalido.' }
     }

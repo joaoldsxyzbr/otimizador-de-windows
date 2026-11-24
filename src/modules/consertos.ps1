@@ -33,6 +33,7 @@ else { Write-Host 'Operacao interrompida com erro.' -ForegroundColor Yellow }
 
 function Executar-NoConsole {
     param([string]$Titulo, [string]$Bloco)
+    Confirmar-PermissaoAlteracao
     Status ('executando: ' + $Titulo)
     Ocupado $true
     $codigo = 1
@@ -55,6 +56,7 @@ function Executar-NoConsole {
 }
 
 function Resetar-WindowsUpdate {
+    Confirmar-PermissaoAlteracao
     if (-not (Perguntar 'Reset do Windows Update' 'Recriar os caches do Windows Update? Os caches anteriores serao preservados com nome unico. Pode exigir reinicializacao e novo download.')) { return }
     $bloco = @'
 Write-Host '== Resetando o Windows Update ==' -ForegroundColor Cyan
@@ -91,6 +93,7 @@ Write-Host 'Caches antigos preservados. Verifique o Windows Update.'
 }
 
 function Resetar-Rede {
+    Confirmar-PermissaoAlteracao
     if (-not (Perguntar 'Reset de rede' 'Esta operacao pode interromper a conexao e exigir reinicio. Nao use em acesso remoto ou sem saber a configuracao de rede. Continuar?')) { return }
     $bloco = @'
 Write-Host '== Resetando a rede ==' -ForegroundColor Cyan
@@ -109,6 +112,7 @@ Write-Host 'REINICIE O PC para completar a correcao.' -ForegroundColor Yellow
 }
 
 function Verificar-Integridade {
+    Confirmar-PermissaoAlteracao
     $bloco = @'
 Write-Host '== Verificacao de integridade do sistema ==' -ForegroundColor Cyan
 Write-Host '1/2 - DISM (pode demorar varios minutos)...' -ForegroundColor Cyan
@@ -120,6 +124,7 @@ Executar-Nativo sfc.exe @('/scannow')
 }
 
 function Manutencao-DISM {
+    Confirmar-PermissaoAlteracao
     $bloco = @'
 Write-Host '== Limpeza do armazenamento de componentes ==' -ForegroundColor Cyan
 Write-Host 'Isso apaga versoes antigas de atualizacoes do Windows. Pode demorar.'
@@ -129,6 +134,7 @@ Executar-Nativo Dism.exe @('/Online','/Cleanup-Image','/StartComponentCleanup') 
 }
 
 function Verificar-Disco {
+    Confirmar-PermissaoAlteracao
     $bloco = @'
 Write-Host '== Verificacao do disco C: (online, sem interromper o uso) ==' -ForegroundColor Cyan
 Executar-Nativo chkdsk.exe @($env:SystemDrive,'/scan')
@@ -137,6 +143,7 @@ Executar-Nativo chkdsk.exe @($env:SystemDrive,'/scan')
 }
 
 function Limpeza-Disco {
+    Confirmar-PermissaoAlteracao
     $bloco = @'
 Write-Host '== Limpeza de disco profunda no C: ==' -ForegroundColor Cyan
 Write-Host 'Executando cleanmgr automatico...'
@@ -189,6 +196,7 @@ function Obter-PlanoTemporarios {
 }
 
 function Limpar-Temporarios {
+    Confirmar-PermissaoAlteracao
     $pastas=@((Join-Path $env:LOCALAPPDATA 'Temp'),(Join-Path $env:SystemRoot 'Temp'))
     $plano=Obter-PlanoTemporarios $pastas
     if ($plano.itens.Count -eq 0) { Avisar 'Limpeza de temporarios' ('Nenhum arquivo elegivel nas pastas consultadas. '+($plano.avisos -join ' | ')); return }
@@ -219,12 +227,14 @@ function Limpar-Temporarios {
 }
 
 function Limpar-DNS {
+    Confirmar-PermissaoAlteracao
     ipconfig /flushdns | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao limpar DNS.' }
     Log 'cache do DNS limpo.'
 }
 
 function Sincronizar-Hora {
+    Confirmar-PermissaoAlteracao
     Status 'sincronizando hora com a internet...'
     Ocupado $true
     W32tm /resync 2>&1 | ForEach-Object { Log ("  " + $_) }
@@ -234,6 +244,7 @@ function Sincronizar-Hora {
 }
 
 function Recuperar-CacheIcones {
+    Confirmar-PermissaoAlteracao
     Status 'reconstruindo cache de icones...'
     Ocupado $true
     Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
@@ -252,6 +263,7 @@ function Recuperar-CacheIcones {
 
 function Configurar-Atualizacoes {
     param([bool]$BloquearDrivers, [bool]$AdiarRecursos)
+    Confirmar-PermissaoAlteracao
     Iniciar-Sessao 'atualizacoes'
     if ($BloquearDrivers) {
         Executar-Acao ([pscustomobject]@{ tipo = 'registro'; caminho = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'; nome = 'ExcludeWUDriverInQualityUpdate'; tipoValor = 'DWord'; dados = '1' }) 'bloquear drivers'
@@ -284,6 +296,7 @@ function Testar-Winget {
 }
 
 function Instalar-Winget {
+    Confirmar-PermissaoAlteracao
     $bloco = @'
 Write-Host '== Instalando o winget (App Installer) ==' -ForegroundColor Cyan
 Add-AppxPackage 'https://aka.ms/getwinget'
@@ -294,6 +307,7 @@ Executar-Nativo winget.exe @('--version')
 
 function Instalar-Aplicativos {
     param($Selecionados)
+    Confirmar-PermissaoAlteracao
     if ($Selecionados.Count -eq 0) { Avisar 'Nada selecionado' 'Marque pelo menos um aplicativo na lista antes de instalar.'; return }
     if (-not (Testar-Winget)) {
         Log 'winget nao encontrado nesta maquina.' -Erro
@@ -318,6 +332,7 @@ function Instalar-Aplicativos {
 }
 
 function Atualizar-Tudo {
+    Confirmar-PermissaoAlteracao
     if (-not (Testar-Winget)) { Log 'winget nao encontrado; use a instalacao do winget na aba Config.' -Erro; return }
     $blocovo = @'
 Write-Host '== Atualizando todos os aplicativos ==' -ForegroundColor Cyan

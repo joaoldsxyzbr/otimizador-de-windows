@@ -399,18 +399,17 @@ try {
     $esperado = ((Get-Content -LiteralPath ($arquivoOnline + '.sha256') -Raw).Trim() -split '\s+')[0]
     if ((Get-FileHash -LiteralPath $arquivoOnline -Algorithm SHA256).Hash -ne $esperado) { throw 'SHA256 divergente.' }
     Passou 'script online compilado e SHA256 valido'
+    $modoAnterior=$global:ModoProtegido; $nomeModoAnterior=$global:ModoOtimizador
     $identidadeTeste = [Security.Principal.WindowsIdentity]::GetCurrent()
     $adminTeste = New-Object Security.Principal.WindowsPrincipal($identidadeTeste)
-    if ($adminTeste.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    try {
         & {
             $ErrorActionPreference = 'Stop'
             & ([scriptblock]::Create($codigoOnline)) -Cli essencial -Simular
-            & ([scriptblock]::Create($codigoOnline)) -ValidarInterface
+            & ([scriptblock]::Create($codigoOnline)) -Diagnostico -ValidarInterface
         }
         Passou 'script em memoria simula perfil e carrega controles WPF'
-    } else {
-        Write-Host '  [info]   teste de execucao em memoria requer administrador.'
-    }
+    } finally { $global:ModoProtegido=$modoAnterior; $global:ModoOtimizador=$nomeModoAnterior }
 } catch { Falhou 'distribuicao online' $_.Exception.Message }
 finally { if (Test-Path -LiteralPath $pastaOnline) { Remove-Item -LiteralPath $pastaOnline -Recurse -Force } }
 
@@ -866,6 +865,33 @@ try {
     }
     Passou 'inspecao compara snapshot e estado atual sem alterar registro'
 } catch { Falhou 'inspecao de recuperacao' $_.Exception.Message }
+
+# ---- decisao conservadora e motor protegido ----
+Secao 'modo corporativo'
+try {
+    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Corporativo/Protetivo' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Pessoal (sem sinais detectados)') { throw 'Decisao de modo incorreta.' }
+    $modoAntes=$global:ModoProtegido
+    try {
+        $global:ModoProtegido=$true
+        foreach ($acao in @(
+            { Iniciar-Sessao 'bloqueado' },
+            { Executar-Acao ([pscustomobject]@{tipo='registro';caminho='HKCU:\Software\NaoCriar';nome='x';dados=1;tipoValor='DWord'}) 'teste' },
+            { Reverter-Sessao 'nao-existe.json' },
+            { Criar-PontoRestauracao },
+            { Limpar-Temporarios },
+            { Executar-NoConsole 'teste' 'throw "nao executar"' },
+            { Desinstalar-Programa ([pscustomobject]@{nome='teste'}) },
+            { Apagar-Rastro ([pscustomobject]@{tipo='arquivo'}) 'nao-existe' 1 },
+            { Alterar-ItemInventario 'servicos' $null }
+        )) {
+            $bloqueado=$false
+            try { & $acao } catch { $bloqueado=$_.Exception.Message -match 'Modo protegido' }
+            if (-not $bloqueado) { throw 'Operacao mutavel nao bloqueada no motor.' }
+        }
+        Executar-Acao ([pscustomobject]@{tipo='registro';caminho='HKCU:\Software\NaoCriar';nome='x';dados=1;tipoValor='DWord'}) 'teste' -Simular
+    } finally { $global:ModoProtegido=$modoAntes }
+    Passou 'modo protegido bloqueia mutacoes, permite simulacao'
+} catch { Falhou 'modo corporativo' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

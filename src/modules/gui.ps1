@@ -278,6 +278,7 @@ $global:PaginaAtual = 'PaginaInicio'
 
 function Trocar-Pagina {
     param([string]$Nome)
+    if ($global:ModoProtegido -and $Nome -ne 'PaginaInicio') { return }
     foreach ($p in @('PaginaInicio', 'PaginaAjustes', 'PaginaDebloat', 'PaginaDesinstalar', 'PaginaInstalar', 'PaginaConfig', 'PaginaAtualizacoes', 'PaginaManutencao', 'PaginaDesfazer')) {
         $pg = $global:Janela.FindName($p)
         if ($p -eq $Nome) { $pg.Visibility = 'Visible' } else { $pg.Visibility = 'Collapsed' }
@@ -346,7 +347,7 @@ function Clique-AplicarAjustes {
     if (-not $conf) { return }
     Status 'preparando ajustes...'
     Ocupado $true
-    if ($global:UI.ChkPontoRestore.IsChecked) { [void](Criar-PontoRestauracao) }
+    if ($global:UI.ChkPontoRestore.IsChecked -and -not (Criar-PontoRestauracao)) { Ocupado $false; Avisar 'Ponto nao confirmado' 'Operacao cancelada. Revise a protecao do sistema.'; return }
     Iniciar-Sessao 'ajustes'
     $total = 0
     foreach ($cb in $selecionados) { $total += @($cb.Tag.acoes).Count }
@@ -395,7 +396,7 @@ function Clique-RemoverUwp {
     if (-not $conf) { return }
     Status 'removendo aplicativos...'
     Ocupado $true
-    if ($global:UI.ChkPontoRestoreUwp.IsChecked) { [void](Criar-PontoRestauracao) }
+    if ($global:UI.ChkPontoRestoreUwp.IsChecked -and -not (Criar-PontoRestauracao)) { Ocupado $false; Avisar 'Ponto nao confirmado' 'Operacao cancelada.'; return }
     Iniciar-Sessao 'debloat'
     $progresso = Iniciar-ProgressoLote 'Removendo aplicativos' $selecionados.Count
     try {
@@ -470,6 +471,7 @@ function Clique-Preset {
 
 # exporta os ajustes marcados num .json (pra repetir depois ou levar pra outro pc)
 function Clique-ExportarPlano {
+    Confirmar-PermissaoAlteracao
     $selecionados = @(Get-Checkboxes $global:UI.ListaAjustes | Where-Object { $_.IsChecked })
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os ajustes que quer salvar no plano.'
@@ -492,6 +494,7 @@ function Clique-ExportarPlano {
 
 # importa um plano exportado: so marca as checkboxes na lista, nao aplica nada
 function Clique-ImportarPlano {
+    Confirmar-PermissaoAlteracao
     $dlg = New-Object Microsoft.Win32.OpenFileDialog
     $dlg.Filter = 'Plano OtimizadorPC (*.json)|*.json|Todos os arquivos (*.*)|*.*'
     if (-not $dlg.ShowDialog()) { return }
@@ -599,6 +602,7 @@ function Filtrar-Inventario {
 # Mudancas pequenas e explicitas no gerenciador; outras ficam nas ferramentas nativas.
 function Alterar-ItemInventario {
     param([string]$Grupo,$Item)
+    Confirmar-PermissaoAlteracao
     if ($null -eq $Item) { throw 'Selecione uma linha.' }
     if ($Grupo -eq 'servicos') {
         $permitidos = @($global:CatalogoTweaks.tweaks | ForEach-Object { $_.acoes } | Where-Object { $_.tipo -eq 'servico' } | ForEach-Object { $_.nome })
@@ -662,7 +666,7 @@ function Clique-InventarioLocal {
                 catch { Avisar 'Falha na exportacao' $_.Exception.Message }
             }
         })
-        [void]$barra.Children.Add($salvar)
+        if (-not $global:ModoProtegido) { [void]$barra.Children.Add($salvar) }
         foreach ($atalho in @(
             @{ nome='Inicializacao'; comando='taskmgr.exe' },
             @{ nome='Servicos'; comando='services.msc' },
@@ -678,11 +682,12 @@ function Clique-InventarioLocal {
                 try { Start-Process -FilePath (Join-Path $env:SystemRoot ('System32\' + [string]$this.Tag)) -ErrorAction Stop | Out-Null }
                 catch { Avisar 'Falha ao abrir ferramenta' $_.Exception.Message }
             })
-            [void]$barra.Children.Add($botao)
+            if (-not $global:ModoProtegido) { [void]$barra.Children.Add($botao) }
         }
         $nota = New-Object System.Windows.Controls.TextBlock
         $nota.TextWrapping = 'Wrap'
         $nota.Text = 'Inventario com acoes limitadas e journal. Alteracoes nas ferramentas nativas nao entram no journal. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
+        if ($global:ModoProtegido) { $nota.Text='Diagnostico local somente leitura. Exportacao e alteracoes indisponiveis. '+($dados.avisos -join ' | ') }
         $nota.Margin = '0,0,0,8'
         [System.Windows.Controls.DockPanel]::SetDock($nota,'Top')
         [void]$painel.Children.Add($nota)
@@ -702,7 +707,7 @@ function Clique-InventarioLocal {
             $grade.ItemsSource = @($dados.$grupo)
             $filtro.Tag = @{ dados=@($dados.$grupo); grade=$grade }
             $filtro.Add_TextChanged({ $this.Tag.grade.ItemsSource = @(Filtrar-Inventario $this.Tag.dados $this.Text) })
-            if ($grupo -in @('runUsuario','servicos','tarefas')) {
+            if (-not $global:ModoProtegido -and $grupo -in @('runUsuario','servicos','tarefas')) {
                 $acao = New-Object System.Windows.Controls.Button
                 $acao.Content = switch ($grupo) { 'runUsuario' {'Remover entrada Run selecionada'} 'servicos' {'Inicio manual (servicos do catalogo)'} 'tarefas' {'Desativar tarefa selecionada'} }
                 $acao.Margin='6'; $acao.Padding='8,4'
@@ -740,6 +745,7 @@ function Clique-InventarioLocal {
 
 # Exporta drivers de terceiros do Driver Store. Nunca instala ou remove drivers.
 function Clique-BackupDrivers {
+    Confirmar-PermissaoAlteracao
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
         $escolher = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -974,6 +980,7 @@ function Executar-ConsultaLocal {
 }
 
 function Clique-Medicoes {
+    Confirmar-PermissaoAlteracao
     try {
         $escolha = Perguntar 'Comparativo do sistema' 'Sim: capturar a referencia antes dos ajustes. Nao: abrir uma referencia salva e comparar com a medicao atual.'
         $antes = $null
@@ -1007,6 +1014,7 @@ function Clique-Medicoes {
 }
 
 function Clique-VerificarRelease {
+    Confirmar-PermissaoAlteracao
     try {
         $dados = @(Executar-ConsultaLocal -Titulo 'Consultando versao oficial' -Codigo ${function:Consultar-ReleaseOficial})
         if ($dados.Count -ne 1 -or $null -eq $dados[0]) { return }
@@ -1029,6 +1037,7 @@ function Clique-VerificarRelease {
 }
 
 function Clique-CargaPadronizada {
+    Confirmar-PermissaoAlteracao
     try {
         if (-not (Perguntar 'Teste de carga' 'Executar tres rodadas de SHA256 e copia de memoria? Feche outras tarefas para comparacao. Este teste sintetico nao representa FPS ou desempenho geral.')) { return }
         $res=@(Executar-ConsultaLocal -Titulo 'Teste de carga padronizada' -Codigo ${function:Medir-CargaPadronizada})
@@ -1050,6 +1059,7 @@ function Clique-MonitorSistema {
         $dados=$med[0]
         $linhas = ($dados.serie | Format-Table -AutoSize | Out-String -Width 100)
         $msg = $linhas + "`nCPU media: $($dados.cpuMedia)% | RAM usada: $($dados.ramUsadaGB) GB | Disco livre: $($dados.discoLivreGB) GB"
+        if ($global:ModoProtegido) { Avisar 'Monitor - diagnostico local' $msg; return }
         if (Perguntar 'Monitor - salvar relatorio?' ($msg + "`nExportar amostras em JSON?")) {
             $salvar=New-Object Microsoft.Win32.SaveFileDialog
             $salvar.Filter='Relatorio JSON (*.json)|*.json'; $salvar.FileName='otimizadorpc-monitor.json'
@@ -1062,6 +1072,7 @@ function Clique-MonitorSistema {
 function Executar-OperacaoUI {
     param([scriptblock]$Acao)
     if ($global:OperacaoUIAtiva) { return }
+    if ($global:ModoProtegido) { Avisar 'Modo protegido' 'Alteracoes indisponiveis. Consulte o TI.'; return }
     $global:OperacaoUIAtiva = $true
     $janela = $global:Janela
     $antes = $janela.IsEnabled
@@ -1093,6 +1104,17 @@ function Ajustar-TamanhoJanela {
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
     $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
+    if ($global:ModoProtegido) {
+        foreach ($nome in @('BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoCriarRestore','BotaoMedicoes','BotaoCarga','BotaoVerificarRelease')) {
+            $global:UI[$nome].IsEnabled=$false
+            $global:UI[$nome].ToolTip='Indisponivel no modo protegido.'
+        }
+        $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
+        $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
+        Trocar-Pagina 'PaginaInicio'
+        Status 'Modo protegido: somente diagnostico local.'
+        return
+    }
 
     # navegacao da barra lateral
     $global:UI.BotaoNavInicio.Add_Click({ Trocar-Pagina 'PaginaInicio' })

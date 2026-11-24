@@ -16,7 +16,7 @@ function Classificar-Programa {
     $grupo='Desconhecido'; $risco='Revisar'; $finalidade='Finalidade nao identificada'; $motivo='Nao ha regra local suficiente para identificar este programa.'
     if ($Prog.componenteSistema -or $Prog.naoRemover -or $Prog.pai -or $Prog.tipoRelease -match '^(Security Update|Critical Update|Update|Hotfix|Service Pack)$' -or
         $n -match '^(KB[0-9]+\b|(?:Security |Critical )?Update for |Hotfix\b|Language (Pack|Interface)\b|Windows (Security|Defender|Update Health Tools|Setup|Servicing Stack)\b|Microsoft (Windows Defender|Defender Antivirus|Edge(?: WebView2 Runtime| Update)?(?:\s*\(.*\))?)$)' -or
-        ($ms -and $n -match '^(Microsoft (Windows (?:10|11|Operating System|Update)|Edge|Update Health Tools)\b|Windows (?:Security|Defender|Update Health Tools|Setup|Servicing Stack)\b)')) {
+        ($ms -and $n -match '^(Microsoft (Windows (?:10|11|Operating System|Update)|Edge|OneDrive|Update Health Tools)\b|Windows (?:Security|Defender|Update Health Tools|Setup|Servicing Stack)\b)')) {
         $grupo='Sistema'; $risco='Bloqueado'; $finalidade='Componente, atualizacao ou entrada protegida'; $motivo='Indicador de sistema/nao remocao no registro ou nome de componente protegido conhecido.'
     } elseif ($n -match '\b(driver|drivers|driver package|chipset|graphics driver|audio driver|display driver|wireless driver)\b' -or $n -match '^(Realtek (?:High Definition Audio|Audio|Ethernet|PCIe)|NVIDIA Graphics Driver|AMD (?:Chipset|Software: Adrenalin Edition))\b') {
         $grupo='Driver'; $risco='Cautela'; $finalidade='Hardware, video, audio ou rede'; $motivo='Nome sugere driver ou pacote de hardware; remover pode prejudicar dispositivos.'
@@ -196,6 +196,7 @@ function Analisar-LinhaComando {
 
 function Desinstalar-Programa {
     param($Prog)
+    Confirmar-PermissaoAlteracao
     $info = Validar-ProtecaoPrograma $Prog -Desinstalar
     $nome = [string]$Prog.nome
     if ($info.risco -ne 'Normal' -and -not (Perguntar 'Cautela na desinstalacao' ($info.motivo + ' Continuar com ' + $nome + '?'))) { throw 'Desinstalacao cancelada pelo usuario.' }
@@ -233,6 +234,7 @@ function Desinstalar-Programa {
 }
 
 function Clique-DesinstalarProg {
+    Confirmar-PermissaoAlteracao
     $selecionados = @(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Escolha na lista o(s) programa(s) que quer desinstalar.'
@@ -246,7 +248,7 @@ function Clique-DesinstalarProg {
 
     Status 'desinstalando...'
     Ocupado $true
-    if ($global:UI.ChkPontoRestoreDesinstalar.IsChecked) { [void](Criar-PontoRestauracao) }
+    if ($global:UI.ChkPontoRestoreDesinstalar.IsChecked -and -not (Criar-PontoRestauracao)) { Ocupado $false; Avisar 'Ponto nao confirmado' 'Operacao cancelada.'; return }
     Iniciar-Sessao 'desinstalar'
     $concluidos = @()
     $i = 0
@@ -617,6 +619,7 @@ function Clique-VarrerRastros {
 
 function Apagar-Rastro {
     param($Rastro, [string]$PastaSessao, [int]$Num)
+    Confirmar-PermissaoAlteracao
 
     # servico orfao: para e desativa (nunca apaga; desfazer restaura tipo e estado)
     if ($Rastro.tipo -eq 'servico') {
@@ -744,6 +747,7 @@ function Marcar-Rastros {
 }
 
 function Clique-ApagarRastros {
+    Confirmar-PermissaoAlteracao
     $lb = $global:UI.ListaRastros
     $selecionados = @(Obter-RastrosMarcados $lb)
     Log ('limpeza de rastros: {0} marcado(s) de {1} exibido(s).' -f $selecionados.Count, $lb.Items.Count)
