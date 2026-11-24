@@ -130,7 +130,7 @@ $controles = @(
     'ListaRecursos', 'BotaoInstalarRecursos', 'BotaoFixUpdate', 'BotaoFixRede', 'BotaoFixIntegridade', 'BotaoFixWinget', 'PainelLegado',
     'ChkBloquearDrivers', 'ChkAdiarRecursos', 'BotaoAplicarAtualizacoes', 'BotaoBuscarAtualizacoes', 'BotaoResetUpdate2',
     'BotaoLimparTemp', 'BotaoLimpezaDisco', 'BotaoLimpezaDism', 'BotaoVerificarIntegridade', 'BotaoVerificarDisco',
-    'BotaoRecuperarIcones', 'BotaoLimparDns', 'BotaoSincronizarHora', 'BotaoBackupDrivers',
+    'BotaoRecuperarIcones', 'BotaoLimparDns', 'BotaoSincronizarHora', 'BotaoBackupDrivers', 'BotaoAnalisarArmazenamento',
     'ListaDesfazer', 'BotaoDesfazer', 'BotaoAtualizarListaSessoes'
 )
 foreach ($nome in $controles) {

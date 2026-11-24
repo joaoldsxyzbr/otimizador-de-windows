@@ -593,6 +593,53 @@ function Clique-BackupDrivers {
     }
 }
 
+function Clique-AnalisarArmazenamento {
+    try {
+        Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+        $escolher = New-Object System.Windows.Forms.FolderBrowserDialog
+        try {
+            $escolher.Description = 'Escolha uma pasta para localizar arquivos grandes'
+            if ($escolher.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
+            $pasta = $escolher.SelectedPath
+        } finally { $escolher.Dispose() }
+        $global:Janela.IsEnabled = $false
+        try {
+            Ocupado $true
+            Status 'analisando armazenamento...'
+            $dados = Analisar-Armazenamento -Pasta $pasta
+        } finally {
+            $global:Janela.IsEnabled = $true
+            Ocupado $false
+        }
+        $dlg = New-Object System.Windows.Window
+        $dlg.Title = 'Analise de armazenamento - somente leitura'
+        $dlg.Owner = $global:Janela
+        $dlg.WindowStartupLocation = 'CenterOwner'
+        $dlg.Width = 800
+        $dlg.Height = 550
+        $dlg.MaxWidth = [System.Windows.SystemParameters]::WorkArea.Width
+        $dlg.MaxHeight = [System.Windows.SystemParameters]::WorkArea.Height
+        $caixa = New-Object System.Windows.Controls.TextBox
+        $caixa.IsReadOnly = $true
+        $caixa.AcceptsReturn = $true
+        $caixa.VerticalScrollBarVisibility = 'Auto'
+        $caixa.HorizontalScrollBarVisibility = 'Auto'
+        $caixa.FontFamily = 'Consolas'
+        $linhas = @($dados.pasta, ('Arquivos examinados: {0}; tamanho logico: {1:N2} GB; itens ignorados: {2}' -f $dados.arquivos, ($dados.bytes / 1GB), $dados.ignorados))
+        if ($dados.parcial) { $linhas += 'Resultado parcial: limite de tempo/itens ou acesso restrito.' }
+        $linhas += @('', 'Maiores arquivos encontrados (ate 30):', '')
+        foreach ($arq in $dados.maiores) { $linhas += ('{0,12:N2} MB  {1}' -f ($arq.bytes / 1MB), $arq.caminho) }
+        $linhas += @('', 'Nenhum arquivo foi apagado. Nao exclua arquivos de sistema com base apenas no tamanho.')
+        $caixa.Text = ($linhas -join [Environment]::NewLine)
+        $dlg.Content = $caixa
+        Status 'analise de armazenamento concluida.'
+        [void]$dlg.ShowDialog()
+    } catch {
+        Log ('falha na analise de armazenamento: ' + $_.Exception.Message) -Erro
+        Status 'falha na analise de armazenamento.'
+    }
+}
+
 function Ligar-Tudo {
 
     # navegacao da barra lateral
@@ -662,6 +709,7 @@ function Ligar-Tudo {
     $global:UI.BotaoLimparDns.Add_Click({ Limpar-DNS; Status 'dns limpo.' })
     $global:UI.BotaoSincronizarHora.Add_Click({ Sincronizar-Hora })
     $global:UI.BotaoBackupDrivers.Add_Click({ Clique-BackupDrivers })
+    $global:UI.BotaoAnalisarArmazenamento.Add_Click({ Clique-AnalisarArmazenamento })
     $global:UI.BotaoRecuperarIcones.Add_Click({ Recuperar-CacheIcones })
     $global:UI.BotaoLimpezaDisco.Add_Click({ Limpeza-Disco })
     $global:UI.BotaoVerificarDisco.Add_Click({ Verificar-Disco })

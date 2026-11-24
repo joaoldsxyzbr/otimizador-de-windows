@@ -313,6 +313,23 @@ try {
     if (Test-Path -LiteralPath $testeJournal) { Remove-Item -LiteralPath $testeJournal -Recurse -Force }
 }
 
+# ---- analise de armazenamento: pasta descartavel ----
+Secao 'analise de armazenamento'
+$testePasta = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-storage-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $testePasta -ErrorAction Stop | Out-Null
+    . (Join-Path $raiz 'src\modules\sistema.ps1')
+    [IO.File]::WriteAllBytes((Join-Path $testePasta 'pequeno.bin'), [byte[]]@(1,2))
+    [IO.File]::WriteAllBytes((Join-Path $testePasta 'grande.bin'), [byte[]]@(1,2,3,4))
+    $resultado = Analisar-Armazenamento -Pasta $testePasta
+    if ($resultado.arquivos -ne 2 -or $resultado.bytes -ne 6 -or $resultado.parcial -or $resultado.maiores[0].bytes -ne 4) { throw 'Contagem, tamanho ou ordenacao incorreta.' }
+    Passou 'analise soma e ordena arquivos sem altera-los'
+    $limitado = Analisar-Armazenamento -Pasta $testePasta -Limite 1
+    if (-not $limitado.parcial -or $limitado.arquivos -ne 1) { throw 'Limite de itens nao respeitado.' }
+    Passou 'analise sinaliza resultado parcial'
+} catch { Falhou 'analise de armazenamento' $_.Exception.Message }
+finally { if (Test-Path -LiteralPath $testePasta) { Remove-Item -LiteralPath $testePasta -Recurse -Force } }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

@@ -144,3 +144,47 @@ function Obter-InventarioLocal {
     } catch { $relatorio.avisos += 'Nao foi possivel consultar adaptadores de rede.' }
     return [pscustomobject]$relatorio
 }
+
+# Analise limitada e somente leitura. Nao segue junctions nem links simbolicos.
+function Analisar-Armazenamento {
+    param([string]$Pasta, [ValidateRange(1,1000000)][int]$Limite = 100000, [ValidateRange(1,120)][int]$Segundos = 20)
+    $raiz = Get-Item -LiteralPath $Pasta -ErrorAction Stop
+    if (-not $raiz.PSIsContainer -or ($raiz.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Escolha uma pasta real, sem redirecionamento.' }
+    $pilha = New-Object 'System.Collections.Generic.Stack[string]'
+    $pilha.Push($raiz.FullName)
+    $maiores = New-Object 'System.Collections.Generic.List[object]'
+    $cron = [Diagnostics.Stopwatch]::StartNew()
+    $contagem = 0
+    $visitados = 0
+    $bytes = [long]0
+    $ignorados = 0
+    $incompleto = $false
+    while ($pilha.Count -gt 0 -and -not $incompleto) {
+        $dir = $pilha.Pop()
+        try {
+            foreach ($caminho in [IO.Directory]::EnumerateFileSystemEntries($dir)) {
+                if ($cron.Elapsed.TotalSeconds -ge $Segundos -or $visitados -ge $Limite) { $incompleto = $true; break }
+                $visitados++
+                try {
+                    $item = Get-Item -LiteralPath $caminho -Force -ErrorAction Stop
+                    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { $ignorados++; continue }
+                    if ($item.PSIsContainer) { $pilha.Push($item.FullName); continue }
+                    $contagem++
+                    $bytes += [long]$item.Length
+                    if ($maiores.Count -lt 30) {
+                        $maiores.Add([pscustomobject]@{ caminho = $item.FullName; bytes = [long]$item.Length })
+                    } else {
+                        $menor = 0
+                        for ($j = 1; $j -lt $maiores.Count; $j++) {
+                            if ($maiores[$j].bytes -lt $maiores[$menor].bytes) { $menor = $j }
+                        }
+                        if ($item.Length -gt $maiores[$menor].bytes) {
+                            $maiores[$menor] = [pscustomobject]@{ caminho = $item.FullName; bytes = [long]$item.Length }
+                        }
+                    }
+                } catch { $ignorados++ }
+            }
+        } catch { $ignorados++ }
+    }
+    return [pscustomobject]@{ pasta = $raiz.FullName; arquivos = $contagem; bytes = $bytes; ignorados = $ignorados; parcial = ($incompleto -or $ignorados -gt 0); maiores = @($maiores | Sort-Object bytes -Descending) }
+}
