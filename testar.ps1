@@ -533,6 +533,15 @@ try {
                 Verificar-PastaPrivada $tmpAcl
                 Garantir-PastaPrivada $tmpAcl
                 Passou 'ACL privada aceita; pasta herdada recusada'
+                $trava = Obter-TravaInstancia $tmpAcl
+                try {
+                    $recusou = $false
+                    try { $segunda = Obter-TravaInstancia $tmpAcl; $segunda.Dispose() } catch { $recusou = $true }
+                    if (-not $recusou) { throw 'Segunda instancia conseguiu a trava.' }
+                } finally { $trava.Dispose() }
+                $novaTrava = Obter-TravaInstancia $tmpAcl
+                $novaTrava.Dispose()
+                Passou 'trava impede segunda instancia e permite reabrir'
             } finally { if (Test-Path -LiteralPath $tmpAcl) { Remove-Item -LiteralPath $tmpAcl -Recurse -Force } }
             if (@(Get-ChildItem -LiteralPath $global:PastaDesfazer -File -Filter '*.json' -ErrorAction SilentlyContinue).Count -gt 0 -and $env:GITHUB_ACTIONS -eq 'true') { throw 'Simulacao criou journal no estado novo.' }
         }

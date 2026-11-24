@@ -119,7 +119,10 @@ foreach ($m in $modulos) {
 # arquivo unico: nao existe src\ ao redor; define as pastas pelo local do ps1
 Add-Texto '# ---- pastas do app (arquivo unico) ----'
 Add-Texto '$global:PastaDados = $global:PastaApp'
-Add-Texto 'Garantir-Pastas'
+Add-Texto '$travaInstancia = $null'
+Add-Texto 'try {'
+Add-Texto '    Garantir-Pastas'
+Add-Texto '    $travaInstancia = Obter-TravaInstancia'
 Add-Texto '$global:AmbienteTrabalho = Detectar-AmbienteTrabalho'
 Add-Texto ''
 

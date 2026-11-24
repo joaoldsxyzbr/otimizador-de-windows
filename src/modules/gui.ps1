@@ -850,6 +850,7 @@ function Executar-OperacaoUI {
     } finally {
         $janela.IsEnabled = $antes
         $global:OperacaoUIAtiva = $false
+        if ($global:UI.ContainsKey('BarraProgresso')) { $global:UI.BarraProgresso.IsIndeterminate = $false }
     }
 }
 
@@ -867,6 +868,7 @@ function Ajustar-TamanhoJanela {
 
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
+    $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
 
     # navegacao da barra lateral
     $global:UI.BotaoNavInicio.Add_Click({ Trocar-Pagina 'PaginaInicio' })

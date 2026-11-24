@@ -55,8 +55,11 @@ $pastaModulos = Join-Path $PSScriptRoot 'src\modules'
 . (Join-Path $pastaModulos 'sistema.ps1')
 . (Join-Path $pastaModulos 'gui.ps1')
 
-Garantir-Pastas
-$global:AmbienteTrabalho = Detectar-AmbienteTrabalho
+$travaInstancia = $null
+try {
+    Garantir-Pastas
+    $travaInstancia = Obter-TravaInstancia
+    $global:AmbienteTrabalho = Detectar-AmbienteTrabalho
 
 # ---- catalogos ----
 try {
@@ -163,3 +166,7 @@ if ($global:AmbienteTrabalho.Count -gt 0) {
 
 $global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - modo administrador')
 [void]$global:Janela.ShowDialog()
+
+} finally {
+    if ($null -ne $travaInstancia) { $travaInstancia.Dispose() }
+}

@@ -8,7 +8,7 @@ $global:PastaLog = Join-Path $global:RaizEstado 'logs'
 $global:PastaDesfazer = Join-Path $global:RaizEstado 'desfazer'
 $global:PastaQuarantena = Join-Path $global:RaizEstado 'quarentena'
 $global:ArquivoLog    = Join-Path $global:PastaLog ("otimizadorpc-" + (Get-Date -Format 'yyyy-MM-dd') + ".log")
-$global:VersaoOtimizador = '2.0.0-rc.3'
+$global:VersaoOtimizador = '2.0.0-rc.4'
 $global:ErrosSessao   = 0
 $global:UI            = @{}
 
@@ -63,6 +63,23 @@ function Garantir-Pastas {
     Garantir-PastaPrivada $global:RaizEstado
     foreach ($p in @($global:PastaLog, $global:PastaDesfazer, $global:PastaQuarantena)) {
         Garantir-PastaPrivada $p
+    }
+}
+
+# Lock exclusivo no volume local, compartilhado entre GUI, CLI e portatil.
+# O arquivo permanece; o handle e liberado ao fechar ou morrer o processo.
+function Obter-TravaInstancia {
+    param([string]$Pasta = $global:RaizEstado)
+    Verificar-PastaPrivada $Pasta
+    $arquivo = Join-Path $Pasta 'instancia.lock'
+    if (Test-Path -LiteralPath $arquivo) {
+        $item = Get-Item -LiteralPath $arquivo -Force -ErrorAction Stop
+        if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Arquivo de trava invalido.' }
+    }
+    try {
+        return [IO.File]::Open($arquivo,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+    } catch [IO.IOException] {
+        throw 'Outra instancia pode estar em execucao, ou a trava esta indisponivel. Feche a outra instancia e tente novamente.'
     }
 }
 

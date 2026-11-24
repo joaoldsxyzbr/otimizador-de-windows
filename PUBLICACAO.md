@@ -34,7 +34,7 @@ Acesse https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/new e crie
 - dist/otimizadorpc-portatil.ps1
 - dist/rodar-portatil.bat
 
-Nao marque como latest ate aprovar a entrega estavel. A publicacao automatica nao esta configurada. O comando estavel com /latest/download/otimizadorpc.ps1 so funciona apos publicar uma release estavel com esse asset.
+Nao marque como latest ate aprovar a entrega estavel. A publicacao automatica esta configurada no workflow Publicar OtimizadorPC, na main. O comando estavel com /latest/download/otimizadorpc.ps1 so funciona apos publicar uma release estavel com esse asset.
 
 Para testar uma pre-release, use o endereco do asset mostrado na propria release, confira o SHA256 e execute apenas codigo revisado. Nunca ignore falhas de integridade.
 
