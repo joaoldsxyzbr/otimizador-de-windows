@@ -154,8 +154,8 @@ function Atualizar-DetalhePrograma {
     $selecionados=@(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     $global:UI.BotaoDetalhesPrograma.IsEnabled=($selecionados.Count -eq 1)
     $bloqueados=@($selecionados | Where-Object { -not $_.classificacao.podeDesinstalar })
-    $global:UI.BotaoDesinstalarProg.IsEnabled=($selecionados.Count -gt 0 -and $bloqueados.Count -eq 0)
-    $global:UI.BotaoVarrerRastros.IsEnabled=($selecionados.Count -eq 1 -and $selecionados[0].classificacao.risco -ne 'Bloqueado')
+    $global:UI.BotaoDesinstalarProg.IsEnabled=(-not $global:ModoProtegido -and $selecionados.Count -gt 0 -and $bloqueados.Count -eq 0)
+    $global:UI.BotaoVarrerRastros.IsEnabled=(-not $global:ModoProtegido -and $selecionados.Count -eq 1 -and $selecionados[0].classificacao.risco -ne 'Bloqueado')
     if ($selecionados.Count -eq 1) {
         $pr=$selecionados[0]; $info=$pr.classificacao
         $global:UI.DetalhePrograma.Text=('{0}: {1}. {2}' -f $info.categoria,$info.finalidade,$info.motivo)
