@@ -253,6 +253,7 @@ Secao 'journal atomico e recuperacao'
 $testeJournal = Join-Path ([System.IO.Path]::GetTempPath()) ('otimizadorpc-teste-' + [guid]::NewGuid().ToString('N'))
 try {
     New-Item -ItemType Directory -Path $testeJournal -ErrorAction Stop | Out-Null
+    . (Join-Path $raiz 'src\modules\comum.ps1')
     . (Join-Path $raiz 'src\modules\motor.ps1')
     $arquivoTeste = Join-Path $testeJournal 'sessao.json'
     Gravar-JSONAtomico -Arquivo $arquivoTeste -Objeto @{ itens = @(@{ tipo = 'teste'; estadoReversao = 'em_andamento' }) }
@@ -399,7 +400,7 @@ try {
     $esperado = ((Get-Content -LiteralPath ($arquivoOnline + '.sha256') -Raw).Trim() -split '\s+')[0]
     if ((Get-FileHash -LiteralPath $arquivoOnline -Algorithm SHA256).Hash -ne $esperado) { throw 'SHA256 divergente.' }
     Passou 'script online compilado e SHA256 valido'
-    $modoAnterior=$global:ModoProtegido; $nomeModoAnterior=$global:ModoOtimizador
+    $modoAnterior=$global:ModoProtegido; $nomeModoAnterior=$global:ModoOtimizador; $ambienteAnterior=$global:AmbienteTrabalho
     $identidadeTeste = [Security.Principal.WindowsIdentity]::GetCurrent()
     $adminTeste = New-Object Security.Principal.WindowsPrincipal($identidadeTeste)
     try {
@@ -419,7 +420,7 @@ try {
             Passou 'interface protegida e simulacao sem arquivos de estado'
         }
         Passou 'script em memoria simula perfil e carrega controles WPF'
-    } finally { $global:ModoProtegido=$modoAnterior; $global:ModoOtimizador=$nomeModoAnterior }
+    } finally { $global:ModoProtegido=$modoAnterior; $global:ModoOtimizador=$nomeModoAnterior; $global:AmbienteTrabalho=$ambienteAnterior }
 } catch { Falhou 'distribuicao online' $_.Exception.Message }
 finally { if (Test-Path -LiteralPath $pastaOnline) { Remove-Item -LiteralPath $pastaOnline -Recurse -Force } }
 

@@ -39,7 +39,7 @@ O botao Consultar e baixar versao oficial mostra releases estavel/candidata e pe
 
 1. baixe/clone o repo e abra a pasta
 2. (opcional, recomendado) rode a bateria de testes: `powershell -ExecutionPolicy Bypass -File .\testar.ps1`
-3. de dois cliques em `rodar-como-admin.bat` para diagnostico sem elevacao; para uso pessoal autorizado, abra Windows PowerShell como administrador e execute ` .\otimizadorpc.ps1`.
+3. de dois cliques em `rodar-como-admin.bat` para diagnostico sem elevacao; para uso pessoal autorizado, abra Windows PowerShell como administrador e execute `.\otimizadorpc.ps1`.
 
 nao quer janela? modo cli:
 
