@@ -453,6 +453,7 @@ function Clique-ImportarPlano {
 }
 
 function Clique-Desfazer {
+    param([switch]$UmaAcao)
     $lb = $global:UI.ListaDesfazer
     if ($lb.SelectedIndex -lt 0) {
         Avisar 'Selecione' 'Escolha na lista a sessao que quer desfazer.'
@@ -464,20 +465,25 @@ function Clique-Desfazer {
         Atualizar-ListaDesfazer
         return
     }
-    $conf = Perguntar 'Desfazer sessao' ('Desfazer todas as acoes da sessao selecionada?' + "`n" + $lb.SelectedItem)
+    if ($UmaAcao) {
+        $conf = Perguntar 'Desfazer ultima acao' 'Reverter somente a ultima acao pendente, respeitando a ordem inversa?'
+    } else {
+        $conf = Perguntar 'Desfazer sessao' ('Desfazer todas as acoes da sessao selecionada?' + "`n" + $lb.SelectedItem)
+    }
     if (-not $conf) { return }
     Status 'revertendo sessao...'
     Ocupado $true
     $global:Janela.IsEnabled = $false
     try {
-        $resultado = Reverter-Sessao -Arquivo $caminho
+        $resultado = Reverter-Sessao -Arquivo $caminho -UmaAcao:$UmaAcao
     } finally {
         $global:Janela.IsEnabled = $true
         Ocupado $false
     }
     Atualizar-ListaDesfazer
     if ($resultado -eq $true) {
-        Status 'sessao revertida.'
+        if (Test-Path -LiteralPath $caminho) { Status 'uma acao revertida; restam itens.' }
+        else { Status 'sessao revertida.' }
     } else {
         Status 'reversao incompleta - consulte o log.'
         Cor-Status 'vermelho'
@@ -762,6 +768,7 @@ function Ligar-Tudo {
 
     # pagina desfazer
     $global:UI.BotaoDesfazer.Add_Click({ Clique-Desfazer })
+    $global:UI.BotaoDesfazerUma.Add_Click({ Clique-Desfazer -UmaAcao })
     $global:UI.BotaoDetalhesSessao.Add_Click({ Clique-DetalhesSessao })
     $global:UI.BotaoAtualizarListaSessoes.Add_Click({ Atualizar-ListaDesfazer; Log 'lista de sessoes atualizada.' })
 

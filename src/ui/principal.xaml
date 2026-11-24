@@ -536,11 +536,12 @@
                             <TextBlock Style="{StaticResource SubTitulo}" Margin="0,2,0,8" Text="Cada vez que voce aplicou ajustes, debloat, recursos ou configuracoes de update, o app guardou um journal de tudo (em C:\ProgramData\otimizadorpc\desfazer). Escolha a sessao e reverta. A limpeza de rastros da aba Desinstalar tambem vira sessao aqui: desfazer devolve arquivos da quarantena e importa os backups .reg do registro. Apps da Store removidos precisam ser reinstalados pela Store." TextWrapping="Wrap"/>
                         </StackPanel>
                         <ListBox x:Name="ListaDesfazer" Grid.Row="1" Background="#1b1b20" Foreground="#e5e7eb" BorderBrush="#374151" Margin="0,6,0,0" FontSize="13"/>
-                        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,10,0,0">
+                        <WrapPanel Grid.Row="2" Margin="0,10,0,0">
                             <Button x:Name="BotaoDesfazer" Style="{StaticResource BotaoVermelho}" Content="Desfazer sessao selecionada" Margin="0,0,10,0" MinWidth="220"/>
                             <Button x:Name="BotaoAtualizarListaSessoes" Content="Atualizar lista" MinWidth="130" Margin="0,0,10,0"/>
-                            <Button x:Name="BotaoDetalhesSessao" Content="Detalhes e quarentena" MinWidth="160"/>
-                        </StackPanel>
+                            <Button x:Name="BotaoDetalhesSessao" Content="Detalhes e quarentena" MinWidth="160" Margin="0,0,10,0"/>
+                            <Button x:Name="BotaoDesfazerUma" Content="Desfazer ultima acao" MinWidth="160"/>
+                        </WrapPanel>
                     </Grid>
                 </Grid>
             </Grid>

@@ -549,12 +549,13 @@ function Desfazer-Item {
 }
 
 function Reverter-Sessao {
-    param([string]$Arquivo)
+    param([string]$Arquivo, [switch]$UmaAcao)
     $ErrorActionPreference = 'Stop'
     try {
         $json = Ler-JSON $Arquivo
         if ($null -eq $json -or $null -eq $json.itens) { throw 'Journal invalido.' }
         $itens = @($json.itens)
+        $feitas = 0
         for ($i = $itens.Count - 1; $i -ge 0; $i--) {
             $item = $itens[$i]
             if ($item.estadoReversao -eq 'concluido') { continue }
@@ -568,7 +569,13 @@ function Reverter-Sessao {
             }
             $item.estadoReversao = 'concluido'
             Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+            $feitas++
             Atualizar-UI
+            if ($UmaAcao -and $feitas -ge 1) { break }
+        }
+        if (@($itens | Where-Object { $_.estadoReversao -ne 'concluido' }).Count -gt 0) {
+            Log 'Uma acao revertida. Restam itens nesta sessao.'
+            return $true
         }
         $novoNome = (Split-Path -Leaf $Arquivo) + '.revertido'
         Rename-Item -LiteralPath $Arquivo -NewName $novoNome -ErrorAction Stop

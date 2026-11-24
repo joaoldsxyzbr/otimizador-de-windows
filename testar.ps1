@@ -290,6 +290,16 @@ try {
         }
         Passou 'retomada pula acoes concluidas'
         $script:acoesTeste = @()
+        $um = Join-Path $testeJournal 'um.json'
+        Gravar-JSONAtomico -Arquivo $um -Objeto @{ rotulo = 'teste'; itens = @(@{ tipo = 'primeira' }, @{ tipo = 'ultima' }) }
+        if ((Reverter-Sessao $um -UmaAcao) -ne $true -or ($script:acoesTeste -join ',') -ne 'ultima' -or -not (Test-Path -LiteralPath $um)) {
+            throw 'Reversao individual nao respeitou a ordem ou finalizou cedo.'
+        }
+        if ((Reverter-Sessao $um -UmaAcao) -ne $true -or ($script:acoesTeste -join ',') -ne 'ultima,primeira' -or -not (Test-Path ($um + '.revertido'))) {
+            throw 'Reversao individual nao finalizou a sessao.'
+        }
+        Passou 'reversao individual respeita ordem inversa e finaliza sessao'
+        $script:acoesTeste = @()
         $incerto = Join-Path $testeJournal 'incerto.json'
         Gravar-JSONAtomico -Arquivo $incerto -Objeto @{ rotulo = 'teste'; itens = @(@{ tipo = 'pendente' }, @{ tipo = 'falha' }) }
         if ((Reverter-Sessao $incerto) -ne $false) { throw 'Falha foi tratada como sucesso.' }
