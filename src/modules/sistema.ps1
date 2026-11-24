@@ -188,3 +188,64 @@ function Analisar-Armazenamento {
     }
     return [pscustomobject]@{ pasta = $raiz.FullName; arquivos = $contagem; bytes = $bytes; ignorados = $ignorados; parcial = ($incompleto -or $ignorados -gt 0); maiores = @($maiores | Sort-Object bytes -Descending) }
 }
+
+# Amostra observacional. Nao executa benchmark nem promete ganhos de desempenho.
+function Medir-EstadoSistema {
+    $cpu = @()
+    $ram = @()
+    $processos = @()
+    for ($i = 0; $i -lt 3; $i++) {
+        $p = Get-CimInstance Win32_PerfFormattedData_PerfOS_Processor -Filter "Name='_Total'" -ErrorAction Stop
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        if ($null -eq $p -or $os.TotalVisibleMemorySize -le 0) { throw 'Contadores do sistema indisponiveis.' }
+        $cpu += [double]$p.PercentProcessorTime
+        $ram += [double]($os.TotalVisibleMemorySize - $os.FreePhysicalMemory) / 1MB
+        $processos += @(Get-Process -ErrorAction Stop).Count
+        if ($i -lt 2) { Start-Sleep -Seconds 1 }
+    }
+    $disco = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$env:SystemDrive'" -ErrorAction Stop
+    if ($null -eq $disco) { throw 'Disco do sistema indisponivel.' }
+    return [pscustomobject]@{
+        formato = 'otimizadorpc-medicao-v1'
+        criado = (Get-Date -Format 'o')
+        maquina = $env:COMPUTERNAME
+        build = [Environment]::OSVersion.Version.Build
+        unidade = $env:SystemDrive
+        ramTotalGB = [math]::Round($os.TotalVisibleMemorySize / 1MB, 2)
+        discoTotalGB = [math]::Round($disco.Size / 1GB, 2)
+        cpuMedia = [math]::Round(($cpu | Measure-Object -Average).Average, 2)
+        ramUsadaGB = [math]::Round(($ram | Measure-Object -Average).Average, 2)
+        processosMedia = [math]::Round(($processos | Measure-Object -Average).Average, 2)
+        discoLivreGB = [math]::Round($disco.FreeSpace / 1GB, 2)
+        amostras = 3
+    }
+}
+
+function Comparar-Medicoes {
+    param($Antes, $Depois)
+    foreach ($item in @($Antes,$Depois)) {
+        if ($item.formato -ne 'otimizadorpc-medicao-v1' -or $item.amostras -ne 3) { throw 'Formato de medicao invalido.' }
+        foreach ($campo in @('cpuMedia','ramUsadaGB','processosMedia','discoLivreGB','ramTotalGB','discoTotalGB')) {
+            $v = $item.$campo
+            if ($null -eq $v -or ($v -isnot [ValueType]) -or $v -is [bool]) { throw ('Campo numerico invalido: ' + $campo) }
+            $n = [double]$v
+            if ([double]::IsNaN($n) -or [double]::IsInfinity($n) -or $n -lt 0) { throw ('Valor invalido: ' + $campo) }
+        }
+        if ($item.cpuMedia -gt 100 -or $item.ramUsadaGB -gt $item.ramTotalGB -or $item.discoLivreGB -gt $item.discoTotalGB) { throw 'Medicao fora dos limites.' }
+    }
+    foreach ($campo in @('maquina','build','unidade','ramTotalGB','discoTotalGB')) {
+        if ($null -eq $Antes.$campo -or $Antes.$campo -ne $Depois.$campo) { throw 'Medicoes de computadores ou configuracoes diferentes.' }
+    }
+    $linhas = @()
+    foreach ($metrica in @(
+        @{ campo='cpuMedia'; nome='CPU media (%)' },
+        @{ campo='ramUsadaGB'; nome='RAM usada (GB)' },
+        @{ campo='processosMedia'; nome='Processos (media)' },
+        @{ campo='discoLivreGB'; nome='Disco livre (GB)' }
+    )) {
+        $v1 = [double]$Antes.($metrica.campo)
+        $v2 = [double]$Depois.($metrica.campo)
+        $linhas += [pscustomobject]@{ metrica=$metrica.nome; antes=$v1; depois=$v2; diferenca=[math]::Round($v2-$v1,2) }
+    }
+    return $linhas
+}

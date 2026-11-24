@@ -608,15 +608,9 @@ function Clique-AnalisarArmazenamento {
             if ($escolher.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { return }
             $pasta = $escolher.SelectedPath
         } finally { $escolher.Dispose() }
-        $global:Janela.IsEnabled = $false
-        try {
-            Ocupado $true
-            Status 'analisando armazenamento...'
-            $dados = Analisar-Armazenamento -Pasta $pasta
-        } finally {
-            $global:Janela.IsEnabled = $true
-            Ocupado $false
-        }
+        $resultado = @(Executar-ConsultaLocal -Titulo 'Analisando armazenamento' -Codigo ${function:Analisar-Armazenamento} -Parametros @{ Pasta = $pasta })
+        if ($resultado.Count -ne 1 -or $null -eq $resultado[0]) { Status 'analise cancelada.'; return }
+        $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window
         $dlg.Title = 'Analise de armazenamento - somente leitura'
         $dlg.Owner = $global:Janela
@@ -687,6 +681,108 @@ function Clique-DetalhesSessao {
     } catch {
         Log ('falha ao consultar sessao: ' + $_.Exception.Message) -Erro
         Avisar 'Sessao invalida' 'Nao foi possivel ler os detalhes. Preserve os arquivos e consulte o log.'
+    }
+}
+
+# Executa consultas somente leitura em um runspace separado, com janela modal.
+function Executar-ConsultaLocal {
+    param([string]$Titulo, [scriptblock]$Codigo, [hashtable]$Parametros = @{})
+    $ps = [PowerShell]::Create()
+    $estado = @{ cancelado=$false; resultado=$null; erro=$null; terminou=$false; parada=$null }
+    $dlg = New-Object System.Windows.Window
+    $dlg.Title = $Titulo
+    $dlg.Owner = $global:Janela
+    $dlg.WindowStartupLocation = 'CenterOwner'
+    $dlg.Width = 400
+    $dlg.Height = 160
+    $dlg.ResizeMode = 'NoResize'
+    $painel = New-Object System.Windows.Controls.StackPanel
+    $painel.Margin = '16'
+    $mensagem = New-Object System.Windows.Controls.TextBlock
+    $mensagem.Text = 'Consultando o sistema. Nenhuma alteracao sera aplicada.'
+    $mensagem.TextWrapping = 'Wrap'
+    [void]$painel.Children.Add($mensagem)
+    $barra = New-Object System.Windows.Controls.ProgressBar
+    $barra.IsIndeterminate = $true
+    $barra.Height = 12
+    $barra.Margin = '0,10,0,10'
+    [void]$painel.Children.Add($barra)
+    $cancelar = New-Object System.Windows.Controls.Button
+    $cancelar.Content = 'Cancelar'
+    [void]$painel.Children.Add($cancelar)
+    $dlg.Content = $painel
+    $timer = New-Object System.Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromMilliseconds(100)
+    try {
+        [void]$ps.AddScript($Codigo.ToString())
+        foreach ($chave in $Parametros.Keys) { [void]$ps.AddParameter($chave,$Parametros[$chave]) }
+        $async = $ps.BeginInvoke()
+        $pedirCancelamento = {
+            if (-not $estado.cancelado -and -not $async.IsCompleted) {
+                $estado.cancelado = $true
+                $cancelar.IsEnabled = $false
+                $mensagem.Text = 'Cancelando consulta...'
+                try { $estado.parada = $ps.BeginStop($null,$null) }
+                catch { $estado.erro = $_.Exception }
+            }
+        }.GetNewClosure()
+        $cancelar.Add_Click($pedirCancelamento)
+        $dlg.Add_Closing({
+            param($sender,$eventArgs)
+            if (-not $estado.terminou) { $eventArgs.Cancel = $true; & $pedirCancelamento }
+        }.GetNewClosure())
+        $timer.Add_Tick({
+            if (-not $async.IsCompleted) { return }
+            $timer.Stop()
+            try {
+                $estado.resultado = @($ps.EndInvoke($async))
+                if ($ps.Streams.Error.Count -gt 0 -and -not $estado.cancelado) { throw $ps.Streams.Error[0].Exception }
+            } catch { if (-not $estado.cancelado) { $estado.erro = $_.Exception } }
+            $estado.terminou = $true
+            $dlg.Close()
+        }.GetNewClosure())
+        $timer.Start()
+        [void]$dlg.ShowDialog()
+        if ($estado.cancelado) { return $null }
+        if ($estado.erro) { throw $estado.erro }
+        return $estado.resultado
+    } finally {
+        $timer.Stop()
+        if ($estado.parada -and $estado.parada.IsCompleted) {
+            try { $ps.EndStop($estado.parada) } catch { }
+        }
+        $ps.Dispose()
+    }
+}
+
+function Clique-Medicoes {
+    try {
+        $escolha = Perguntar 'Comparativo do sistema' 'Sim: capturar a referencia antes dos ajustes. Nao: abrir uma referencia salva e comparar com a medicao atual.'
+        $antes = $null
+        if (-not $escolha) {
+            $abrir = New-Object Microsoft.Win32.OpenFileDialog
+            $abrir.Filter = 'Medicao JSON (*.json)|*.json'
+            if (-not $abrir.ShowDialog()) { return }
+            $antes = Ler-JSON $abrir.FileName
+        }
+        $medicoes = @(Executar-ConsultaLocal -Titulo 'Medindo o sistema' -Codigo ${function:Medir-EstadoSistema})
+        if ($medicoes.Count -ne 1 -or $null -eq $medicoes[0]) { Status 'medicao cancelada.'; return }
+        $atual = $medicoes[0]
+        if ($escolha) {
+            $salvar = New-Object Microsoft.Win32.SaveFileDialog
+            $salvar.Filter = 'Medicao JSON (*.json)|*.json'
+            $salvar.FileName = 'otimizadorpc-antes.json'
+            if ($salvar.ShowDialog()) {
+                Gravar-JSONAtomico -Arquivo $salvar.FileName -Objeto $atual
+                Avisar 'Referencia salva' 'Repita a medicao em condicoes semelhantes, com os mesmos programas abertos. O JSON inclui o nome do computador; nao compartilhe sem revisar.'
+            }
+        } else {
+            $linhas = @(Comparar-Medicoes -Antes $antes -Depois $atual | Format-Table -AutoSize | Out-String -Width 120)
+            Avisar 'Comparativo observacional' (($linhas -join '') + [Environment]::NewLine + 'Tres amostras de CPU, RAM e processos. A carga de trabalho pode variar; diferencas nao provam ganho de desempenho ou FPS.')
+        }
+    } catch {
+        Log ('falha na medicao: ' + $_.Exception.Message) -Erro
+        Avisar 'Medicao indisponivel' $_.Exception.Message
     }
 }
 
@@ -774,6 +870,7 @@ function Ligar-Tudo {
 
     # pagina inicio
     $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
+    $global:UI.BotaoMedicoes.Add_Click({ Clique-Medicoes })
     $global:UI.BotaoCriarRestore.Add_Click({
         Ocupado $true
         [void](Criar-PontoRestauracao)

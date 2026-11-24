@@ -408,6 +408,22 @@ try {
 } catch { Falhou 'distribuicao online' $_.Exception.Message }
 finally { if (Test-Path -LiteralPath $pastaOnline) { Remove-Item -LiteralPath $pastaOnline -Recurse -Force } }
 
+# ---- comparativo: dados sinteticos, sem depender da carga do runner ----
+Secao 'comparacao de medicoes'
+try {
+    $a = [pscustomobject]@{ formato='otimizadorpc-medicao-v1'; amostras=3; maquina='ci'; build=1; unidade='C:'; ramTotalGB=16; discoTotalGB=100; cpuMedia=20; ramUsadaGB=8; processosMedia=100; discoLivreGB=30 }
+    $b = $a.PSObject.Copy()
+    $b.cpuMedia = 10
+    $b.discoLivreGB = 35
+    $comparado = @(Comparar-Medicoes $a $b)
+    if ($comparado.Count -ne 4 -or $comparado[0].diferenca -ne -10 -or $comparado[3].diferenca -ne 5) { throw 'Diferencas incorretas.' }
+    $b.maquina = 'outro-pc'
+    $rejeitado = $false
+    try { Comparar-Medicoes $a $b | Out-Null } catch { $rejeitado = $true }
+    if (-not $rejeitado) { throw 'Computadores diferentes foram comparados.' }
+    Passou 'comparacao de medicoes e validacao de compatibilidade'
+} catch { Falhou 'comparacao de medicoes' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
