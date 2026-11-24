@@ -61,6 +61,7 @@ nao quer janela? modo cli:
 ## desenvolvimento v2 (pre-release)
 
 - perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (detecta ambiente gerenciado ou bateria). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- ajustes iniciam em simulacao; debloat nao seleciona aplicativos automaticamente e atua apenas no usuario atual, com nomes exatos, sem desprovisionar pacotes. Reinstalacao depende de disponibilidade e verificacao.
 - desinstalador: correspondencia exata para pastas/chaves, bloqueio de locais protegidos e links, servicos/tarefas/entradas de inicializacao/PATH candidatos apenas com executavel ou caminho ausente. Nao e prova de que o rastro pertence ao app; revise cada caixa. Desinstaladores com comandos ambiguos devem ser executados pelo Windows, nao por fallback cmd.
 - recuperacao de valores de registro e PATH: compara o estado atual com o aplicado e o anterior; interrompe se houver mudanca posterior em vez de sobrescrever. Conflitos exigem revisao manual.
 - estado administrativo: a nova pasta ProgramData\otimizadorpc-v2 exige ACL restrita a administradores/SYSTEM, sem confiar automaticamente no estado antigo. Os arquivos anteriores em ProgramData\otimizadorpc permanecem intactos, mas precisam de recuperacao manual/revisao; nao copie journals antigos para a pasta nova.

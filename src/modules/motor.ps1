@@ -325,31 +325,22 @@ function Executar-Acao {
             }
 
             'appx' {
-                $achou = $false
-                $pkgs = @(Get-AppxPackage | Where-Object { $_.Name -like ($Acao.pacote + '*') })
+                # Remocao apenas do usuario atual, sem afetar outros usuarios
+                # nem o provisionamento. O nome deve ser exato.
+                $pkgs = @(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Acao.pacote })
+                $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
                 foreach ($p in $pkgs) {
-                    $achou = $true
+                    if ($p.IsFramework -or $p.NonRemovable -or $p.IsResourcePackage) { throw ('Pacote protegido: ' + $p.Name) }
                     Registrar-Jornal ([pscustomobject]@{
-                        tipo     = 'appx'
-                        pacote   = $p.Name
-                        completo = $p.PackageFullName
-                        familia  = $p.PackageFamilyName
+                        tipo = 'appx'; pacote = $p.Name; completo = $p.PackageFullName
+                        familia = $p.PackageFamilyName; usuarioSid = $sid
                     })
-                    try {
-                        Remove-AppxPackage -Package $p.PackageFullName -AllUsers -ErrorAction Stop
-                    } catch {
-                        try { Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop } catch { throw }
-                    }
-                    Log ("appx removido: {0}" -f $p.Name)
+                    Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop
+                    if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.PackageFullName -eq $p.PackageFullName }).Count -gt 0) { throw 'Pacote continua instalado.' }
+                    $global:CacheAppxCarregadoEm = $null
+                    Log ('appx removido do usuario atual: ' + $p.Name)
                 }
-                try {
-                    $prov = @(Get-AppxProvisionedPackage -Online | Where-Object { $_.DisplayName -like ($Acao.pacote + '*') -or $_.PackageName -like ($Acao.pacote + '*') })
-                    foreach ($pr in $prov) {
-                        Remove-AppxProvisionedPackage -Online -PackageName $pr.PackageName -ErrorAction Stop | Out-Null
-                        Log ("appx desprovisionado (novos usuarios nao receberao): {0}" -f $pr.DisplayName)
-                    }
-                } catch { }
-                if (-not $achou) { Log ("appx '{0}' nao esta instalado, nada a fazer." -f $Acao.pacote) }
+                if ($pkgs.Count -eq 0) { Log ("appx '{0}' nao esta instalado no usuario atual." -f $Acao.pacote) }
             }
 
             'recurso' {
@@ -497,14 +488,17 @@ function Desfazer-Item {
                 # tenta reinstalar pro usuario atual; quando a remocao foi
                 # por usuario (o pacote continua staged na maquina), volta
                 # na hora; quando foi -AllUsers, so pela Store mesmo
+                if ($Item.usuarioSid -and $Item.usuarioSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'A sessao AppX pertence a outro usuario.' }
+                if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0) { Log 'appx ja esta instalado no usuario atual.'; return $true }
                 $fez = $false
                 if (-not [string]::IsNullOrWhiteSpace([string]$Item.familia)) {
                     try {
                         Add-AppxPackage -RegisterByFamilyName -MainPackage $Item.familia -ErrorAction Stop
-                        $fez = $true
+                        $fez = (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0)
                     } catch { $fez = $false }
                 }
                 if ($fez) {
+                    $global:CacheAppxCarregadoEm = $null
                     Log ("appx '{0}' reinstalado pelo desfazer (familia: {1})." -f $Item.pacote, $Item.familia)
                 } else {
                     throw ('Reinstalacao manual necessaria pela Microsoft Store: ' + $Item.pacote)
@@ -698,7 +692,7 @@ function Appx-Instalado {
     param([string]$Pacote)
     Carregar-CacheAppx
     foreach ($n in $global:CacheAppx) {
-        if ($n -like ($Pacote + '*')) { return $true }
+        if ($n -eq $Pacote) { return $true }
     }
     return $false
 }

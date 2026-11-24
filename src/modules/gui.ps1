@@ -70,14 +70,14 @@ function Montar-PaginaDebloat {
     $painel = $global:UI.ListaUwp
     $painel.Children.Clear()
     $grupos = @{}
-    $grupoSeguroNome = 'seguros de remover (marcados)'
+    $grupoSeguroNome = 'opcionais - revise antes de remover'
     $grupoCautelaNome = 'com cautela (leia as descricoes)'
     foreach ($p in $global:CatalogoUwp.pacotes) {
         if ($p.so -eq 'win11' -and -not $win11) { continue }
         if ($p.so -eq 'win10' -and $win11) { continue }
         $titulo = $grupoCautelaNome
         $marcado = $false
-        if ($p.remover) { $titulo = $grupoSeguroNome; $marcado = $true }
+        if ($p.remover) { $titulo = $grupoSeguroNome }
         if (-not $grupos.ContainsKey($titulo)) {
             $grupos[$titulo] = Nova-Categoria $titulo
             [void]$painel.Children.Add($grupos[$titulo])
@@ -343,7 +343,7 @@ function Clique-RemoverUwp {
         return
     }
     $nomes = ($selecionados | ForEach-Object { $_.Tag.nome }) -join ', '
-    $conf = Perguntar 'Remover aplicativos' ("Remover {0} aplicativo(s) pre-instalado(s):`n`n{1}`n`nIsso remove da Store; da para reinstalar depois. Continuar?" -f $selecionados.Count, $nomes)
+    $conf = Perguntar 'Remover aplicativos' ("Remover {0} aplicativo(s) pre-instalado(s):`n`n{1}`n`nRemocao apenas do usuario atual. Dados locais e reinstalacao nao sao garantidos. Outros usuarios nao serao alterados. Continuar?" -f $selecionados.Count, $nomes)
     if (-not $conf) { return }
     Status 'removendo aplicativos...'
     Ocupado $true
@@ -360,7 +360,9 @@ function Clique-RemoverUwp {
     $arq = Salvar-Sessao
     Ocupado $false
     Log ('debloat concluido' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { ' (nada foi removido)' }))
-    Status 'aplicativos removidos. relogar pode ser necessario.'
+    if ($global:ErrosSessao -gt 0) { Status 'debloat com falhas; consulte o log.' }
+    else { Status 'debloat concluido; relogar pode ser necessario.' }
+    Verificar-EstadoUwp
 }
 
 function Clique-InstalarApps {

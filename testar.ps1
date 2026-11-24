@@ -551,6 +551,31 @@ try {
     Passou 'varredura conservadora protege chaves e caminhos ambiguos'
 } catch { Falhou 'limites da varredura' $_.Exception.Message }
 
+# ---- AppX: simulacao de escopo, nenhum pacote real e removido ----
+Secao 'debloat limitado ao usuario'
+try {
+    & {
+        . (Join-Path $raiz 'src\modules\motor.ps1')
+        $script:appxTeste = @(
+            [pscustomobject]@{ Name='Microsoft.Example'; PackageFullName='Example_v1'; PackageFamilyName='Example_family' },
+            [pscustomobject]@{ Name='Microsoft.ExampleExtra'; PackageFullName='ExampleExtra_v1'; PackageFamilyName='Extra_family' }
+        )
+        $script:appxJournal = @()
+        function Log { param($Mensagem,[switch]$Erro) if ($Erro) { throw $Mensagem } }
+        function Get-AppxPackage { [CmdletBinding()] param() return $script:appxTeste }
+        function Registrar-Jornal { param($Item) $script:appxJournal += $Item }
+        function Remove-AppxPackage {
+            [CmdletBinding()] param([string]$Package)
+            if ($Package -ne 'Example_v1') { throw 'Pacote incorreto.' }
+            $script:appxTeste = @($script:appxTeste | Where-Object { $_.PackageFullName -ne $Package })
+        }
+        function Remove-AppxProvisionedPackage { throw 'Provisionamento nao deve ser alterado.' }
+        Executar-Acao ([pscustomobject]@{ tipo='appx'; pacote='Microsoft.Example' }) 'teste'
+        if ($script:appxJournal.Count -ne 1 -or -not $script:appxJournal[0].usuarioSid -or $script:appxTeste.Count -ne 1 -or $script:appxTeste[0].Name -ne 'Microsoft.ExampleExtra') { throw 'Escopo ou correspondencia AppX incorreta.' }
+        Passou 'debloat preserva pacotes semelhantes e provisionamento'
+    }
+} catch { Falhou 'debloat limitado ao usuario' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

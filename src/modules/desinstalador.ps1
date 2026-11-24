@@ -272,7 +272,14 @@ function Caminho-RastroSeguro {
             $p = [IO.Path]::GetFullPath($bloqueado).TrimEnd('\')
             if ($full -ieq $p -or $full.StartsWith($p + '\',[StringComparison]::OrdinalIgnoreCase)) { return $false }
         }
-        if ($full -match '\\(WindowsApps|Common Files|Microsoft\\Windows|Microsoft\\Windows Defender)(\\|$)') { return $false }
+        if ($full -match '\\(WindowsApps|Common Files|Microsoft\\Windows Defender)(\\|$)') { return $false }
+        if ($full -match '\\Microsoft\\Windows(\\|$)') {
+            $menuOk = $false
+            foreach ($menu in @((Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'),(Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs'))) {
+                if ($full.StartsWith($menu + '\',[StringComparison]::OrdinalIgnoreCase)) { $menuOk = $true }
+            }
+            if (-not $menuOk) { return $false }
+        }
         $permitido = $false
         foreach ($base in @($env:APPDATA,$env:LOCALAPPDATA,$env:ProgramData,$env:ProgramFiles,${env:ProgramFiles(x86)},(Join-Path $env:USERPROFILE 'Desktop'),(Join-Path $env:PUBLIC 'Desktop'))) {
             if ($base -and $full.StartsWith(([IO.Path]::GetFullPath($base).TrimEnd('\') + '\'),[StringComparison]::OrdinalIgnoreCase)) { $permitido = $true; break }
