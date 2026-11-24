@@ -822,6 +822,18 @@ try {
     $p.IsFramework=$false; $entrada | Add-Member -NotePropertyName desconhecido -NotePropertyValue $true
     if ((Obter-GuiaUwp $entrada @($p)).permitido) { throw 'Pacote desconhecido permitido.' }
     Passou 'guias completos, presets conservadores e AppX protegido'
+    & {
+        $script:consultaAppx=0; $script:removeuAppx=0; $script:errosAppx=0
+        function Log { param($Mensagem,[switch]$Erro) if ($Erro) {$script:errosAppx++} }
+        function Testar-AppxCatalogado { param($Nome) return ($Nome -eq 'Microsoft.WindowsStore') }
+        function Get-AppxPackage { [CmdletBinding()] param() $script:consultaAppx++; [pscustomobject]@{Name='Microsoft.WindowsStore';PackageFullName='Store_teste'} }
+        function Remove-AppxPackage { $script:removeuAppx++ }
+        Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Desconhecido'}) 'teste bloqueio'
+        if ($script:consultaAppx -ne 0 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 1) {throw 'Pacote fora do catalogo nao bloqueado.'}
+        Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Microsoft.WindowsStore'}) 'teste bloqueio'
+        if ($script:consultaAppx -ne 1 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 2) {throw 'Pacote protegido nao bloqueado.'}
+    }
+    Passou 'motor recusa AppX desconhecido e protegido antes de remover'
 } catch { Falhou 'otimizacao orientada' $_.Exception.Message }
 
 # ---- plano de temporarios somente leitura ----
@@ -842,6 +854,18 @@ try {
         Passou 'plano de limpeza ignora recentes e subpastas sem alterar dados'
     } finally { if (Test-Path -LiteralPath $pasta) { Remove-Item -LiteralPath $pasta -Recurse -Force } }
 } catch { Falhou 'limpeza orientada' $_.Exception.Message }
+
+# ---- detalhes do journal nao alteram valores ----
+Secao 'inspecao de recuperacao'
+try {
+    & {
+        function Ler-ValorRegistro { param($Caminho,$Nome) [pscustomobject]@{existia=$true;tipo='String';valor='mudanca posterior'} }
+        $item=[pscustomobject]@{tipo='registro';caminho='HKCU:\Software\Teste';nome='teste';existia=$true;tipoAnterior='String';valorAnteriorEstruturado=[pscustomobject]@{valor='original'};existiaDepois=$true;tipoDepois='String';valorDepoisEstruturado=[pscustomobject]@{valor='aplicado'}}
+        $texto=(Obter-DetalheRecuperacao $item) -join ' '
+        if ($texto -notmatch 'original' -or $texto -notmatch 'aplicado' -or $texto -notmatch 'mudanca posterior' -or $texto -notmatch 'Possivel conflito') {throw 'Comparacao incompleta.'}
+    }
+    Passou 'inspecao compara snapshot e estado atual sem alterar registro'
+} catch { Falhou 'inspecao de recuperacao' $_.Exception.Message }
 
 # ---- resumo ----
 Write-Host ''

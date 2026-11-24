@@ -1,38 +1,242 @@
 {
   "pacotes": [
-    { "nome": "Clima do Bing", "pacote": "Microsoft.BingWeather", "desc": "App de clima pré-instalado da MSN.", "remover": true, "so": "ambos" },
-    { "nome": "Noticias do Bing", "pacote": "Microsoft.BingNews", "desc": "App de noticias pré-instalado da MSN.", "remover": true, "so": "ambos" },
-    { "nome": "Esportes do Bing", "pacote": "Microsoft.BingSports", "desc": "App de esportes pré-instalado.", "remover": true, "so": "win10" },
-    { "nome": "Financas do Bing (Money)", "pacote": "Microsoft.BingFinance", "desc": "App de financas pré-instalado.", "remover": true, "so": "win10" },
-    { "nome": "Busca do Bing / Bing Search", "pacote": "Microsoft.BingSearch", "desc": "App de busca do Bing pré-instalado.", "remover": true, "so": "win11" },
-    { "nome": "Visualizador 3D", "pacote": "Microsoft.Microsoft3DViewer", "desc": "Visualizador de modelos 3D.", "remover": true, "so": "ambos" },
-    { "nome": "Print 3D", "pacote": "Microsoft.Print3D", "desc": "App de impressao 3D.", "remover": true, "so": "win10" },
-    { "nome": "Paciencia (Solitaire Collection)", "pacote": "Microsoft.MicrosoftSolitaireCollection", "desc": "Jogos de cartas pre-instalados.", "remover": true, "so": "ambos" },
-    { "nome": "Portal de Realidade Mista", "pacote": "Microsoft.MixedReality.Portal", "desc": "Setup de realidade mista/VR.", "remover": true, "so": "ambos" },
-    { "nome": "Obter Ajuda", "pacote": "Microsoft.GetHelp", "desc": "App de suporte da Microsoft com propagandas.", "remover": true, "so": "ambos" },
-    { "nome": "Dicas / Get Started", "pacote": "Microsoft.Getstarted", "desc": "App de dicas do Windows.", "remover": true, "so": "ambos" },
-    { "nome": "Mensagens", "pacote": "Microsoft.Messaging", "desc": "App de SMS antigo.", "remover": true, "so": "win10" },
-    { "nome": "Hub do Office", "pacote": "Microsoft.MicrosoftOfficeHub", "desc": "Apenas o hub promocional do Office, nao e o Office.", "remover": true, "so": "ambos" },
-    { "nome": "Pessoas", "pacote": "Microsoft.People", "desc": "App de contatos raramente usado.", "remover": true, "so": "ambos" },
-    { "nome": "Skype (UWP)", "pacote": "Microsoft.SkypeApp", "desc": "Versao UWP do Skype (descontinuado).", "remover": true, "so": "win10" },
-    { "nome": "Microsoft Pay / Wallet", "pacote": "Microsoft.Wallet", "desc": "Carteira digital antiga da Microsoft.", "remover": true, "so": "ambos" },
-    { "nome": "Hub de Feedback", "pacote": "Microsoft.WindowsFeedbackHub", "desc": "App de envio de feedback a Microsoft.", "remover": true, "so": "ambos" },
-    { "nome": "Mapas", "pacote": "Microsoft.WindowsMaps", "desc": "App de mapas offline (raramente usado; use no celular).", "remover": true, "so": "ambos" },
-    { "nome": "Groove Música", "pacote": "Microsoft.ZuneMusic", "desc": "Player de musica descontinuado.", "remover": true, "so": "ambos" },
-    { "nome": "Microsoft To Do", "pacote": "Microsoft.Todos", "desc": "App de tarefas da Microsoft.", "remover": true, "so": "ambos" },
-    { "nome": "Power Automate Desktop", "pacote": "Microsoft.PowerAutomateDesktop", "desc": "Automacao de tarefas corporativa, pesado e inutil na maioria dos PCs.", "remover": true, "so": "ambos" },
-    { "nome": "Cortana", "pacote": "Microsoft.549981C3F5F10", "desc": "Assistente descontinuado pela Microsoft.", "remover": true, "so": "ambos" },
-    { "nome": "Copilot", "pacote": "Microsoft.Copilot", "desc": "App do Copilot (IA da Microsoft).", "remover": true, "so": "win11" },
-    { "nome": "Teams pessoal (chat da barra)", "pacote": "MicrosoftTeams", "desc": "App do Teams para consumo, fica no lugar do chat do Skype.", "remover": true, "so": "ambos" },
-    { "nome": "Clipchamp", "pacote": "Clipchamp.Clipchamp", "desc": "Editor de video da Microsoft pré-instalado.", "remover": true, "so": "win11" },
-    { "nome": "Links para Celular (Phone Link)", "pacote": "Microsoft.YourPhone", "desc": "Conecta o celular ao PC (Devec / Link to Windows). Marque somente se nao usa.", "remover": false, "so": "ambos" },
-    { "nome": "Mail e Calendario", "pacote": "microsoft.windowscommunicationsapps", "desc": "AVISO: pode ser seu cliente de e-mail padrao no Windows 10.", "remover": false, "so": "win10" },
-    { "nome": "Novo Outlook", "pacote": "Microsoft.OutlookForWindows", "desc": "AVISO: e o novo cliente de e-mail do Windows 11.", "remover": false, "so": "win11" },
-    { "nome": "Notas Autoadesivas", "pacote": "Microsoft.MicrosoftStickyNotes", "desc": "Post-its. Marque somente se nao usa.", "remover": false, "so": "ambos" },
-    { "nome": "Gravador de Voz", "pacote": "Microsoft.WindowsSoundRecorder", "desc": "Gravador de voz simples. Marque somente se nao usa.", "remover": false, "so": "ambos" },
-    { "nome": "Alarmes e Relogio", "pacote": "Microsoft.WindowsAlarms", "desc": "Alarmes, cronometro e temporizador. Marque somente se nao usa.", "remover": false, "so": "ambos" },
-    { "nome": "Xbox (Gaming Services)", "pacote": "Microsoft.GamingApp", "desc": "AVISO: necessario para Game Pass e jogos da Microsoft Store. Nao remova se instala jogos de la.", "remover": false, "so": "ambos" },
-    { "nome": "Assistente Rapido", "pacote": "MicrosoftCorporationII.QuickAssist", "desc": "Suporte remoto da Microsoft. Util para ajudar ou receber ajuda tecnica. Marque so se nao usa.", "remover": false, "so": "ambos" },
-    { "nome": "Filmes e TV", "pacote": "Microsoft.ZuneVideo", "desc": "Player antigo da Store, necessario para reproduzir compras da Microsoft Store.", "remover": false, "so": "ambos" }
+    {
+      "nome": "Clima do Bing",
+      "pacote": "Microsoft.BingWeather",
+      "desc": "App de clima pré-instalado da MSN.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Noticias do Bing",
+      "pacote": "Microsoft.BingNews",
+      "desc": "App de noticias pré-instalado da MSN.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Esportes do Bing",
+      "pacote": "Microsoft.BingSports",
+      "desc": "App de esportes pré-instalado.",
+      "remover": true,
+      "so": "win10"
+    },
+    {
+      "nome": "Financas do Bing (Money)",
+      "pacote": "Microsoft.BingFinance",
+      "desc": "App de financas pré-instalado.",
+      "remover": true,
+      "so": "win10"
+    },
+    {
+      "nome": "Busca do Bing / Bing Search",
+      "pacote": "Microsoft.BingSearch",
+      "desc": "Pacote de busca. Pode afetar integracoes de pesquisa; nao remova sem verificar seu uso.",
+      "remover": false,
+      "so": "win11"
+    },
+    {
+      "nome": "Visualizador 3D",
+      "pacote": "Microsoft.Microsoft3DViewer",
+      "desc": "Visualizador de modelos 3D.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Print 3D",
+      "pacote": "Microsoft.Print3D",
+      "desc": "App de impressao 3D.",
+      "remover": true,
+      "so": "win10"
+    },
+    {
+      "nome": "Paciencia (Solitaire Collection)",
+      "pacote": "Microsoft.MicrosoftSolitaireCollection",
+      "desc": "Jogos de cartas pre-instalados.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Portal de Realidade Mista",
+      "pacote": "Microsoft.MixedReality.Portal",
+      "desc": "Setup de realidade mista/VR.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Obter Ajuda",
+      "pacote": "Microsoft.GetHelp",
+      "desc": "Aplicativo de suporte e ajuda do Windows.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Dicas / Get Started",
+      "pacote": "Microsoft.Getstarted",
+      "desc": "App de dicas do Windows.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Mensagens",
+      "pacote": "Microsoft.Messaging",
+      "desc": "App de SMS antigo.",
+      "remover": true,
+      "so": "win10"
+    },
+    {
+      "nome": "Hub do Office",
+      "pacote": "Microsoft.MicrosoftOfficeHub",
+      "desc": "Apenas o hub promocional do Office, nao e o Office.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Pessoas",
+      "pacote": "Microsoft.People",
+      "desc": "App de contatos raramente usado.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Skype (UWP)",
+      "pacote": "Microsoft.SkypeApp",
+      "desc": "Versao UWP do Skype (descontinuado).",
+      "remover": true,
+      "so": "win10"
+    },
+    {
+      "nome": "Microsoft Pay / Wallet",
+      "pacote": "Microsoft.Wallet",
+      "desc": "Carteira digital antiga da Microsoft.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Hub de Feedback",
+      "pacote": "Microsoft.WindowsFeedbackHub",
+      "desc": "App de envio de feedback a Microsoft.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Mapas",
+      "pacote": "Microsoft.WindowsMaps",
+      "desc": "Aplicativo de mapas offline; mantenha se usa.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Groove Música",
+      "pacote": "Microsoft.ZuneMusic",
+      "desc": "Aplicativo de musica e reproducao de midia; nome e funcionalidade variam por versao.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Microsoft To Do",
+      "pacote": "Microsoft.Todos",
+      "desc": "App de tarefas da Microsoft.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Power Automate Desktop",
+      "pacote": "Microsoft.PowerAutomateDesktop",
+      "desc": "Automacao de tarefas; mantenha se usa fluxos ou ambiente corporativo.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Cortana",
+      "pacote": "Microsoft.549981C3F5F10",
+      "desc": "Assistente descontinuado pela Microsoft.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Copilot",
+      "pacote": "Microsoft.Copilot",
+      "desc": "App do Copilot (IA da Microsoft).",
+      "remover": true,
+      "so": "win11"
+    },
+    {
+      "nome": "Teams pessoal (chat da barra)",
+      "pacote": "MicrosoftTeams",
+      "desc": "App do Teams para consumo, fica no lugar do chat do Skype.",
+      "remover": true,
+      "so": "ambos"
+    },
+    {
+      "nome": "Clipchamp",
+      "pacote": "Clipchamp.Clipchamp",
+      "desc": "Editor de video da Microsoft pré-instalado.",
+      "remover": true,
+      "so": "win11"
+    },
+    {
+      "nome": "Links para Celular (Phone Link)",
+      "pacote": "Microsoft.YourPhone",
+      "desc": "Conecta o celular ao PC (Devec / Link to Windows). Marque somente se nao usa.",
+      "remover": false,
+      "so": "ambos"
+    },
+    {
+      "nome": "Mail e Calendario",
+      "pacote": "microsoft.windowscommunicationsapps",
+      "desc": "AVISO: pode ser seu cliente de e-mail padrao no Windows 10.",
+      "remover": false,
+      "so": "win10"
+    },
+    {
+      "nome": "Novo Outlook",
+      "pacote": "Microsoft.OutlookForWindows",
+      "desc": "AVISO: e o novo cliente de e-mail do Windows 11.",
+      "remover": false,
+      "so": "win11"
+    },
+    {
+      "nome": "Notas Autoadesivas",
+      "pacote": "Microsoft.MicrosoftStickyNotes",
+      "desc": "Post-its. Marque somente se nao usa.",
+      "remover": false,
+      "so": "ambos"
+    },
+    {
+      "nome": "Gravador de Voz",
+      "pacote": "Microsoft.WindowsSoundRecorder",
+      "desc": "Gravador de voz simples. Marque somente se nao usa.",
+      "remover": false,
+      "so": "ambos"
+    },
+    {
+      "nome": "Alarmes e Relogio",
+      "pacote": "Microsoft.WindowsAlarms",
+      "desc": "Alarmes, cronometro e temporizador. Marque somente se nao usa.",
+      "remover": false,
+      "so": "ambos"
+    },
+    {
+      "nome": "Xbox (Gaming Services)",
+      "pacote": "Microsoft.GamingApp",
+      "desc": "Aplicativo Xbox para jogos e Game Pass. Nao confundir com o pacote Gaming Services; mantenha se usa o ecossistema.",
+      "remover": false,
+      "so": "ambos"
+    },
+    {
+      "nome": "Assistente Rapido",
+      "pacote": "MicrosoftCorporationII.QuickAssist",
+      "desc": "Suporte remoto da Microsoft. Util para ajudar ou receber ajuda tecnica. Marque so se nao usa.",
+      "remover": false,
+      "so": "ambos"
+    },
+    {
+      "nome": "Filmes e TV",
+      "pacote": "Microsoft.ZuneVideo",
+      "desc": "Player antigo da Store, necessario para reproduzir compras da Microsoft Store.",
+      "remover": false,
+      "so": "ambos"
+    }
   ]
 }

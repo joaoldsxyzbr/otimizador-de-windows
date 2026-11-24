@@ -312,7 +312,7 @@ function Testar-AppxProtegido {
 
 function Testar-AppxCatalogado {
     param([string]$Nome)
-    return (@($global:CatalogoUwp.pacotes | Where-Object { $_.pacote -eq $Nome }).Count -eq 1)
+    return (@($global:CatalogoUwp.pacotes | Where-Object { $_.pacote -eq $Nome -and -not $_.protegido -and -not $_.desconhecido }).Count -eq 1)
 }
 
 function Executar-Acao {

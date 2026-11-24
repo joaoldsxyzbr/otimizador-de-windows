@@ -13,6 +13,7 @@ function Nova-Checkbox {
     $cb.IsChecked = $Marcado
     if (-not [string]::IsNullOrWhiteSpace($Dica)) {
         $cb.ToolTip = $Dica
+        [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($cb,$true)
     }
     return $cb
 }
@@ -450,7 +451,9 @@ function Clique-Preset {
     param([string]$Nivel)
     $cbs = Get-Checkboxes $global:UI.ListaAjustes
     try {
-        $ids = @(Selecionar-TweaksPreset -Nivel $Nivel -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11) | ForEach-Object { $_.id })
+        $perfil=$Nivel
+        if ($Nivel -eq 'recomendado') { $perfil=Obter-PerfilRecomendado }
+        $ids = @(Selecionar-TweaksPreset -Nivel $perfil -Catalogo $global:CatalogoTweaks -Win11 (Eh-Win11) | ForEach-Object { $_.id })
     } catch {
         Avisar 'Preset invalido' $_.Exception.Message
         return
@@ -459,7 +462,6 @@ function Clique-Preset {
         $cb.IsChecked = ($ids -contains $cb.Tag.id -and (Verificar-Tweak $cb.Tag) -ne 'aplicado')
     }
     if ($Nivel -eq 'recomendado') {
-        $perfil=Obter-PerfilRecomendado
         $motivo=switch ($perfil) {'corporativo' {'Possivel ambiente gerenciado; apenas extensoes de arquivos.'} 'notebook' {'Bateria detectada; ajustes leves sem forcar energia.'} default {'Sem evidencia para ajustes agressivos; selecao essencial.'}}
         Avisar 'Recomendacao explicada' ($motivo + ' A selecao nao aplica nada e ignora ajustes ja aplicados.')
     }
