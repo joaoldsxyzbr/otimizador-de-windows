@@ -414,7 +414,7 @@ try {
             if ($existia) { $antes=@(Get-ChildItem -LiteralPath $estadoRaiz -File -Recurse -ErrorAction Stop | ForEach-Object { $_.FullName+'|'+$_.Length+'|'+$_.LastWriteTimeUtc.Ticks } | Sort-Object) }
             & ([scriptblock]::Create($codigoOnline)) -Cli essencial -Simular
             & ([scriptblock]::Create($codigoOnline)) -Diagnostico -ValidarInterface
-            if (-not $global:ModoProtegido -or $global:UI.BotaoNavAjustes.IsEnabled -or $global:UI.BotaoCriarRestore.IsEnabled -or $global:UI.BotaoVerificarRelease.IsEnabled -or -not $global:UI.BotaoInventario.IsEnabled) { throw 'Interface protegida incorreta.' }
+            if (-not $global:ModoProtegido -or -not $global:UI.BotaoNavAjustes.IsEnabled -or $global:UI.BotaoCriarRestore.IsEnabled -or $global:UI.BotaoVerificarRelease.IsEnabled -or -not $global:UI.BotaoInventario.IsEnabled) { throw 'Interface protegida incorreta.' }
             if ((Test-Path -LiteralPath $estadoRaiz) -ne $existia) { throw 'Diagnostico criou pasta de estado.' }
             $depois=@()
             if ($existia) { $depois=@(Get-ChildItem -LiteralPath $estadoRaiz -File -Recurse -ErrorAction Stop | ForEach-Object { $_.FullName+'|'+$_.Length+'|'+$_.LastWriteTimeUtc.Ticks } | Sort-Object) }
@@ -1021,6 +1021,34 @@ try {
             if (@(Get-Checkboxes $global:UI.ListaApps | Where-Object {$_.IsChecked}).Count) {throw 'Apps preselecionados.'}
             if (@(Get-Checkboxes $global:UI.ListaApps).Count -ne @($global:CatalogoApps.aplicativos).Count) {throw 'Catalogo incompleto.'}
             Passou 'interface pessoal ligada, sem apps preselecionados'
+            # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
+            $global:Janela.Close()
+            $global:ModoProtegido=$true
+            $global:CatalogoUwp=Get-Content -LiteralPath (Join-Path $raiz 'data\uwp.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            function Verificar-EstadoAjustes { }
+            function Verificar-EstadoUwp { }
+            function Carregar-Programas { $global:ProgramasInstalados=@() }
+            function Tem-Atualizacoes { return $null }
+            $global:ProgramasInstalados=@()
+            $global:Janela=[Windows.Markup.XamlReader]::Parse((Get-Content -LiteralPath (Join-Path $raiz 'src\ui\principal.xaml') -Raw -Encoding UTF8))
+            $global:UI=@{}
+            foreach ($nome in $nomesCtrl) { $global:UI[$nome]=$global:Janela.FindName($nome) }
+            Ligar-Tudo
+            foreach ($sufixo in @('Ajustes','Debloat','Desinstalar','Instalar','Config','Atualizacoes','Manutencao','Desfazer','Inicio')) {
+                $botao=$global:UI['BotaoNav'+$sufixo]
+                if (-not $botao.IsEnabled) {throw ('Navegacao bloqueada: '+$sufixo)}
+                $botao.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+                if ($global:PaginaAtual -ne ('Pagina'+$sufixo) -or $botao.Tag -ne 'ativo') {throw ('Clique nao mudou a aba: '+$sufixo)}
+                foreach ($p in @('Inicio','Ajustes','Debloat','Desinstalar','Instalar','Config','Atualizacoes','Manutencao','Desfazer')) {
+                    $esperada=if ($p -eq $sufixo) {'Visible'} else {'Collapsed'}
+                    if ($global:Janela.FindName('Pagina'+$p).Visibility.ToString() -ne $esperada) {throw ('Visibilidade incorreta: '+$p)}
+                }
+            }
+            foreach ($nome in @('BotaoAplicarAjustes','BotaoRemoverUwp','BotaoDesinstalarProg','BotaoVarrerRastros','BotaoInstalarApps','BotaoInstalarRecursos','BotaoFixRede','BotaoLimparTemp','BotaoDesfazer','BotaoCriarRestore','BotaoVerificarRelease','BotaoExportarPlano')) {
+                if ($global:UI[$nome].IsEnabled) {throw ('Acao habilitada no modo protegido: '+$nome)}
+            }
+            Passou 'nove abas navegaveis no modo protegido e acoes bloqueadas'
+
         } finally {
             if ($global:Janela -and $global:Janela -ne $janelaAntes) {$global:Janela.Close()}
             $global:UI=$uiAntes; $global:Janela=$janelaAntes; $global:ModoProtegido=$modoAntes
