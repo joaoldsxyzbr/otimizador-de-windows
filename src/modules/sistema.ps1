@@ -27,6 +27,33 @@ function Detectar-AmbienteTrabalho {
     return @($achados)
 }
 
+# Recomendacoes conservadoras, sem modificar configuracoes.
+function Obter-DiagnosticoLocal {
+    param($OS, $Disco)
+    $avisos = @()
+    if ($OS.TotalVisibleMemorySize -gt 0) {
+        $livre = 100.0 * $OS.FreePhysicalMemory / $OS.TotalVisibleMemorySize
+        if ($livre -lt 10) { $avisos += 'Pouca RAM disponivel nesta amostra. Revise processos antes de aplicar ajustes.' }
+    }
+    if ($Disco.Size -gt 0) {
+        $livre = 100.0 * $Disco.FreeSpace / $Disco.Size
+        if ($livre -lt 15) { $avisos += 'Pouco espaco livre no disco do sistema. Revise arquivos e use a manutencao.' }
+    }
+    try {
+        $inicio = @(Get-CimInstance Win32_StartupCommand -ErrorAction Stop)
+        $avisos += ('Entradas de inicializacao detectadas: {0}. Revise no Gerenciador de Tarefas.' -f $inicio.Count)
+    } catch { $avisos += 'Nao foi possivel consultar a inicializacao.' }
+    if ((Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending') -or
+        (Test-Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')) {
+        $avisos += 'Reinicio pendente detectado. Reinicie antes de aplicar ajustes.'
+    }
+    if (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) {
+        $avisos += 'Possivel ambiente gerenciado. Consulte o administrador antes de alterar politicas.'
+    }
+    if ($avisos.Count -eq 0) { $avisos += 'Nenhum alerta nas verificacoes disponiveis.' }
+    return ($avisos -join [Environment]::NewLine)
+}
+
 function Preencher-PaginaInicio {
     try {
         $os = Get-CimInstance Win32_OperatingSystem
@@ -41,6 +68,10 @@ function Preencher-PaginaInicio {
 
         $uptime = (Get-Date) - $os.LastBootUpTime
         $upTexto = ('{0}d {1}h {2}min' -f $uptime.Days, $uptime.Hours, $uptime.Minutes)
+
+        if ($global:UI.ContainsKey('InfoDiagnostico')) {
+            $global:UI.InfoDiagnostico.Text = Obter-DiagnosticoLocal -OS $os -Disco $disco
+        }
 
         $gpuTexto = ($gpu | ForEach-Object { $_.Name }) -join ', '
 
