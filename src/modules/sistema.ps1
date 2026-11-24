@@ -112,6 +112,7 @@ function Obter-InventarioLocal {
         criado = (Get-Date -Format 'o')
         windows = ('{0} (build {1})' -f $(if ([Environment]::OSVersion.Version.Build -ge 22000) { 'Windows 11' } else { 'Windows 10' }),[Environment]::OSVersion.Version.Build)
         inicializacao = @()
+        runUsuario = @()
         servicos = @()
         tarefas = @()
         discos = @()
@@ -124,6 +125,13 @@ function Obter-InventarioLocal {
         $relatorio.inicializacao = @(Get-CimInstance Win32_StartupCommand -ErrorAction Stop |
             Select-Object Name, Location | Sort-Object Name)
     } catch { $relatorio.avisos += 'Nao foi possivel consultar entradas de inicializacao.' }
+    try {
+        $chave = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Run')
+        if ($chave) {
+            try { $relatorio.runUsuario = @($chave.GetValueNames() | ForEach-Object { [pscustomobject]@{ nome=$_; tipo=$chave.GetValueKind($_).ToString(); valor=$chave.GetValue($_,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) } }) }
+            finally { $chave.Dispose() }
+        }
+    } catch { $relatorio.avisos += 'Nao foi possivel consultar Run do usuario.' }
     try {
         $relatorio.servicos = @(Get-Service -ErrorAction Stop | Sort-Object Name | ForEach-Object {
             [pscustomobject]@{ nome = $_.Name; descricao = $_.DisplayName; estado = $_.Status.ToString(); inicio = $_.StartType.ToString() }

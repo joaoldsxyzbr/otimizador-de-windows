@@ -648,6 +648,16 @@ try {
     Passou 'cancelamento impede proxima acao sem interromper a anterior'
 } catch { Falhou 'progresso em lote' $_.Exception.Message }
 
+# ---- tarefa: identidade da definicao ----
+Secao 'assinatura de tarefas'
+try {
+    $a = '<Task><Settings><Enabled>true</Enabled></Settings><Actions><Exec><Command>teste.exe</Command></Exec></Actions></Task>'
+    $b = $a.Replace('true','false')
+    if ((Assinatura-TarefaXml $a) -ne (Assinatura-TarefaXml $b)) { throw 'Estado de habilitacao afetou assinatura.' }
+    if ((Assinatura-TarefaXml $a) -eq (Assinatura-TarefaXml ($a.Replace('teste.exe','outro.exe')))) { throw 'Alteracao de definicao nao detectada.' }
+    Passou 'assinatura detecta mudanca de definicao de tarefa'
+} catch { Falhou 'assinatura de tarefas' $_.Exception.Message }
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'

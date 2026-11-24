@@ -270,6 +270,40 @@ function Ler-PlanoRegRestrito {
     return $acoes
 }
 
+# Assinatura de definicao da tarefa, ignorando somente Settings/Enabled.
+function Assinatura-TarefaXml {
+    param([string]$Texto)
+    $doc = New-Object Xml.XmlDocument
+    $doc.XmlResolver = $null
+    $doc.LoadXml($Texto)
+    foreach ($node in @($doc.SelectNodes("/*[local-name()='Task']/*[local-name()='Settings']/*[local-name()='Enabled']"))) {
+        [void]$node.ParentNode.RemoveChild($node)
+    }
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($doc.OuterXml)))).Replace('-','') }
+    finally { $sha.Dispose() }
+}
+
+function Obter-AssinaturaTarefa {
+    param([string]$Caminho,[string]$Nome)
+    return (Assinatura-TarefaXml (Export-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop))
+}
+
+function Desativar-TarefaComJournal {
+    param([string]$Caminho,[string]$Nome)
+    if (-not $Caminho.StartsWith('\') -or $Caminho.StartsWith('\Microsoft\',[StringComparison]::OrdinalIgnoreCase) -or $Caminho -ieq '\Microsoft') { throw 'Tarefa de sistema ou caminho invalido.' }
+    if ($Nome -match '[*?\[\]]' -or $Caminho -match '[*?\[\]]') { throw 'Identificador ambiguo.' }
+    $tarefas = @(Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop)
+    if ($tarefas.Count -ne 1 -or $tarefas[0].TaskName -ne $Nome -or $tarefas[0].TaskPath -ne $Caminho) { throw 'Tarefa nao identificada unicamente.' }
+    $atual = $tarefas[0]
+    if ($atual.State -eq 'Disabled') { return }
+    if ($atual.State -ne 'Ready') { throw 'Tarefa em execucao ou estado incerto; nao modificada.' }
+    $assinatura = Obter-AssinaturaTarefa $Caminho $Nome
+    Registrar-Jornal ([pscustomobject]@{ tipo='tarefa'; tarefaPath=$Caminho; tarefaNome=$Nome; estadoAnterior='Ready'; estadoDepois='Disabled'; assinatura=$assinatura })
+    Disable-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop | Out-Null
+    if ((Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Disabled') { throw 'Desativacao nao confirmada.' }
+}
+
 function Executar-Acao {
     param($Acao, [string]$Contexto, [switch]$Simular)
 
@@ -515,12 +549,13 @@ function Desfazer-Item {
             }
 
             'tarefa' {
-                if ($Item.estadoAnterior -eq 'Disabled') {
-                    Disable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
-                } else {
-                    Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
-                }
-                Log ("estado de habilitacao da tarefa restaurado: {0}{1}" -f [string]$Item.tarefaPath, [string]$Item.tarefaNome)
+                if (-not $Item.assinatura -or (Obter-AssinaturaTarefa $Item.tarefaPath $Item.tarefaNome) -ne $Item.assinatura) { throw 'Definicao da tarefa incerta ou alterada; revise manualmente.' }
+                $atual = (Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop).State
+                if ($atual -eq 'Ready') { return $true }
+                if ($atual -ne 'Disabled') { throw 'Estado da tarefa mudou.' }
+                Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
+                if ((Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop).State -eq 'Disabled') { throw 'Reativacao nao confirmada.' }
+                Log ('tarefa reativada: ' + $Item.tarefaNome)
             }
 
             'firewall-estado' {

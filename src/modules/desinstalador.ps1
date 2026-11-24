@@ -568,10 +568,8 @@ function Apagar-Rastro {
     if ($Rastro.tipo -eq 'tarefa') {
         $t = Get-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop
         if ($t.TaskPath -like '\\Microsoft\\*' -or @($t.Actions).Count -ne 1 -or -not (Caminho-LocalAusente ([string]$t.Actions[0].Execute))) { throw 'Tarefa nao confirmada como candidata orfa.' }
-        $estadoAnt = [string]$t.State
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'tarefa'; tarefaPath = $Rastro.tarefaPath; tarefaNome = $Rastro.tarefaNome; estadoAnterior = $estadoAnt })
-        Disable-ScheduledTask -TaskPath $Rastro.tarefaPath -TaskName $Rastro.tarefaNome -ErrorAction Stop | Out-Null
-        Log ('tarefa agendada desativada (desfazer reativa): ' + $Rastro.caminho)
+        Desativar-TarefaComJournal $Rastro.tarefaPath $Rastro.tarefaNome
+        Log ('tarefa candidata processada com journal: ' + $Rastro.caminho)
         return
     }
 

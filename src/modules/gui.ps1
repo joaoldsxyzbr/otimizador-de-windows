@@ -552,6 +552,38 @@ function Filtrar-Inventario {
     }
 }
 
+# Mudancas pequenas e explicitas no gerenciador; outras ficam nas ferramentas nativas.
+function Alterar-ItemInventario {
+    param([string]$Grupo,$Item)
+    if ($null -eq $Item) { throw 'Selecione uma linha.' }
+    if ($Grupo -eq 'servicos') {
+        $permitidos = @($global:CatalogoTweaks.tweaks | ForEach-Object { $_.acoes } | Where-Object { $_.tipo -eq 'servico' } | ForEach-Object { $_.nome })
+        if ($Item.nome -notin $permitidos) { throw 'Servico fora do catalogo; use o gerenciador nativo.' }
+        $atual = Obter-EstadoServico $Item.nome
+        if ($atual.tipo -ne $Item.inicio -or $atual.estado -ne $Item.estado) { throw 'Inventario desatualizado; reabra antes de alterar.' }
+        if ($atual.tipo -eq 'Manual') { throw 'Servico ja esta em inicio manual.' }
+        if (-not (Perguntar 'Servico - inicio manual' ('Alterar ' + $Item.nome + ' para inicio manual? Pode afetar funcionalidades. O estado atual sera preservado.'))) { return $false }
+        Iniciar-Sessao 'gerenciador-servicos'
+        Alterar-ServicoComJournal $Item.nome 'Manual'
+    } elseif ($Grupo -eq 'tarefas') {
+        $atual = Get-ScheduledTask -TaskPath $Item.caminho -TaskName $Item.nome -ErrorAction Stop
+        if ($atual.State -ne $Item.estado -or $atual.State -ne 'Ready') { throw 'Tarefa indisponivel ou inventario desatualizado.' }
+        if (-not (Perguntar 'Desativar tarefa' ('Desativar ' + $Item.caminho + $Item.nome + '? Tarefas de sistema nao sao aceitas.'))) { return $false }
+        Iniciar-Sessao 'gerenciador-tarefas'
+        Desativar-TarefaComJournal $Item.caminho $Item.nome
+    } elseif ($Grupo -eq 'runUsuario') {
+        $ck = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+        $atual = Ler-ValorRegistro $ck $Item.nome
+        if (-not (Registro-Corresponde $atual $true $Item.tipo $Item.valor)) { throw 'Entrada mudou; reabra o inventario.' }
+        if (-not (Perguntar 'Inicializacao do usuario' ('Remover somente a entrada Run de ' + $Item.nome + '? O programa nao sera desinstalado; o valor original sera salvo.'))) { return $false }
+        Iniciar-Sessao 'gerenciador-inicializacao'
+        Executar-Acao ([pscustomobject]@{ tipo='registro'; caminho=$ck; nome=$Item.nome; remover=$true }) 'entrada Run'
+    } else { throw 'Grupo nao editavel.' }
+    [void](Salvar-Sessao)
+    if ($global:ErrosSessao -gt 0) { throw 'Operacao com falha; consulte o journal.' }
+    return $true
+}
+
 function Clique-InventarioLocal {
     try {
         Status 'coletando inventario local...'
@@ -605,12 +637,12 @@ function Clique-InventarioLocal {
         }
         $nota = New-Object System.Windows.Controls.TextBlock
         $nota.TextWrapping = 'Wrap'
-        $nota.Text = 'Inventario somente leitura. Alteracoes nas ferramentas nativas nao entram no journal. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
+        $nota.Text = 'Inventario com acoes limitadas e journal. Alteracoes nas ferramentas nativas nao entram no journal. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
         $nota.Margin = '0,0,0,8'
         [System.Windows.Controls.DockPanel]::SetDock($nota,'Top')
         [void]$painel.Children.Add($nota)
         $abas = New-Object System.Windows.Controls.TabControl
-        foreach ($grupo in @('inicializacao','servicos','tarefas','discos','rede','drivers','processos')) {
+        foreach ($grupo in @('inicializacao','runUsuario','servicos','tarefas','discos','rede','drivers','processos')) {
             $tab = New-Object System.Windows.Controls.TabItem
             $tab.Header = $grupo
             $corpo = New-Object System.Windows.Controls.DockPanel
@@ -625,6 +657,27 @@ function Clique-InventarioLocal {
             $grade.ItemsSource = @($dados.$grupo)
             $filtro.Tag = @{ dados=@($dados.$grupo); grade=$grade }
             $filtro.Add_TextChanged({ $this.Tag.grade.ItemsSource = @(Filtrar-Inventario $this.Tag.dados $this.Text) })
+            if ($grupo -in @('runUsuario','servicos','tarefas')) {
+                $acao = New-Object System.Windows.Controls.Button
+                $acao.Content = switch ($grupo) { 'runUsuario' {'Remover entrada Run selecionada'} 'servicos' {'Inicio manual (servicos do catalogo)'} 'tarefas' {'Desativar tarefa selecionada'} }
+                $acao.Margin='6'; $acao.Padding='8,4'
+                $acao.Tag=@{ grupo=$grupo; grade=$grade; janela=$dlg }
+                $acao.Add_Click({
+                    $ctx=$this.Tag
+                    if ($global:OperacaoUIAtiva) { return }
+                    $global:OperacaoUIAtiva=$true
+                    $ctx.janela.IsEnabled=$false
+                    try {
+                        if (Alterar-ItemInventario $ctx.grupo $ctx.grade.SelectedItem) {
+                            Avisar 'Operacao concluida' 'Reabra o inventario para atualizar. Veja a sessao na aba Desfazer.'
+                            $ctx.janela.Close()
+                        }
+                    } catch { Avisar 'Operacao interrompida' $_.Exception.Message }
+                    finally { $ctx.janela.IsEnabled=$true; $global:OperacaoUIAtiva=$false }
+                })
+                [System.Windows.Controls.DockPanel]::SetDock($acao,'Top')
+                [void]$corpo.Children.Add($acao)
+            }
             [void]$corpo.Children.Add($grade)
             $tab.Content=$corpo
             [void]$abas.Items.Add($tab)
