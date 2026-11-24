@@ -31,7 +31,7 @@ Sem os parametros CLI, a interface e aberta. Nao e necessario instalar o app. O 
 
 O comando de distribuicao final sera `irm https://github.com/joaoldsxyzbr/otimizador-de-windows/releases/latest/download/otimizadorpc.ps1 | iex` **somente depois de uma release estavel contendo esse asset ser publicada**. A publicacao automatica esta configurada e a primeira pre-release foi publicada. O comando direto executa codigo remoto sem conferir o hash automaticamente: revise a origem e a versao antes de executar como administrador.
 
-O launcher `iniciar.ps1` permanece como alternativa baseada na montagem do codigo-fonte: confere os blobs Git antes de montar em pasta temporaria. Essa alternativa nao e execucao exclusivamente em memoria.
+O launcher `iniciar.ps1` permanece como alternativa baseada na montagem do codigo-fonte: confere os hashes dos blobs Git dos arquivos obtidos por commit antes de montar em pasta temporaria protegida (execucao elevada). Essa alternativa nao e execucao exclusivamente em memoria.
 
 O botao Consultar versao oficial verifica os metadados da ultima release estavel e oferece abrir a pagina do GitHub, sem instalar ou executar atualizacoes. Procedimento de entrega: [PUBLICACAO.md](PUBLICACAO.md).
 

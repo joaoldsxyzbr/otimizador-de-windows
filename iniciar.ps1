@@ -26,6 +26,9 @@ if (-not $SomenteValidar) {
 $hostPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 if (-not (Test-Path -LiteralPath $hostPS -PathType Leaf)) { throw 'Windows PowerShell 5.1 nao encontrado.' }
 $temporario = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-' + [guid]::NewGuid().ToString('N'))
+if (-not $SomenteValidar) {
+    $temporario = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)) ('otimizadorpc-launch-' + [guid]::NewGuid().ToString('N'))
+}
 $repo = 'joaoldsxyzbr/otimizador-de-windows'
 $arquivos = @(
     'otimizadorpc.ps1', 'montar-portatil.ps1',
@@ -35,7 +38,20 @@ $arquivos = @(
 )
 $tlsAnterior = [Net.ServicePointManager]::SecurityProtocol
 try {
-    New-Item -ItemType Directory -Path $temporario | Out-Null
+    if ($SomenteValidar) { New-Item -ItemType Directory -Path $temporario | Out-Null }
+    else {
+        $acl = New-Object Security.AccessControl.DirectorySecurity
+        $acl.SetAccessRuleProtection($true,$false)
+        $admin = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+        $acl.SetOwner($admin)
+        $heranca = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+        foreach ($sid in @($admin,[Security.Principal.SecurityIdentifier]::new('S-1-5-18'))) {
+            $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid,[Security.AccessControl.FileSystemRights]::FullControl,$heranca,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))
+        }
+        $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]::new('S-1-3-4'),[Security.AccessControl.FileSystemRights]::ReadPermissions,$heranca,[Security.AccessControl.PropagationFlags]::None,[Security.AccessControl.AccessControlType]::Allow))
+        if (Test-Path -LiteralPath $temporario) { throw 'Pasta temporaria ja existe.' }
+        [void][IO.Directory]::CreateDirectory($temporario,$acl)
+    }
     if ($FonteLocal) {
         $origem = (Get-Item -LiteralPath $FonteLocal).FullName
         $fonte = Join-Path $temporario 'fonte'
@@ -49,6 +65,7 @@ try {
     } else {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $headers = @{ 'User-Agent' = 'OtimizadorPC-Launcher'; Accept = 'application/vnd.github+json' }
+        if ($env:GITHUB_ACTIONS -eq 'true' -and $env:GH_TOKEN) { $headers.Authorization = 'Bearer ' + $env:GH_TOKEN }
         $commit = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/commits/' + $Ref) -Headers $headers -TimeoutSec 30
         $sha = [string]$commit.sha
         $treeSha = [string]$commit.commit.tree.sha
@@ -63,17 +80,17 @@ try {
         foreach ($rel in $arquivos) {
             $entrada = @($arvore.tree | Where-Object { $_.path -ceq $rel -and $_.type -eq 'blob' -and $_.mode -eq '100644' })
             if ($entrada.Count -ne 1 -or $entrada[0].sha -notmatch '^[0-9a-f]{40}$') { throw ('Arquivo Git invalido: ' + $rel) }
-            $blob = Invoke-RestMethod -Uri ('https://api.github.com/repos/' + $repo + '/git/blobs/' + $entrada[0].sha) -Headers $headers -TimeoutSec 30
-            if ($blob.sha -ne $entrada[0].sha -or $blob.encoding -ne 'base64') { throw ('Blob invalido: ' + $rel) }
-            $bytes = [Convert]::FromBase64String([string]$blob.content)
+            $dest = Join-Path $fonte $rel
+            New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
+            # Raw por commit evita uma chamada adicional a API por arquivo.
+            # O hash do blob continua obrigatorio antes de executar.
+            Invoke-WebRequest -UseBasicParsing -Uri ('https://raw.githubusercontent.com/' + $repo + '/' + $sha + '/' + $rel) -OutFile $dest -TimeoutSec 45
+            $bytes = [IO.File]::ReadAllBytes($dest)
             $prefixo = [Text.Encoding]::ASCII.GetBytes(('blob ' + $bytes.Length + [char]0))
             $hash = [Security.Cryptography.SHA1]::Create()
             try { $calculado = ([BitConverter]::ToString($hash.ComputeHash([byte[]]($prefixo + $bytes)))).Replace('-','').ToLowerInvariant() }
             finally { $hash.Dispose() }
             if ($calculado -ne $entrada[0].sha) { throw ('Integridade Git divergente: ' + $rel) }
-            $dest = Join-Path $fonte $rel
-            New-Item -ItemType Directory -Path (Split-Path -Parent $dest) -Force | Out-Null
-            [IO.File]::WriteAllBytes($dest, $bytes)
         }
         Write-Host 'Arquivos conferidos com o commit do GitHub.'
     }
