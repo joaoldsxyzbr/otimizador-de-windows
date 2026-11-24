@@ -96,7 +96,13 @@ function Gravar-SessaoArquivo {
         rotulo = $global:RotuloSessao
         itens  = @($global:SessaoItens)
     }
-    $json = ConvertTo-Json -InputObject $obj -Depth 6
+    Gravar-JSONAtomico -Arquivo $arquivo -Objeto $obj
+    return $arquivo
+}
+
+function Gravar-JSONAtomico {
+    param([string]$Arquivo, $Objeto)
+    $json = ConvertTo-Json -InputObject $Objeto -Depth 12
     # Grava no mesmo volume e publica somente apos fechar e sincronizar.
     $temporario = $arquivo + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     try {
@@ -116,7 +122,6 @@ function Gravar-SessaoArquivo {
             [System.IO.File]::Delete($temporario)
         }
     }
-    return $arquivo
 }
 
 function Registrar-Jornal {
@@ -520,23 +525,32 @@ function Desfazer-Item {
 
 function Reverter-Sessao {
     param([string]$Arquivo)
-    $json = Ler-JSON $Arquivo
-    $itens = @($json.itens)
-    [array]::Reverse($itens)
-    Log ("revertendo sessao '{0}' ({1} acoes)..." -f $json.rotulo, $itens.Count)
-    foreach ($item in $itens) {
-        if (-not (Desfazer-Item $item)) {
-            Log 'Reversao interrompida: journal preservado para revisao. Nao repita sem conferir os itens ja restaurados.' -Erro
-            return
+    $ErrorActionPreference = 'Stop'
+    try {
+        $json = Ler-JSON $Arquivo
+        if ($null -eq $json -or $null -eq $json.itens) { throw 'Journal invalido.' }
+        $itens = @($json.itens)
+        for ($i = $itens.Count - 1; $i -ge 0; $i--) {
+            $item = $itens[$i]
+            if ($item.estadoReversao -eq 'concluido') { continue }
+            if ($item.estadoReversao -eq 'em_andamento') {
+                throw ("Acao {0} com resultado incerto. Revise manualmente antes de continuar." -f $i)
+            }
+            $item | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force
+            Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+            if (-not (Desfazer-Item $item)) {
+                throw ("Falha na acao {0}. Journal preservado; revisao manual necessaria." -f $i)
+            }
+            $item.estadoReversao = 'concluido'
+            Gravar-JSONAtomico -Arquivo $Arquivo -Objeto $json
+            Atualizar-UI
         }
-        Atualizar-UI
+        $novoNome = (Split-Path -Leaf $Arquivo) + '.revertido'
+        Rename-Item -LiteralPath $Arquivo -NewName $novoNome -ErrorAction Stop
+        Log 'sessao revertida. algumas mudancas podem exigir relogar no windows.'
+    } catch {
+        Log ('Reversao interrompida: ' + $_.Exception.Message) -Erro
     }
-    $novoNome = (Split-Path -Leaf $Arquivo) + '.revertido'
-    try { Rename-Item -Path $Arquivo -NewName $novoNome -ErrorAction Stop } catch {
-        Log ('Falha ao finalizar journal: ' + $_.Exception.Message) -Erro
-        return
-    }
-    Log 'sessao revertida. algumas mudancas podem exigir relogar no windows.'
 }
 
 # ---- ponto de restauracao ----
