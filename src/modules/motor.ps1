@@ -97,16 +97,38 @@ function Gravar-SessaoArquivo {
         itens  = @($global:SessaoItens)
     }
     $json = ConvertTo-Json -InputObject $obj -Depth 6
-    [System.IO.File]::WriteAllText($arquivo, $json)
+    # Grava no mesmo volume e publica somente apos fechar e sincronizar.
+    $temporario = $arquivo + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $stream = [System.IO.File]::Open($temporario, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+        try {
+            $stream.Write($bytes, 0, $bytes.Length)
+            $stream.Flush($true)
+        } finally { $stream.Dispose() }
+        if ([System.IO.File]::Exists($arquivo)) {
+            [System.IO.File]::Replace($temporario, $arquivo, $arquivo + '.bak')
+        } else {
+            [System.IO.File]::Move($temporario, $arquivo)
+        }
+    } finally {
+        if ([System.IO.File]::Exists($temporario)) {
+            [System.IO.File]::Delete($temporario)
+        }
+    }
     return $arquivo
 }
 
 function Registrar-Jornal {
     param($Item)
-    if ($null -eq $global:SessaoItens) { return }
+    if ($null -eq $global:SessaoItens) { throw 'Sessao de journal nao iniciada.' }
     [void]$global:SessaoItens.Add($Item)
-    # flush imediato: journal a prova de crash
-    try { [void](Gravar-SessaoArquivo) } catch { }
+    try {
+        [void](Gravar-SessaoArquivo)
+    } catch {
+        $global:SessaoItens.RemoveAt($global:SessaoItens.Count - 1)
+        throw
+    }
 }
 
 function Salvar-Sessao {
