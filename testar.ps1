@@ -357,6 +357,18 @@ try {
     Passou 'launcher monta e valida portatil sem instalar'
 } catch { Falhou 'launcher portatil' $_.Exception.Message }
 
+# No GitHub Actions, testa tambem o caminho publico de download.
+if ($env:GITHUB_ACTIONS -eq 'true') {
+    Secao 'launcher via github'
+    try {
+        $evento = Get-Content -LiteralPath $env:GITHUB_EVENT_PATH -Raw -Encoding UTF8 | ConvertFrom-Json
+        $refTeste = $env:GITHUB_SHA
+        if ($evento.pull_request.head.sha) { $refTeste = $evento.pull_request.head.sha }
+        & (Join-Path $raiz 'iniciar.ps1') -Ref $refTeste -SomenteValidar
+        Passou 'launcher baixa commit publico, confere blobs e monta portatil'
+    } catch { Falhou 'launcher via github' $_.Exception.Message }
+}
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
