@@ -1251,6 +1251,22 @@ function Desfazer-Item {
                 throw ('Reinstalacao manual necessaria: ' + $Item.nome)
             }
 
+            'instalacao-app' {
+                $alvo=[string]$Item.nome
+                if ($alvo) {throw ('Instalacao via WinGet sem desfazer automatico: ' + $alvo)}
+                throw 'Instalacao via WinGet sem desfazer automatico.'
+            }
+
+            'temp' {
+                throw 'Limpeza de temporarios e definitiva; sem restauracao automatica.'
+            }
+
+            'manutencao' {
+                $alvo=[string]$Item.operacao
+                if ($alvo) {throw ('Efeito externo de manutencao (' + $alvo + ') sem desfazer automatico; revise manualmente.')}
+                throw 'Efeito externo de manutencao sem desfazer automatico; revise manualmente.'
+            }
+
             'tarefa' {
                 Confirmar-AlvoTarefa $Item.tarefaPath $Item.tarefaNome
                 if (-not $Item.assinatura -or (Obter-AssinaturaTarefa $Item.tarefaPath $Item.tarefaNome) -ne $Item.assinatura) { throw 'Definicao da tarefa incerta ou alterada; revise manualmente.' }
@@ -1439,7 +1455,7 @@ function Reverter-Sessao {
                 if ($UmaAcao -and $feitas -ge 1) {break}
                 continue
             }
-            if ((Obter-TipoRecuperacao $item) -eq 'manual-sem-garantia' -and $item.tipo -in @('desinstalado-app','instalacao-app','temp','manutencao','reg-import','comando','regra-firewall','firewall-estado')) {throw 'Operacao sem desfazer automatico. Use encerramento manual sem restauracao.'}
+            if ((Obter-TipoRecuperacao $item) -eq 'manual-sem-garantia' -and $item.tipo -in @('desinstalado-app','instalacao-app','temp','manutencao','reg-import','comando','regra-firewall','firewall-estado')) {throw ("Acao {0} ({1}) sem desfazer automatico. Use encerramento manual sem restauracao." -f $i, [string]$item.tipo)}
             $item | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force
             Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
             if (-not (Desfazer-Item $item)) {
