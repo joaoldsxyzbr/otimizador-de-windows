@@ -123,7 +123,7 @@ function Confirmar-ContextoJournal {
 
 function Iniciar-Sessao {
     param([string]$Rotulo)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     $global:ContextoSessaoJournal = Obter-ContextoJournal
     $global:SessaoItens = New-Object System.Collections.ArrayList
     $global:RotuloSessao = $Rotulo
@@ -192,7 +192,7 @@ function Gravar-JournalSeguro {
 
 function Gravar-JSONAtomico {
     param([string]$Arquivo, $Objeto,[switch]$AclJournal)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao $(if ($AclJournal -or $Arquivo -ieq (Join-Path $global:RaizEstado 'preferencias.json')) {'estado-local'} else {'exportar'})
     $json = ConvertTo-Json -InputObject $Objeto -Depth 12
     # Grava no mesmo volume e publica somente apos fechar e sincronizar.
     $temporario = $arquivo + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
@@ -218,7 +218,7 @@ function Gravar-JSONAtomico {
 
 function Registrar-Jornal {
     param($Item)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     if ($null -eq $global:SessaoItens) { throw 'Sessao de journal nao iniciada.' }
     $Item | Add-Member -NotePropertyName idOperacao -NotePropertyValue ([guid]::NewGuid().ToString('N')) -Force
     $Item | Add-Member -NotePropertyName estadoAplicacao -NotePropertyValue 'intencao' -Force
@@ -339,7 +339,7 @@ function Obter-EstadoServico {
 
 function Definir-InicioServico {
     param([string]$Nome,[string]$Tipo,[bool]$Atraso)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'servico'
     if ($Nome -notmatch '^[A-Za-z0-9_.-]+$' -or $Tipo -notin @('Automatic','Manual','Disabled')) { throw 'Configuracao de servico invalida.' }
     Confirmar-DependenciasServico $Nome $Tipo
     $modo = switch ($Tipo) {
@@ -354,7 +354,7 @@ function Definir-InicioServico {
 
 function Alterar-ServicoComJournal {
     param([string]$Nome,[string]$Inicio)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'servico'
     Confirmar-DependenciasServico $Nome $Inicio
     $ant = Obter-EstadoServico $Nome
     if ($ant.tipo -eq $Inicio -and ($Inicio -ne 'Disabled' -or $ant.estado -eq 'Stopped')) { return }
@@ -364,6 +364,7 @@ function Alterar-ServicoComJournal {
         tipoDepois=$Inicio; estadoDepois=$depois; atrasoDepois=$false
     }
     Registrar-Jornal $entrada
+    Confirmar-PermissaoAlteracao 'servico'
     Confirmar-DependenciasServico $Nome $Inicio
     $releitura=Obter-EstadoServico $Nome
     if ($releitura.tipo -ne $ant.tipo -or $releitura.estado -ne $ant.estado -or $releitura.atraso -ne $ant.atraso) {throw 'Servico mudou durante preparacao; preservado.'}
@@ -438,7 +439,7 @@ function Confirmar-AlvoTarefa {
 
 function Desativar-TarefaComJournal {
     param([string]$Caminho,[string]$Nome)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'tarefa'
     Confirmar-AlvoTarefa $Caminho $Nome
     $tarefas = @(Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop)
     if ($tarefas.Count -ne 1 -or $tarefas[0].TaskName -ne $Nome -or $tarefas[0].TaskPath -ne $Caminho) { throw 'Tarefa nao identificada unicamente.' }
@@ -448,6 +449,7 @@ function Desativar-TarefaComJournal {
     $assinatura = Obter-AssinaturaTarefa $Caminho $Nome
     $entrada=[pscustomobject]@{ tipo='tarefa'; tarefaPath=$Caminho; tarefaNome=$Nome; estadoAnterior='Ready'; estadoDepois='Disabled'; assinatura=$assinatura }
     Registrar-Jornal $entrada
+    Confirmar-PermissaoAlteracao 'tarefa'
     if ((Obter-AssinaturaTarefa $Caminho $Nome) -ne $assinatura -or (Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Ready') {throw 'Tarefa mudou durante preparacao; preservada.'}
     Disable-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop | Out-Null
     if ((Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Disabled') { throw 'Desativacao nao confirmada.' }
@@ -498,7 +500,7 @@ function Confirmar-PlanoEnergiaDisponivel {
 
 function Definir-PlanoEnergia {
     param([string]$Guid)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'energia'
     $id=[guid]::Empty
     if (-not [guid]::TryParse($Guid,[ref]$id) -or $id -eq [guid]::Empty) { throw 'GUID de energia invalido.' }
     Confirmar-PoliticaEnergiaLocal
@@ -514,6 +516,23 @@ function Definir-PlanoEnergia {
 function Testar-RecursoCatalogado {
     param([string]$Nome)
     return ($Nome -in @('Microsoft-Hyper-V-All','VirtualMachinePlatform','Microsoft-Windows-Subsystem-Linux','Containers-DisposableClientVM','NetFx3','DirectPlay','WindowsMediaPlayer','TelnetClient'))
+}
+
+function Confirmar-PoliticaAppxLocal {
+    foreach ($h in @('HKCU','HKLM')) {
+        foreach ($k in @('SOFTWARE\Policies\Microsoft\WindowsStore','SOFTWARE\Policies\Microsoft\Windows\Appx','SOFTWARE\Policies\Microsoft\Windows\AppLocker')) {
+            try {$existe=Test-Path -LiteralPath ($h+':\'+$k) -ErrorAction Stop}
+            catch {throw 'Consulta de politica AppX inconclusiva.'}
+            if ($existe) {throw 'Indicador de politica AppX/Store/AppLocker presente; use o procedimento autorizado.'}
+        }
+    }
+}
+
+function Confirmar-CompatibilidadeRecurso {
+    param([string]$Nome,$Contexto)
+    if (-not $Contexto -or -not $Contexto.cliente -or $Contexto.build -lt 10240 -or -not $Contexto.edicao) {throw 'Compatibilidade de recurso nao confirmada.'}
+    if ($Nome -in @('Microsoft-Hyper-V-All','Containers-DisposableClientVM') -and $Contexto.edicao -notmatch '^(Professional|Enterprise|Education)') {throw 'Edicao sem suporte confirmado a virtualizacao/Sandbox.'}
+    if ($Nome -eq 'Containers-DisposableClientVM' -and $Contexto.build -lt 18362) {throw 'Build sem suporte confirmado ao Sandbox.'}
 }
 
 function Confirmar-PoliticaRecursosLocal {
@@ -662,6 +681,19 @@ function Confirmar-PoliticaPreferenciaLocal {
             }
         }
     }
+    $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    foreach ($escopo in @('device',$sid)) {
+        foreach ($grupo in @('Start','Search','Personalization','Experience')) {
+            $p='HKLM:\SOFTWARE\Microsoft\PolicyManager\current\'+$escopo+'\'+$grupo
+            try {
+                if (-not (Test-Path -LiteralPath $p -ErrorAction Stop)) {continue}
+                $v=Get-ItemProperty -LiteralPath $p -ErrorAction Stop
+            } catch {throw 'Consulta de politica MDM de preferencia inconclusiva.'}
+            foreach ($nomePolitica in $valores) {
+                if ($nomePolitica -and $v.PSObject.Properties[($nomePolitica+'_ProviderSet')] -and $v.($nomePolitica+'_ProviderSet') -eq 1) {throw 'Indicador MDM de preferencia presente; use procedimento autorizado.'}
+            }
+        }
+    }
 }
 
 function Confirmar-PoliticaEnergiaLocal {
@@ -671,6 +703,23 @@ function Confirmar-PoliticaEnergiaLocal {
         try { $presente=Test-Path -LiteralPath $chave -ErrorAction Stop }
         catch { throw 'Consulta de politica de energia inconclusiva; alteracao recusada.' }
         if ($presente) { throw 'Indicador de politica de energia presente; alteracao recusada.' }
+    }
+}
+
+function Obter-IdOperacaoAcao {
+    param($Acao)
+    switch ($Acao.tipo) {
+        'registro' {
+            $c=Converter-Hive ([string]$Acao.caminho)
+            if ($c -match '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\(?:Explorer\\Advanced|Search|Themes\\Personalize)$') {return 'registro-usuario'}
+            if ($c -match '(?i)^HKEY_CURRENT_USER\\') {return 'registro-local'}
+            return 'registro-maquina'
+        }
+        {$_ -in @('servico','tarefa','energia','recurso','appx')} {return [string]$_}
+        'path-entrada' {return 'path'}
+        'quarantena-arquivo' {return 'rastros'}
+        'quarantena-registro' {return 'rastros'}
+        default {return 'nao-catalogado'}
     }
 }
 
@@ -685,10 +734,11 @@ function Executar-Acao {
         return
     }
 
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     $ErrorActionPreference = 'Stop'
     try {
         Confirmar-NovaAcao $Acao
+        Confirmar-PermissaoAlteracao (Obter-IdOperacaoAcao $Acao)
         switch ($Acao.tipo) {
 
             'registro' {
@@ -726,6 +776,7 @@ function Executar-Acao {
                     backupReg    = $arqBackup
                 }
                 Registrar-Jornal $entrada
+                Confirmar-PermissaoAlteracao (Obter-IdOperacaoAcao $Acao)
                 Confirmar-PoliticaPreferenciaLocal $Acao.caminho $Acao.nome
                 if (-not (Registro-Corresponde (Ler-ValorRegistro $Acao.caminho $Acao.nome) ([bool]$leitura.existia) $leitura.tipo $leitura.valor)) {throw 'Valor mudou durante a preparacao; preservado.'}
                 if ($Acao.remover) {
@@ -760,6 +811,7 @@ function Executar-Acao {
             }
 
             'appx' {
+                Confirmar-PoliticaAppxLocal
                 # Remocao apenas do usuario atual, sem afetar outros usuarios
                 # nem o provisionamento. O nome deve ser exato.
                 if (-not (Testar-AppxCatalogado $Acao.pacote)) { throw 'Pacote fora do catalogo de remocao.' }
@@ -776,6 +828,11 @@ function Executar-Acao {
                         familia = $p.PackageFamilyName; usuarioSid = $sid
                     }
                     Registrar-Jornal $entrada
+                    Confirmar-PermissaoAlteracao 'appx'
+                    Confirmar-PoliticaAppxLocal
+                    $frescos=@(Get-AppxPackage -ErrorAction Stop)
+                    $alvos=@($frescos | Where-Object {$_.PackageFullName -eq $p.PackageFullName})
+                    if ($alvos.Count -ne 1 -or (Testar-AppxProtegido $alvos[0]) -or @(Obter-DependentesAppx $alvos[0] $frescos).Count) {throw 'Pacote ou dependencias mudaram; preservado.'}
                     Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop
                     if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.PackageFullName -eq $p.PackageFullName }).Count -gt 0) { throw 'Pacote continua instalado.' }
                     Confirmar-EfeitoJournal $entrada
@@ -786,6 +843,7 @@ function Executar-Acao {
             }
 
             'recurso' {
+                Confirmar-CompatibilidadeRecurso $Acao.nome (Obter-ContextoAjustes)
                 Confirmar-PoliticaRecursosLocal
                 $antes = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ nome=$_.FeatureName; estado=$_.State.ToString() } })
                 $feat = @($antes | Where-Object { $_.nome -eq $Acao.nome })
@@ -795,6 +853,10 @@ function Executar-Acao {
                 if ($feat[0].estado -notin @('Enabled','Disabled')) { throw 'Recurso em estado pendente ou payload removido; revise pelo Windows.' }
                 $entrada = [pscustomobject]@{ tipo='recurso'; nome=$Acao.nome; estadoAnterior=$feat[0].estado; estadoDepois=$alvo; alteracoes=$null }
                 Registrar-Jornal $entrada
+                Confirmar-PermissaoAlteracao 'recurso'
+                Confirmar-CompatibilidadeRecurso $Acao.nome (Obter-ContextoAjustes)
+                Confirmar-PoliticaRecursosLocal
+                if ((Get-WindowsOptionalFeature -Online -FeatureName $Acao.nome -ErrorAction Stop).State.ToString() -ne $feat[0].estado) {throw 'Estado do recurso mudou; preservado.'}
                 if ($Acao.ativar) { $resultado = Enable-WindowsOptionalFeature -Online -FeatureName $Acao.nome -All -NoRestart -ErrorAction Stop }
                 else { $resultado = Disable-WindowsOptionalFeature -Online -FeatureName $Acao.nome -NoRestart -ErrorAction Stop }
                 $depois = @(Get-WindowsOptionalFeature -Online -ErrorAction Stop)
@@ -899,16 +961,36 @@ function Confirmar-BackupQuarentena {
     return $full
 }
 
+# Recovery may restore a previous value (not necessarily the current catalog
+# value), but cannot reopen arbitrary historical Windows registry targets.
+function Confirmar-AlvoRegistroReversao {
+    param($Item)
+    $c=Converter-Hive ([string]$Item.caminho)
+    $n=[string]$Item.nome
+    Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='registro';caminho=$Item.caminho;nome=$n})
+    if ($c -match '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced$' -and $n -in @('HideFileExt','TaskbarDa','LaunchTo','Hidden','ShowTaskViewButton')) {return}
+    if ($c -ieq 'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Search' -and $n -eq 'SearchboxTaskbarMode') {return}
+    if ($c -ieq 'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -and $n -in @('AppsUseLightTheme','SystemUsesLightTheme')) {return}
+    if ($n -and $c -in @('HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run','HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run','HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run')) {return}
+    if ($c -match '(?i)^HKEY_CURRENT_USER\\Software\\[^\\]+(?:\\[^\\]+)*$' -and $c -notmatch '(?i)^HKEY_CURRENT_USER\\Software\\(?:Microsoft|Classes|Policies|Clients|RegisteredApplications|WOW6432Node)(?:\\|$)') {return}
+    throw 'Alvo historico fora da lista de recuperacao automatica; preserve o journal e revise manualmente.'
+}
+
 function Desfazer-Item {
     param($Item)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     $ErrorActionPreference = 'Stop'
     try {
+        if ($Item.tipo -in @('registro','servico','energia','recurso','appx','tarefa','path-entrada','quarantena-arquivo','quarantena-registro')) {
+            $idReversao=if ($Item.tipo -eq 'tarefa') {'tarefa-reversao'} else {Obter-IdOperacaoAcao $Item}
+            Confirmar-PermissaoAlteracao $idReversao
+        }
         switch ($Item.tipo) {
 
             'registro' {
                 if (-not $Item.PSObject.Properties['existiaDepois']) {throw 'Journal de registro sem snapshot posterior; revise manualmente.'}
                 $rede = Converter-Hive $Item.caminho
+                if ($rede -notmatch '^HKEY_(CURRENT_USER|LOCAL_MACHINE)\\') {throw 'Hive de reversao fora do escopo revisado.'}
                 if ($Item.PSObject.Properties['existiaDepois']) {
                     $atual = Ler-ValorRegistro -CaminhoPS $Item.caminho -Nome $Item.nome
                     if (Registro-Corresponde $atual ([bool]$Item.existia) $Item.tipoAnterior $Item.valorAnteriorEstruturado.valor) {
@@ -919,8 +1001,10 @@ function Desfazer-Item {
                         throw ('Conflito: valor mudou desde a aplicacao. Preservado: ' + $Item.caminho + '\\' + $Item.nome)
                     }
                 }
-                Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='registro';caminho=$Item.caminho;nome=$Item.nome})
+                Confirmar-AlvoRegistroReversao $Item
                 Confirmar-PoliticaPreferenciaLocal $Item.caminho $Item.nome
+                Confirmar-PermissaoAlteracao (Obter-IdOperacaoAcao $Item)
+                if (-not (Registro-Corresponde (Ler-ValorRegistro $Item.caminho $Item.nome) ([bool]$Item.existiaDepois) $Item.tipoDepois $Item.valorDepoisEstruturado.valor)) {throw 'Registro mudou durante preparacao da reversao.'}
                 if ($Item.existia) {
                     $kind = Converter-Kind $Item.tipoAnterior
                     if ($null -ne $Item.valorAnteriorEstruturado) { $valor = $Item.valorAnteriorEstruturado.valor }
@@ -986,6 +1070,7 @@ function Desfazer-Item {
                 if ($atual -eq $Item.estadoAnterior) { return $true }
                 if ($atual -ne $Item.estadoDepois -or $atual -notin @('Enabled','Disabled')) { throw 'Recurso em estado pendente ou alterado posteriormente.' }
                 if (-not (Testar-RecursoCatalogado $Item.nome)) {throw 'Recurso fora da lista revisada; recupere manualmente.'}
+                Confirmar-CompatibilidadeRecurso $Item.nome (Obter-ContextoAjustes)
                 Confirmar-PoliticaRecursosLocal
                 if ($Item.estadoAnterior -eq 'Enabled') { Enable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null }
                 elseif ($Item.estadoAnterior -eq 'Disabled') { Disable-WindowsOptionalFeature -Online -FeatureName $Item.nome -NoRestart -ErrorAction Stop | Out-Null }
@@ -998,10 +1083,12 @@ function Desfazer-Item {
                 # tenta reinstalar pro usuario atual; quando a remocao foi
                 # por usuario (o pacote continua staged na maquina), volta
                 # na hora; quando foi -AllUsers, so pela Store mesmo
-                if ($Item.usuarioSid -and $Item.usuarioSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'A sessao AppX pertence a outro usuario.' }
+                Confirmar-PoliticaAppxLocal
+                if (-not (Testar-AppxCatalogado $Item.pacote)) {throw 'Pacote fora do catalogo atual; reinstale manualmente.'}
+                if (-not $Item.usuarioSid -or $Item.usuarioSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'A sessao AppX pertence a outro usuario.' }
                 if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0) { Log 'appx ja esta instalado no usuario atual.'; return $true }
                 $fez = $false
-                if (-not [string]::IsNullOrWhiteSpace([string]$Item.familia)) {
+                if (-not [string]::IsNullOrWhiteSpace([string]$Item.familia) -and $Item.familia -match ('^'+[regex]::Escape([string]$Item.pacote)+'_[a-z0-9]{13}$')) {
                     try {
                         Add-AppxPackage -RegisterByFamilyName -MainPackage $Item.familia -ErrorAction Stop
                         $fez = (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0)
@@ -1025,6 +1112,7 @@ function Desfazer-Item {
                 $atual = (Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop).State
                 if ($atual -eq 'Ready') { return $true }
                 if ($atual -ne 'Disabled') { throw 'Estado da tarefa mudou.' }
+                Confirmar-PermissaoAlteracao 'tarefa-reversao'
                 Enable-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop | Out-Null
                 if ((Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop).State -eq 'Disabled') { throw 'Reativacao nao confirmada.' }
                 Log ('tarefa reativada: ' + $Item.tarefaNome)
@@ -1158,7 +1246,7 @@ function Testar-ItemJaRestaurado {
 
 function Reverter-Sessao {
     param([string]$Arquivo, [switch]$UmaAcao)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     $ErrorActionPreference = 'Stop'
     try {
         $Arquivo=Confirmar-ArquivoJournal $Arquivo
@@ -1210,7 +1298,7 @@ function Reverter-Sessao {
 # Atestado manual: registra a verificacao feita pelo usuario, sem repetir a acao.
 function Confirmar-ReversaoManual {
     param([string]$Arquivo, [int]$Indice)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     $ErrorActionPreference = 'Stop'
     $Arquivo=Confirmar-ArquivoJournal $Arquivo
     $json = Ler-JSON $Arquivo
@@ -1235,10 +1323,14 @@ function Confirmar-ReversaoManual {
 # ---- ponto de restauracao ----
 
 function Criar-PontoRestauracao {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'restore'
     try {
+        foreach ($p in @('HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\SystemRestore','HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\SystemRestore')) {
+            if (Test-Path -LiteralPath $p -ErrorAction Stop) {throw 'Indicador de politica de restauracao presente; use o procedimento autorizado.'}
+        }
         $antes=@(Get-ComputerRestorePoint -ErrorAction Stop)
         $descricao='OtimizadorPC '+[guid]::NewGuid().ToString('N').Substring(0,12)
+        Confirmar-PermissaoAlteracao 'restore'
         Checkpoint-Computer -Description $descricao -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
         $novos=@(Get-ComputerRestorePoint -ErrorAction Stop | Where-Object { $_.Description -eq $descricao -and $_.SequenceNumber -notin @($antes | ForEach-Object {$_.SequenceNumber}) })
         if ($novos.Count -ne 1) { throw 'Novo ponto nao confirmado (limite diario ou protecao indisponivel).' }
@@ -1460,7 +1552,8 @@ function Avaliar-AutorizacaoAjuste {
 
 function Confirmar-AutorizacaoAjuste {
     param($Ajuste,$Contexto)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
+    foreach ($acao in @($Ajuste.acoes)) {Confirmar-PermissaoAlteracao (Obter-IdOperacaoAcao $acao)}
     $decisao=Avaliar-AutorizacaoAjuste $Ajuste $Contexto $true -ConsultarPoliticas
     if ($decisao.estado -ne 'permitido') {throw ($Ajuste.nome+': '+$decisao.motivo)}
 }
@@ -1493,7 +1586,7 @@ function Aplicar-Preset {
         return $true
     }
 
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     try {Confirmar-LoteAjustes $selecionados} catch {Log $_.Exception.Message -Erro;return $false}
     foreach ($t in $selecionados) {
         try {Confirmar-AutorizacaoAjuste $t $ctx} catch {Log ('Preset real interrompido: '+$_.Exception.Message) -Erro;return $false}

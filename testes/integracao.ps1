@@ -35,6 +35,7 @@ try {
 # do PROPRIO local dele (src\modules -> raiz), entao da pra
 # carregar de qualquer lugar. motor traz o executor e o desfazer.
 . (Join-Path $raiz 'src\modules\comum.ps1')
+. (Join-Path $raiz 'testes\contexto-autorizacao.ps1')
 . (Join-Path $raiz 'src\modules\motor.ps1')
 
 Garantir-Pastas
@@ -312,14 +313,23 @@ try {
     $acaoTarefa = New-ScheduledTaskAction -Execute (Join-Path $env:SystemRoot 'System32\cmd.exe') -Argument '/c exit 0'
     Register-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -Action $acaoTarefa -ErrorAction Stop | Out-Null
     Iniciar-Sessao 'ci-tarefa'
-    Desativar-TarefaComJournal '\' $nomeTarefa
-    $arq = Salvar-Sessao
-    if ((Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Disabled') { throw 'Tarefa nao desativada.' }
+    $recusou=$false
+    try {Desativar-TarefaComJournal '\' $nomeTarefa} catch {$recusou=$_.Exception.Message -match 'Tarefa sem identidade'}
+    if (-not $recusou -or (Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Ready' -or $global:SessaoItens.Count) {throw 'Tarefa desconhecida alterada pelo app.'}
+    $entrada=[pscustomobject]@{tipo='tarefa';tarefaPath='\';tarefaNome=$nomeTarefa;estadoAnterior='Ready';estadoDepois='Disabled';assinatura=(Obter-AssinaturaTarefa '\' $nomeTarefa)}
+    Registrar-Jornal $entrada
+    Disable-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -ErrorAction Stop | Out-Null
+    Confirmar-EfeitoJournal $entrada
+    $arq=Salvar-Sessao
+    if ((Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Disabled') {throw 'Fixture de tarefa nao desativada.'}
     if (-not (Reverter-Sessao $arq)) { throw 'Tarefa nao revertida.' }
     if ((Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Ready') { throw 'Tarefa nao reativada.' }
-    Log 'CI ok: tarefa descartavel desativada e reativada com journal'
+    Log 'CI ok: nova desativacao de tarefa desconhecida recusada e snapshot anterior restaurado'
     Iniciar-Sessao 'ci-tarefa-incerta'
-    Desativar-TarefaComJournal '\' $nomeTarefa
+    $entrada=[pscustomobject]@{tipo='tarefa';tarefaPath='\';tarefaNome=$nomeTarefa;estadoAnterior='Ready';estadoDepois='Disabled';assinatura=(Obter-AssinaturaTarefa '\' $nomeTarefa)}
+    Registrar-Jornal $entrada
+    Disable-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -ErrorAction Stop | Out-Null
+    Confirmar-EfeitoJournal $entrada
     $arq=Salvar-Sessao
     $j=Ler-JSON $arq
     $j.itens[0] | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force

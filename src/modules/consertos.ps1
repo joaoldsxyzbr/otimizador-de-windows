@@ -32,8 +32,11 @@ else { Write-Host 'Operacao interrompida com erro.' -ForegroundColor Yellow }
 }
 
 function Executar-NoConsole {
-    param([string]$Titulo, [string]$Bloco)
-    Confirmar-PermissaoAlteracao
+    param([string]$Titulo, [string]$Bloco,[string]$Operacao)
+    Confirmar-PermissaoAlteracao $Operacao
+    if ($Operacao -notin @('diagnostico-admin','reparo','winget','consulta-winget')) {throw 'Console fora do catalogo de operacoes.'}
+    if ($Operacao -eq 'reparo') {Confirmar-PoliticaRecursosLocal}
+    if ($Operacao -in @('winget','consulta-winget')) {Confirmar-PoliticaWingetLocal}
     Status ('executando: ' + $Titulo)
     Ocupado $true
     $codigo = 1
@@ -43,6 +46,7 @@ function Executar-NoConsole {
         $bytes = [Text.Encoding]::Unicode.GetBytes($cmd)
         $enc = [Convert]::ToBase64String($bytes)
         $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+        Confirmar-PermissaoAlteracao $Operacao
         $proc = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -ErrorAction Stop
         try {
             while (-not $proc.WaitForExit(100)) { Atualizar-UI }
@@ -57,7 +61,7 @@ function Executar-NoConsole {
 
 # Compatibility entrypoint: route troubleshooting to Windows, never reset services.
 function Resetar-WindowsUpdate {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nativo'
     if (-not (Perguntar 'Diagnosticar Windows Update' 'Abrir Windows Update para revisar erros, historico e opcoes permitidas? O OtimizadorPC nao vai parar servicos nem renomear caches.')) {return}
     Start-Process -FilePath 'ms-settings:windowsupdate' -ErrorAction Stop | Out-Null
     Log 'Windows Update aberto; nenhuma politica ou cache alterado pelo aplicativo.'
@@ -66,7 +70,7 @@ function Resetar-WindowsUpdate {
 
 # Network reset can break VPN, static IP and remote access. Do not run a generic reset.
 function Resetar-Rede {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nativo'
     if (-not (Perguntar 'Diagnosticar rede' 'Abrir configuracoes de rede para revisar conexao e solucionar problemas? O OtimizadorPC nao vai resetar Winsock, TCP/IP, VPN ou liberar enderecos IP.')) {return}
     Start-Process -FilePath 'ms-settings:network-status' -ErrorAction Stop | Out-Null
     Log 'Configuracoes de rede abertas; nenhuma configuracao de rede alterada pelo aplicativo.'
@@ -74,25 +78,25 @@ function Resetar-Rede {
 
 
 function Diagnosticar-Integridade {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'diagnostico-admin'
     if (-not (Perguntar 'Diagnosticar integridade' 'Executar DISM ScanHealth e SFC verifyonly? Consultas podem demorar e gravar logs do Windows, mas nao solicitam reparo.')) { return }
     $bloco=@'
 Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/ScanHealth')
 Executar-Nativo (Join-Path $env:SystemRoot 'System32\sfc.exe') @('/verifyonly')
 '@
-    Executar-NoConsole -Titulo 'Diagnosticar integridade' -Bloco $bloco
+    Executar-NoConsole -Operacao 'diagnostico-admin' -Titulo 'Diagnosticar integridade' -Bloco $bloco
 }
 
 function Analisar-ComponentesWindows {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'diagnostico-admin'
     $bloco=@'
 Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/AnalyzeComponentStore')
 '@
-    Executar-NoConsole -Titulo 'Analisar armazenamento de componentes' -Bloco $bloco
+    Executar-NoConsole -Operacao 'diagnostico-admin' -Titulo 'Analisar armazenamento de componentes' -Bloco $bloco
 }
 
 function Abrir-OtimizacaoVolume {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nativo'
     if (-not (Perguntar 'Otimizar unidades do Windows' 'Abrir a ferramenta nativa Otimizar Unidades? Ela analisa volumes e seleciona a operacao apropriada ao tipo de midia. Revise o estado e escolha manualmente. O OtimizadorPC nao forca desfragmentacao nem TRIM.')) {return}
     $exe=Join-Path $env:SystemRoot 'System32\dfrgui.exe'
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {throw 'Ferramenta nativa indisponivel.'}
@@ -100,7 +104,7 @@ function Abrir-OtimizacaoVolume {
 }
 
 function Consultar-Energia {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'diagnostico-admin'
     $bloco=@'
 $exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
 Executar-Nativo $exe @('/getactivescheme')
@@ -108,11 +112,11 @@ Executar-Nativo $exe @('/requests')
 Executar-Nativo $exe @('/lastwake')
 Executar-Nativo $exe @('/waketimers')
 '@
-    Executar-NoConsole -Titulo 'Diagnostico de energia e suspensao' -Bloco $bloco
+    Executar-NoConsole -Operacao 'diagnostico-admin' -Titulo 'Diagnostico de energia e suspensao' -Bloco $bloco
 }
 
 function Verificar-Integridade {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'reparo'
     if (-not (Perguntar 'Reparar integridade' 'DISM RestoreHealth e SFC scannow podem alterar arquivos de sistema e usar Windows Update. Use para corrupcao ou falhas confirmadas. Nao ha journal de rollback. Continuar?')) { return }
     $bloco = @'
 Write-Host '== Verificacao de integridade do sistema ==' -ForegroundColor Cyan
@@ -121,33 +125,33 @@ Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cl
 Write-Host '2/2 - SFC (varredura de arquivos de sistema)...' -ForegroundColor Cyan
 Executar-Nativo (Join-Path $env:SystemRoot 'System32\sfc.exe') @('/scannow')
 '@
-    Executar-NoConsole -Titulo 'Verificacao de integridade (DISM + SFC)' -Bloco $bloco
+    Executar-NoConsole -Operacao 'reparo' -Titulo 'Verificacao de integridade (DISM + SFC)' -Bloco $bloco
 }
 
 function Manutencao-DISM {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'reparo'
     if (-not (Perguntar 'Limpar componentes' 'Analise primeiro o armazenamento de componentes. DISM StartComponentCleanup remove componentes substituidos; nao possui desfazer pelo app. Continuar?')) { return }
     $bloco = @'
 Write-Host '== Limpeza do armazenamento de componentes ==' -ForegroundColor Cyan
 Write-Host 'Isso apaga versoes antigas de atualizacoes do Windows. Pode demorar.'
 Executar-Nativo (Join-Path $env:SystemRoot 'System32\Dism.exe') @('/Online','/Cleanup-Image','/StartComponentCleanup') @(0,3010)
 '@
-    Executar-NoConsole -Titulo 'Limpeza DISM de componentes' -Bloco $bloco
+    Executar-NoConsole -Operacao 'reparo' -Titulo 'Limpeza DISM de componentes' -Bloco $bloco
 }
 
 function Verificar-Disco {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'diagnostico-admin'
     if (-not (Perguntar 'Verificar volume do sistema' 'Executar CHKDSK sem parametros de reparo? Pode demorar. Em um volume em uso, resultados podem exigir nova verificacao; nenhuma correcao sera solicitada.')) {return}
     $bloco=@'
 Write-Host ('== Verificacao sem reparo solicitado: '+$env:SystemDrive+' ==') -ForegroundColor Cyan
 Executar-Nativo (Join-Path $env:SystemRoot 'System32\chkdsk.exe') @($env:SystemDrive)
 '@
-    Executar-NoConsole -Titulo 'Verificacao de disco sem reparo solicitado' -Bloco $bloco
+    Executar-NoConsole -Operacao 'diagnostico-admin' -Titulo 'Verificacao de disco sem reparo solicitado' -Bloco $bloco
 }
 
 
 function Limpeza-Disco {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nativo'
     if (-not (Perguntar 'Limpeza de disco' 'Abrir ferramenta nativa para revisar categorias antes da exclusao? Nao selecionaremos categorias automaticamente.')) { return }
     Start-Process -FilePath (Join-Path $env:SystemRoot 'System32\cleanmgr.exe') -ArgumentList @('/d',$env:SystemDrive) -ErrorAction Stop | Out-Null
 }
@@ -194,8 +198,10 @@ function Obter-PlanoTemporarios {
 }
 
 function Limpar-Temporarios {
-    Confirmar-PermissaoAlteracao
-    $pastas=@((Join-Path $env:LOCALAPPDATA 'Temp'))
+    Confirmar-PermissaoAlteracao 'temp'
+    $local=[Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+    if (-not $local -or $local -ine $env:LOCALAPPDATA) {throw 'Perfil local do usuario nao confirmado; temporarios preservados.'}
+    $pastas=@((Join-Path $local 'Temp'))
     $plano=Obter-PlanoTemporarios $pastas
     if ($plano.itens.Count -eq 0) { Avisar 'Limpeza de temporarios' ('Nenhum arquivo elegivel nas pastas consultadas. '+($plano.avisos -join ' | ')); return }
     $msg=('Encontrados {0} arquivo(s), {1:N2} MB estimados. Somente arquivos na raiz do Temp do usuario atual, modificados ha mais de 7 dias. O Temp do Windows nao sera limpo por esta rotina. Nao inclui subpastas, documentos ou links.' -f $plano.itens.Count,($plano.bytes/1MB))
@@ -214,7 +220,7 @@ function Limpar-Temporarios {
                 if (-not (Testar-RaizTemporarios $f.pasta) -or (Split-Path -Parent $f.caminho) -ne $f.pasta) { throw 'Pasta mudou.' }
                 $atual=Get-Item -LiteralPath $f.caminho -Force -ErrorAction Stop
                 if ($atual.PSIsContainer -or ($atual.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $atual.Length -ne $f.bytes -or $atual.LastWriteTimeUtc -ne $f.modificado -or $atual.CreationTimeUtc -ne $f.criado) { throw 'Arquivo mudou.' }
-                Confirmar-PermissaoAlteracao
+                Confirmar-PermissaoAlteracao 'temp'
                 Remove-Item -LiteralPath $f.caminho -Force -ErrorAction Stop
                 if (Test-Path -LiteralPath $f.caminho -ErrorAction Stop) {throw 'Exclusao nao confirmada.'}
                 $apagados++; $bytes+=$f.bytes
@@ -227,8 +233,9 @@ function Limpar-Temporarios {
 }
 
 function Limpar-DNS {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'dns'
     if (-not (Perguntar 'Limpar cache DNS' 'Limpar apenas o cache local de resolucao de nomes? Nao altera servidores DNS, VPN ou configuracao de rede. Use somente em problema de resolucao.')) {return}
+    Confirmar-PermissaoAlteracao 'dns'
     & (Join-Path $env:SystemRoot 'System32\ipconfig.exe') /flushdns | Out-Null
     if ($LASTEXITCODE -ne 0) {throw 'Falha ao limpar DNS.'}
     Log 'cache local do DNS limpo.'
@@ -236,11 +243,12 @@ function Limpar-DNS {
 
 
 function Sincronizar-Hora {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'hora'
     if (-not (Perguntar 'Sincronizar hora' 'Solicitar sincronizacao pela fonte de hora ja configurada no Windows? Nao altera servidor, servico ou politicas de hora.')) {return}
     Status 'solicitando sincronizacao de hora...'
     Ocupado $true
     try {
+        Confirmar-PermissaoAlteracao 'hora'
         $saida=& (Join-Path $env:SystemRoot 'System32\w32tm.exe') /resync 2>&1
         $codigo=$LASTEXITCODE
         foreach ($linha in $saida) {Log ('  '+$linha)}
@@ -252,7 +260,7 @@ function Sincronizar-Hora {
 
 
 function Recuperar-CacheIcones {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nativo'
     if (-not (Perguntar 'Icones e Explorer' 'Abrir configuracoes de personalizacao? Salve o trabalho e encerre a sessao pelo Windows se os icones continuarem incorretos. Nenhum processo sera encerrado nem cache excluido automaticamente.')) {return}
     Start-Process 'ms-settings:personalization' -ErrorAction Stop | Out-Null
     Log 'Personalizacao aberta; cache e processos preservados.'
@@ -262,7 +270,7 @@ function Recuperar-CacheIcones {
 
 function Configurar-Atualizacoes {
     param([bool]$BloquearDrivers,[bool]$AdiarRecursos)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nao-catalogado'
     throw 'Edicao de politicas indisponivel nesta versao. Use configuracoes oficiais do Windows.'
 }
 
@@ -327,7 +335,7 @@ function Testar-Winget {
 }
 
 function Instalar-Winget {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'nativo'
     if (Perguntar 'App Installer' 'Abrir a pagina oficial do App Installer na Microsoft Store? O OtimizadorPC nao baixara nem executara instalador automaticamente.') {
         Start-Process 'ms-windows-store://pdp/?ProductId=9NBLGGH4NNS1' -ErrorAction Stop | Out-Null
     }
@@ -366,7 +374,7 @@ function Obter-ArgumentosApp {
 
 function Instalar-Aplicativos {
     param($Selecionados,[ValidateSet('install','upgrade')][string]$Operacao='install')
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'winget'
     Confirmar-PoliticaWingetLocal
     if (@($Selecionados).Count -eq 0) { Avisar 'Nada selecionado' 'Selecione aplicativos para a operacao.'; return }
     if (-not (Testar-Winget)) { Avisar 'WinGet indisponivel' 'Use o App Installer oficial em Config.'; return }
@@ -383,18 +391,20 @@ function Instalar-Aplicativos {
     }
     $titulo=if ($Operacao -eq 'install') {'Instalar selecionados'} else {'Atualizar selecionados'}
     if (-not (Perguntar $titulo (($plano -join "`n")+"`n`nA operacao pode instalar dependencias e solicitar aceite de licenca. Nao ha rollback automatico. Continuar?"))) { return }
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'winget'
     Confirmar-PoliticaWingetLocal
     foreach ($app in $Selecionados) {Confirmar-AppCatalogado $app}
     if ((Obter-WingetExe) -cne $exe) {throw 'WinGet mudou durante a confirmacao; refaca a operacao.'}
-    Executar-NoConsole -Titulo $titulo -Bloco $linhas.ToString()
+    Executar-NoConsole -Operacao 'winget' -Titulo $titulo -Bloco $linhas.ToString()
 }
 
 function Atualizar-Tudo {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'consulta-winget'
     Confirmar-PoliticaWingetLocal
     if (-not (Testar-Winget)) { Avisar 'WinGet indisponivel' 'Use App Installer oficial em Config.'; return }
     if (-not (Perguntar 'Consultar atualizacoes' 'Consultar ofertas do WinGet nas fontes configuradas? Pode acessar a internet e pedir aceite de fonte. Nenhum upgrade sera executado.')) { return }
+    Confirmar-PermissaoAlteracao 'consulta-winget'
+    Confirmar-PoliticaWingetLocal
     $exeSeguro=(Obter-WingetExe).Replace("'","''")
-    Executar-NoConsole -Titulo 'Consultar atualizacoes de aplicativos' -Bloco ("Executar-Nativo '$exeSeguro' @('upgrade')")
+    Executar-NoConsole -Operacao 'consulta-winget' -Titulo 'Consultar atualizacoes de aplicativos' -Bloco ("Executar-Nativo '$exeSeguro' @('upgrade')")
 }

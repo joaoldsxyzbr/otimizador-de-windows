@@ -90,7 +90,8 @@ function Atualizar-RotuloAjuste {
     if ($t.apenasManual) { $Cb.Content += ' [manual]' }
     if (Obter-BloqueioAjuste $t) { $Cb.Content += ' [somente consulta/simulacao]' }
     $Cb.ToolTip=(Obter-GuiaAjuste $t).texto
-    if ($global:ModoProtegido) { $Cb.Content+=' [somente consulta]'; $Cb.IsChecked=$false; $Cb.IsEnabled=$false }
+    $decisao=@(@(foreach ($a in @($t.acoes)) {Avaliar-PermissaoOperacao (Obter-IdOperacaoAcao $a) -Previa}) | Where-Object {$_.estado -ne 'permitido'} | Select-Object -First 1)
+    if ($global:ModoProtegido -or $decisao.Count) { $Cb.Content+=' [somente consulta]'; $Cb.IsChecked=$false; $Cb.IsEnabled=$false; if ($decisao.Count) {$Cb.ToolTip += [Environment]::NewLine+$decisao[0].motivo} }
     elseif (-not $Cb.IsEnabled) { $Cb.Content+=' [indisponivel nesta instalacao]'; $Cb.IsChecked=$false }
     $Cb.Foreground=switch ($Estado) {'aplicado' {Cor-Tema '#86efac'} 'parcial' {Cor-Tema '#fde047'} default {Cor-Tema '#e5e7eb'}}
     if ($Estado -eq 'aplicado') { $Cb.IsChecked=$false }
@@ -151,7 +152,7 @@ function Montar-PaginaDebloat {
         }
         $estado=if ($info.instalado) {'instalado'} else {'nao instalado'}
         $cb=Nova-Checkbox -Texto ($p.nome + ' [' + $estado + ']') -Tag $p -Dica $info.texto
-        $cb.IsEnabled=(-not $global:ModoProtegido -and $info.permitido)
+        $cb.IsEnabled=((Testar-PermissaoPrevia 'appx') -and $info.permitido)
         if (-not $cb.IsEnabled) {$cb.Foreground=Cor-Tema '#6b7280'}
         [void]$grupos[$titulo].Content.Children.Add($cb)
     }
@@ -170,7 +171,7 @@ function Montar-PaginaInstalar {
         $fonte=if ($a.fonte -eq 'msstore') {'msstore'} else {'winget'}
         $dica=$a.desc+"`nID: "+$a.id+"`nFonte: "+$fonte+"`nInstalar nao solicita upgrade automatico. Use a consulta WinGet para identificar versoes instaladas/disponiveis."
         $cb=Nova-Checkbox -Texto ($a.nome+' ['+$fonte+']') -Tag $a -Dica $dica
-        if ($global:ModoProtegido) { $cb.IsEnabled=$false }
+        if (-not (Testar-PermissaoPrevia 'winget')) { $cb.IsEnabled=$false }
         [void]$grupos[$a.categoria].Content.Children.Add($cb)
     }
 }
@@ -193,7 +194,7 @@ function Montar-PaginaRecursos {
         $f=@($estados | Where-Object {$_.FeatureName -eq $r.feat})
         $estado=if (-not $consultou) {'consulta indisponivel'} elseif ($f.Count -ne 1) {'indisponivel nesta instalacao'} else {$f[0].State.ToString()}
         $cb=Nova-Checkbox -Texto ($r.nome+' ['+$estado+']') -Tag $r -Dica ($r.desc+"`nEstado: "+$estado+". Dependencias e reinicio podem exigir recuperacao manual.")
-        $cb.IsEnabled=(-not $global:ModoProtegido -and $consultou -and $f.Count -eq 1 -and $estado -eq 'Disabled')
+        $cb.IsEnabled=((Testar-PermissaoPrevia 'recurso') -and $consultou -and $f.Count -eq 1 -and $estado -eq 'Disabled')
         [void]$painel.Children.Add($cb)
     }
 }
@@ -378,7 +379,7 @@ function Mostrar-ConsultaUwp {
     $ui.InfoConsultaUwp.Text=$Mensagem
     $ui.BotaoAtualizarUwp.IsEnabled=($null -eq $Estado.trabalho -and $Fase -ne 'na_fila')
     $ui.BotaoCancelarUwp.IsEnabled=($Fase -in @('carregando','na_fila'))
-    $ui.BotaoRemoverUwp.IsEnabled=(-not $global:ModoProtegido -and $Fase -eq 'atualizado' -and -not $global:OperacaoUIAtiva)
+    $ui.BotaoRemoverUwp.IsEnabled=((Testar-PermissaoPrevia 'appx') -and $Fase -eq 'atualizado' -and -not $global:OperacaoUIAtiva)
     if ($Fase -ne 'atualizado') { $ui.ListaUwp.Children.Clear() }
 }
 
@@ -698,7 +699,7 @@ function Clique-Preset {
 
 # exporta os ajustes marcados num .json (pra repetir depois ou levar pra outro pc)
 function Clique-ExportarPlano {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'exportar'
     $selecionados = @(Get-Checkboxes $global:UI.ListaAjustes | Where-Object { $_.IsChecked })
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Marque os ajustes que quer salvar no plano.'
@@ -714,14 +715,15 @@ function Clique-ExportarPlano {
         criado  = (Get-Date -Format 'o')
         ajustes = @($selecionados | ForEach-Object { [string]$_.Tag.id })
     }
-    ConvertTo-Json -InputObject $plano -Depth 4 | Set-Content -Path $dlg.FileName -Encoding UTF8
+    Confirmar-PermissaoAlteracao 'exportar'
+    Gravar-JSONAtomico -Arquivo $dlg.FileName -Objeto $plano
     Log ('plano exportado com ' + $selecionados.Count + ' ajuste(s): ' + $dlg.FileName)
     Status ('plano exportado (' + $selecionados.Count + ' ajustes).')
 }
 
 # importa um plano exportado: so marca as checkboxes na lista, nao aplica nada
 function Clique-ImportarPlano {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     $dlg = New-Object Microsoft.Win32.OpenFileDialog
     $dlg.Filter = 'Plano OtimizadorPC (*.json)|*.json|Todos os arquivos (*.*)|*.*'
     if (-not $dlg.ShowDialog()) { return }
@@ -830,7 +832,7 @@ function Filtrar-Inventario {
 # Mudancas pequenas e explicitas no gerenciador; outras ficam nas ferramentas nativas.
 function Alterar-ItemInventario {
     param([string]$Grupo,$Item)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao $(switch ($Grupo) {'servicos' {'servico'} 'tarefas' {'tarefa'} 'runUsuario' {'registro-local'} default {'nao-catalogado'}})
     if ($null -eq $Item) { throw 'Selecione uma linha.' }
     if ($Grupo -eq 'servicos') {
         $permitidos = @($global:CatalogoTweaks.tweaks | ForEach-Object { $_.acoes } | Where-Object { $_.tipo -eq 'servico' } | ForEach-Object { $_.nome })
@@ -864,7 +866,7 @@ function Alterar-ItemInventario {
 function Clique-InventarioLocal {
     try {
         Status 'coletando inventario local...'
-        $resultado = @(Executar-ConsultaLocal -Titulo 'Inventario local' -Codigo ${function:Obter-InventarioLocal} -Parametros @{Protegido=[bool]$global:ModoProtegido})
+        $resultado = @(Executar-ConsultaLocal -Titulo 'Inventario local' -Codigo ${function:Obter-InventarioLocal} -Parametros @{Protegido=(-not (Testar-PermissaoPrevia 'exportar'))})
         if ($resultado.Count -ne 1 -or $null -eq $resultado[0]) { Status 'inventario cancelado.'; return }
         $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window
@@ -894,7 +896,7 @@ function Clique-InventarioLocal {
                 catch { Avisar 'Falha na exportacao' $_.Exception.Message }
             }
         })
-        if (-not $global:ModoProtegido) { [void]$barra.Children.Add($salvar) }
+        if (Testar-PermissaoPrevia 'exportar') { [void]$barra.Children.Add($salvar) }
         foreach ($atalho in @(
             @{ nome='Inicializacao'; comando='taskmgr.exe' },
             @{ nome='Servicos'; comando='services.msc' },
@@ -910,12 +912,12 @@ function Clique-InventarioLocal {
                 try { Start-Process -FilePath (Join-Path $env:SystemRoot ('System32\' + [string]$this.Tag)) -ErrorAction Stop | Out-Null }
                 catch { Avisar 'Falha ao abrir ferramenta' $_.Exception.Message }
             })
-            if (-not $global:ModoProtegido) { [void]$barra.Children.Add($botao) }
+            [void]$barra.Children.Add($botao)
         }
         $nota = New-Object System.Windows.Controls.TextBlock
         $nota.TextWrapping = 'Wrap'
         $nota.Text = 'Inventario com acoes limitadas e journal. Alteracoes nas ferramentas nativas nao entram no journal. Win32/MSI e AppX sao inventarios distintos; use as abas Desinstalar e Debloat para avaliar remocao. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
-        if ($global:ModoProtegido) { $nota.Text='Diagnostico local somente leitura. Exportacao e alteracoes indisponiveis. '+($dados.avisos -join ' | ') }
+        if (-not (Testar-PermissaoPrevia 'exportar')) { $nota.Text='Diagnostico local somente leitura. Exportacao e alteracoes indisponiveis. '+($dados.avisos -join ' | ') }
         $nota.Margin = '0,0,0,8'
         [System.Windows.Controls.DockPanel]::SetDock($nota,'Top')
         [void]$painel.Children.Add($nota)
@@ -935,7 +937,8 @@ function Clique-InventarioLocal {
             $grade.ItemsSource = @($dados.$grupo)
             $filtro.Tag = @{ dados=@($dados.$grupo); grade=$grade }
             $filtro.Add_TextChanged({ $this.Tag.grade.ItemsSource = @(Filtrar-Inventario $this.Tag.dados $this.Text) })
-            if (-not $global:ModoProtegido -and $grupo -in @('runUsuario','servicos','tarefas')) {
+            $idGrupo=switch ($grupo) {'runUsuario' {'registro-local'} 'servicos' {'servico'} 'tarefas' {'tarefa'} default {'nao-catalogado'}}
+            if (Testar-PermissaoPrevia $idGrupo) {
                 $acao = New-Object System.Windows.Controls.Button
                 $acao.Content = switch ($grupo) { 'runUsuario' {'Remover entrada Run selecionada'} 'servicos' {'Inicio manual (servicos do catalogo)'} 'tarefas' {'Desativar tarefa selecionada'} }
                 $acao.Margin='6'; $acao.Padding='8,4'
@@ -973,7 +976,7 @@ function Clique-InventarioLocal {
 
 # Exporta drivers de terceiros do Driver Store. Nunca instala ou remove drivers.
 function Clique-BackupDrivers {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'exportar'
     try {
         Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
         $escolher = New-Object System.Windows.Forms.FolderBrowserDialog
@@ -987,6 +990,7 @@ function Clique-BackupDrivers {
         try {
             Ocupado $true
             Status 'exportando drivers...'
+            Confirmar-PermissaoAlteracao 'exportar'
             New-Item -ItemType Directory -Path $pasta -ErrorAction Stop | Out-Null
             $drivers = @(Executar-ConsultaLocal -Titulo 'Exportando drivers' -Codigo { param([string]$Destino) Export-WindowsDriver -Online -Destination $Destino -ErrorAction Stop } -Parametros @{Destino=$pasta} -Mensagem 'Copiando drivers para a pasta escolhida. Nao interrompa a exportacao.' -SemCancelar)
             Log ('exportacao de drivers: ' + $pasta + ' (' + $drivers.Count + ' pacote(s) informado(s)).')
@@ -1214,7 +1218,7 @@ function Executar-ConsultaLocal {
 }
 
 function Clique-Medicoes {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'exportar'
     try {
         $escolha = Perguntar 'Comparativo do sistema' 'Sim: capturar a referencia antes dos ajustes. Nao: abrir uma referencia salva e comparar com a medicao atual.'
         $antes = $null
@@ -1248,7 +1252,7 @@ function Clique-Medicoes {
 }
 
 function Clique-VerificarRelease {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'download'
     try {
         $dados = @(Executar-ConsultaLocal -Titulo 'Consultando versao oficial' -Codigo ${function:Consultar-ReleaseOficial})
         if ($dados.Count -ne 1 -or $null -eq $dados[0]) { return }
@@ -1263,6 +1267,7 @@ function Clique-VerificarRelease {
         $salvar.Filter='Script PowerShell (*.ps1)|*.ps1'
         $salvar.FileName=('otimizadorpc-' + $tag + '.ps1')
         if ($salvar.ShowDialog()) {
+            Confirmar-PermissaoAlteracao 'download'
             [IO.File]::WriteAllBytes($salvar.FileName,[byte[]]$res[0].bytes)
             if ((Get-FileHash -LiteralPath $salvar.FileName -Algorithm SHA256).Hash -ne $res[0].hash) { throw 'Arquivo salvo com hash divergente.' }
             Avisar 'Download verificado' 'Script salvo; nenhuma atualizacao foi executada. SHA256 verifica integridade, nao substitui assinatura digital. Revise o codigo antes de executar.'
@@ -1271,7 +1276,7 @@ function Clique-VerificarRelease {
 }
 
 function Clique-CargaPadronizada {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'exportar'
     try {
         if (-not (Perguntar 'Teste de carga' 'Executar tres rodadas de SHA256 e copia de memoria? Feche outras tarefas para comparacao. Este teste sintetico nao representa FPS ou desempenho geral.')) { return }
         $res=@(Executar-ConsultaLocal -Titulo 'Teste de carga padronizada' -Codigo ${function:Medir-CargaPadronizada})
@@ -1330,7 +1335,7 @@ function Clique-MonitorSistema {
         $dados=$med[0]
         $linhas = ($dados.serie | Format-Table -AutoSize | Out-String -Width 100)
         $msg = $linhas + "`nCPU media: $($dados.cpuMedia)% | RAM usada: $($dados.ramUsadaGB) GB | Disco livre: $($dados.discoLivreGB) GB"
-        if ($global:ModoProtegido) { Avisar 'Monitor - diagnostico local' $msg; return }
+        if (-not (Testar-PermissaoPrevia 'exportar')) { Avisar 'Monitor - diagnostico local' $msg; return }
         if (Perguntar 'Monitor - salvar relatorio?' ($msg + "`nExportar amostras em JSON?")) {
             $salvar=New-Object Microsoft.Win32.SaveFileDialog
             $salvar.Filter='Relatorio JSON (*.json)|*.json'; $salvar.FileName='otimizadorpc-monitor.json'
@@ -1341,9 +1346,9 @@ function Clique-MonitorSistema {
 
 # Um unico controlador de cliques mutaveis evita reentrada pelo Dispatcher.
 function Executar-OperacaoUI {
-    param([scriptblock]$Acao)
+    param([scriptblock]$Acao,[string]$Id)
     if ($global:OperacaoUIAtiva) { return }
-    if ($global:ModoProtegido) { Avisar 'Modo protegido' 'Alteracoes indisponiveis. Consulte o TI.'; return }
+    try {Confirmar-PermissaoAlteracao $Id} catch {Avisar 'Operacao indisponivel' $_.Exception.Message;return}
     $global:OperacaoUIAtiva = $true
     $janela = $global:Janela
     $antes = $janela.IsEnabled
@@ -1621,7 +1626,10 @@ function Mostrar-EstadoPainel {
         return
     }
     $botoes=if ($s.tipo -eq 'Ajustes') {@('BotaoAplicarAjustes','BotaoPresetSeguro','BotaoPresetBalanceado','BotaoPresetAgressivo','BotaoPerfilEssencial','BotaoPerfilGamer','BotaoPerfilNotebook','BotaoPerfilPrivacidade','BotaoPerfilCorporativo','BotaoPerfilRecomendado','BotaoImportarPlano','BotaoExportarPlano')} else {@('BotaoInstalarRecursos')}
-    foreach ($nome in $botoes) {$ui[$nome].IsEnabled=$habilitar}
+    foreach ($nome in $botoes) {
+        $id=if ($s.tipo -eq 'Recursos') {'recurso'} elseif ($nome -eq 'BotaoExportarPlano') {'exportar'} else {'estado-local'}
+        $ui[$nome].IsEnabled=($habilitar -and (Testar-PermissaoPrevia $id))
+    }
     if ($Fase -ne 'atualizado') {
         $s.resultados=@{}
         foreach ($cb in @(Get-Checkboxes $ui[('Lista'+$s.tipo)])) {
@@ -1698,7 +1706,7 @@ function Solicitar-ConsultaPainel {
     param([ValidateSet('Ajustes','Recursos','Atualizacoes','Historico')][string]$Tipo,[switch]$Forcar,[scriptblock]$Codigo=$null,[int]$LimiteSegundos=60)
     $s=$global:ConsultasPaineis[$Tipo]
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
-    if ($Tipo -in @('Recursos','Historico') -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel no modo protegido.';return}
+    if ($Tipo -eq 'Historico' -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel no modo protegido.';return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
     if ($global:FilaConsultas.Contains($Tipo)) {return}
     if (-not (Testar-VagaConsulta)) {Adicionar-ConsultaFila $Tipo $s 'Solicitar-ConsultaPainel' @{Tipo=$Tipo;Forcar=$true;Codigo=$Codigo;LimiteSegundos=$LimiteSegundos} 'Mostrar-EstadoPainel';return}
@@ -1772,6 +1780,28 @@ function Finalizar-ConsultasPendentes {
     return $pendentes
 }
 
+# Capability preview is advisory. The executor always checks live context.
+function Atualizar-CapacidadesOperacoes {
+    $mapa=@{
+        BotaoInstalarApps='winget'; BotaoAtualizarSelecionados='winget'; BotaoAtualizarTudo='consulta-winget'; BotaoMarcarPadroes='winget'
+        BotaoApagarRastros='rastros'; BotaoMarcarRastros='rastros'; BotaoDesmarcarRastros='rastros'
+        BotaoCriarRestore='restore'; BotaoBackupDrivers='exportar'; BotaoMedicoes='exportar'; BotaoCarga='exportar'; BotaoVerificarRelease='download'
+        BotaoLimparTemp='temp'; BotaoLimparDns='dns'; BotaoSincronizarHora='hora'
+        BotaoFixIntegridade='reparo'; BotaoLimpezaDism='reparo'; BotaoVerificarIntegridade='reparo'
+        BotaoVerificarDisco='diagnostico-admin'; BotaoAnalisarComponentes='diagnostico-admin'; BotaoDiagnosticarIntegridade='diagnostico-admin'; BotaoConsultarEnergia='diagnostico-admin'
+    }
+    foreach ($nome in $mapa.Keys) {
+        $b=$global:UI[$nome]
+        if (-not $b) {continue}
+        $d=Avaliar-PermissaoOperacao $mapa[$nome] -Previa
+        if ($d.estado -ne 'permitido') {
+            $b.IsEnabled=$false
+            $b.ToolTip=$d.motivo+' '+$d.proximo
+            [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($b,$true)
+        }
+    }
+}
+
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
     Inicializar-FilaConsultas
@@ -1812,7 +1842,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoPreviaEssencial','BotaoAnalisarArmazenamento','BotaoBuscarAtualizacoes','BotaoInicioStartup','BotaoInicioStorage','BotaoInicioUpdate','BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
+        $permitidos=@('BotaoFixUpdate','BotaoFixRede','BotaoFixWinget','BotaoResetUpdate2','BotaoLimpezaDisco','BotaoRecuperarIcones','BotaoOtimizarVolume','BotaoAplicarAtualizacoes','BotaoPreviaEssencial','BotaoAnalisarArmazenamento','BotaoBuscarAtualizacoes','BotaoInicioStartup','BotaoInicioStorage','BotaoInicioUpdate','BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
@@ -1821,6 +1851,14 @@ function Ligar-Tudo {
                 [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($controle,$true)
             }
         }
+        $global:UI.BotaoFixUpdate.Add_Click({ Resetar-WindowsUpdate })
+        $global:UI.BotaoFixRede.Add_Click({ Resetar-Rede })
+        $global:UI.BotaoFixWinget.Add_Click({ Instalar-Winget })
+        $global:UI.BotaoResetUpdate2.Add_Click({ Resetar-WindowsUpdate })
+        $global:UI.BotaoLimpezaDisco.Add_Click({ Limpeza-Disco })
+        $global:UI.BotaoRecuperarIcones.Add_Click({ Recuperar-CacheIcones })
+        $global:UI.BotaoOtimizarVolume.Add_Click({ Abrir-OtimizacaoVolume })
+        $global:UI.BotaoAplicarAtualizacoes.Add_Click({ Clique-HistoricoAtualizacoes })
         $global:UI.BotaoAnalisarArmazenamento.Add_Click({ Clique-AnalisarArmazenamento })
         $global:UI.BotaoBuscarAtualizacoes.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
         $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
@@ -1841,6 +1879,7 @@ function Ligar-Tudo {
         Atualizar-DetalhePrograma
         Montar-PaginaAjustes
         Montar-PaginaInstalar
+        Montar-PaineisLegados
         Trocar-Pagina 'PaginaInicio'
         Status 'Modo protegido: somente consulta; alteracoes e exportacoes bloqueadas.'
         return
@@ -1861,12 +1900,12 @@ function Ligar-Tudo {
     $global:UI.BotaoPerfilPrivacidade.Add_Click({ Clique-Preset 'privacidade' })
     $global:UI.BotaoPerfilCorporativo.Add_Click({ Clique-Preset 'corporativo' })
     $global:UI.BotaoPerfilRecomendado.Add_Click({ Clique-Preset 'recomendado' })
-    $global:UI.BotaoAplicarAjustes.Add_Click({ Executar-OperacaoUI { Clique-AplicarAjustes } })
+    $global:UI.BotaoAplicarAjustes.Add_Click({ Executar-OperacaoUI -Id 'estado-local' -Acao { Clique-AplicarAjustes } })
     $global:UI.BotaoExportarPlano.Add_Click({ Clique-ExportarPlano })
     $global:UI.BotaoImportarPlano.Add_Click({ Clique-ImportarPlano })
 
     # pagina debloat
-    $global:UI.BotaoRemoverUwp.Add_Click({ Executar-OperacaoUI { Clique-RemoverUwp } })
+    $global:UI.BotaoRemoverUwp.Add_Click({ Executar-OperacaoUI -Id 'appx' -Acao { Clique-RemoverUwp } })
 
     # pagina desinstalar
     $global:UI.FiltroDesinstalar.Add_TextChanged({ if ($null -ne $global:ProgramasInstalados) { Atualizar-ListaProgramas } })
@@ -1876,26 +1915,26 @@ function Ligar-Tudo {
     $global:UI.BotaoDetalhesPrograma.Add_Click({ Clique-DetalhesPrograma })
     Atualizar-DetalhePrograma
     $global:UI.BotaoAtualizarProgramas.Add_Click({ Carregar-Programas -Forcar })
-    $global:UI.BotaoDesinstalarProg.Add_Click({ Executar-OperacaoUI { Clique-DesinstalarProg } })
-    $global:UI.BotaoVarrerRastros.Add_Click({ Executar-OperacaoUI { Clique-VarrerRastros } })
+    $global:UI.BotaoDesinstalarProg.Add_Click({ Executar-OperacaoUI -Id 'desinstalar' -Acao { Clique-DesinstalarProg } })
+    $global:UI.BotaoVarrerRastros.Add_Click({ Executar-OperacaoUI -Id 'rastros' -Acao { Clique-VarrerRastros } })
     $global:UI.BotaoMarcarRastros.Add_Click({ Marcar-Rastros $true })
     $global:UI.BotaoDesmarcarRastros.Add_Click({ Marcar-Rastros $false })
-    $global:UI.BotaoApagarRastros.Add_Click({ Executar-OperacaoUI { Clique-ApagarRastros } })
+    $global:UI.BotaoApagarRastros.Add_Click({ Executar-OperacaoUI -Id 'rastros' -Acao { Clique-ApagarRastros } })
 
     # pagina instalar
-    $global:UI.BotaoInstalarApps.Add_Click({ Executar-OperacaoUI { Clique-InstalarApps } })
-    $global:UI.BotaoAtualizarTudo.Add_Click({ Executar-OperacaoUI { Atualizar-Tudo } })
-    $global:UI.BotaoAtualizarSelecionados.Add_Click({ Executar-OperacaoUI { Clique-InstalarApps -Operacao upgrade } })
+    $global:UI.BotaoInstalarApps.Add_Click({ Executar-OperacaoUI -Id 'winget' -Acao { Clique-InstalarApps } })
+    $global:UI.BotaoAtualizarTudo.Add_Click({ Executar-OperacaoUI -Id 'consulta-winget' -Acao { Atualizar-Tudo } })
+    $global:UI.BotaoAtualizarSelecionados.Add_Click({ Executar-OperacaoUI -Id 'winget' -Acao { Clique-InstalarApps -Operacao upgrade } })
     $global:UI.BotaoMarcarPadroes.Add_Click({
         foreach ($cb in (Get-Checkboxes $global:UI.ListaApps)) { $cb.IsChecked = [bool]$cb.Tag.padrao }
         Log 'apps padroes marcados.'
     })
 
     # pagina config
-    $global:UI.BotaoInstalarRecursos.Add_Click({ Executar-OperacaoUI { Clique-InstalarRecursos } })
-    $global:UI.BotaoFixUpdate.Add_Click({ Executar-OperacaoUI { Resetar-WindowsUpdate } })
-    $global:UI.BotaoFixRede.Add_Click({ Executar-OperacaoUI { Resetar-Rede } })
-    $global:UI.BotaoFixWinget.Add_Click({ Executar-OperacaoUI { Instalar-Winget } })
+    $global:UI.BotaoInstalarRecursos.Add_Click({ Executar-OperacaoUI -Id 'recurso' -Acao { Clique-InstalarRecursos } })
+    $global:UI.BotaoFixUpdate.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Resetar-WindowsUpdate } })
+    $global:UI.BotaoFixRede.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Resetar-Rede } })
+    $global:UI.BotaoFixWinget.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Instalar-Winget } })
     $global:UI.BotaoTema.Add_Click({
         try {
             $novo=if ($global:TemaOtimizador -eq 'claro') { 'escuro' } else { 'claro' }
@@ -1906,30 +1945,30 @@ function Ligar-Tudo {
 
     # pagina atualizacoes
     $global:UI.BotaoAplicarAtualizacoes.Add_Click({ Clique-HistoricoAtualizacoes })
-    $global:UI.BotaoFixIntegridade.Add_Click({ Executar-OperacaoUI { Verificar-Integridade } })
+    $global:UI.BotaoFixIntegridade.Add_Click({ Executar-OperacaoUI -Id 'reparo' -Acao { Verificar-Integridade } })
     $global:UI.BotaoBuscarAtualizacoes.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
-    $global:UI.BotaoResetUpdate2.Add_Click({ Executar-OperacaoUI { Resetar-WindowsUpdate } })
+    $global:UI.BotaoResetUpdate2.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Resetar-WindowsUpdate } })
 
     # pagina manutencao
-    $global:UI.BotaoLimparTemp.Add_Click({ Executar-OperacaoUI { Limpar-Temporarios } })
-    $global:UI.BotaoLimparDns.Add_Click({ Executar-OperacaoUI { Limpar-DNS } })
-    $global:UI.BotaoSincronizarHora.Add_Click({ Executar-OperacaoUI { Sincronizar-Hora } })
-    $global:UI.BotaoBackupDrivers.Add_Click({ Executar-OperacaoUI { Clique-BackupDrivers } })
+    $global:UI.BotaoLimparTemp.Add_Click({ Executar-OperacaoUI -Id 'temp' -Acao { Limpar-Temporarios } })
+    $global:UI.BotaoLimparDns.Add_Click({ Executar-OperacaoUI -Id 'dns' -Acao { Limpar-DNS } })
+    $global:UI.BotaoSincronizarHora.Add_Click({ Executar-OperacaoUI -Id 'hora' -Acao { Sincronizar-Hora } })
+    $global:UI.BotaoBackupDrivers.Add_Click({ Executar-OperacaoUI -Id 'exportar' -Acao { Clique-BackupDrivers } })
     $global:UI.BotaoAnalisarArmazenamento.Add_Click({ Clique-AnalisarArmazenamento })
-    $global:UI.BotaoRecuperarIcones.Add_Click({ Executar-OperacaoUI { Recuperar-CacheIcones } })
-    $global:UI.BotaoLimpezaDisco.Add_Click({ Executar-OperacaoUI { Limpeza-Disco } })
-    $global:UI.BotaoVerificarDisco.Add_Click({ Executar-OperacaoUI { Verificar-Disco } })
-    $global:UI.BotaoLimpezaDism.Add_Click({ Executar-OperacaoUI { Manutencao-DISM } })
-    $global:UI.BotaoAnalisarComponentes.Add_Click({ Executar-OperacaoUI { Analisar-ComponentesWindows } })
-    $global:UI.BotaoDiagnosticarIntegridade.Add_Click({ Executar-OperacaoUI { Diagnosticar-Integridade } })
-    $global:UI.BotaoConsultarEnergia.Add_Click({ Executar-OperacaoUI { Consultar-Energia } })
-    $global:UI.BotaoOtimizarVolume.Add_Click({ Executar-OperacaoUI { Abrir-OtimizacaoVolume } })
-    $global:UI.BotaoVerificarIntegridade.Add_Click({ Executar-OperacaoUI { Verificar-Integridade } })
+    $global:UI.BotaoRecuperarIcones.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Recuperar-CacheIcones } })
+    $global:UI.BotaoLimpezaDisco.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Limpeza-Disco } })
+    $global:UI.BotaoVerificarDisco.Add_Click({ Executar-OperacaoUI -Id 'diagnostico-admin' -Acao { Verificar-Disco } })
+    $global:UI.BotaoLimpezaDism.Add_Click({ Executar-OperacaoUI -Id 'reparo' -Acao { Manutencao-DISM } })
+    $global:UI.BotaoAnalisarComponentes.Add_Click({ Executar-OperacaoUI -Id 'diagnostico-admin' -Acao { Analisar-ComponentesWindows } })
+    $global:UI.BotaoDiagnosticarIntegridade.Add_Click({ Executar-OperacaoUI -Id 'diagnostico-admin' -Acao { Diagnosticar-Integridade } })
+    $global:UI.BotaoConsultarEnergia.Add_Click({ Executar-OperacaoUI -Id 'diagnostico-admin' -Acao { Consultar-Energia } })
+    $global:UI.BotaoOtimizarVolume.Add_Click({ Executar-OperacaoUI -Id 'nativo' -Acao { Abrir-OtimizacaoVolume } })
+    $global:UI.BotaoVerificarIntegridade.Add_Click({ Executar-OperacaoUI -Id 'reparo' -Acao { Verificar-Integridade } })
 
     # pagina desfazer
-    $global:UI.BotaoDesfazer.Add_Click({ Executar-OperacaoUI { Clique-Desfazer } })
-    $global:UI.BotaoDesfazerUma.Add_Click({ Executar-OperacaoUI { Clique-Desfazer -UmaAcao } })
-    $global:UI.BotaoConfirmarManual.Add_Click({ Executar-OperacaoUI { Clique-ConfirmarManual } })
+    $global:UI.BotaoDesfazer.Add_Click({ Executar-OperacaoUI -Id 'estado-local' -Acao { Clique-Desfazer } })
+    $global:UI.BotaoDesfazerUma.Add_Click({ Executar-OperacaoUI -Id 'estado-local' -Acao { Clique-Desfazer -UmaAcao } })
+    $global:UI.BotaoConfirmarManual.Add_Click({ Executar-OperacaoUI -Id 'estado-local' -Acao { Clique-ConfirmarManual } })
     $global:UI.BotaoDetalhesSessao.Add_Click({ Clique-DetalhesSessao })
 
 
@@ -1944,7 +1983,7 @@ function Ligar-Tudo {
     $global:UI.BotaoCarga.Add_Click({ Clique-CargaPadronizada })
     $global:UI.BotaoVerificarRelease.Add_Click({ Clique-VerificarRelease })
     $global:UI.BotaoCriarRestore.Add_Click({
-        Executar-OperacaoUI { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false } }
+        Executar-OperacaoUI -Id 'restore' -Acao { Ocupado $true; try { [void](Criar-PontoRestauracao) } finally { Ocupado $false } }
     })
 
     # monta conteudo dinamico
@@ -1952,5 +1991,6 @@ function Ligar-Tudo {
     # Debloat consulta pacotes somente ao abrir a aba.
     Montar-PaginaInstalar
     Montar-PaineisLegados
+    Atualizar-CapacidadesOperacoes
     Trocar-Pagina 'PaginaInicio'
 }

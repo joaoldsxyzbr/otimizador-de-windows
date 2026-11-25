@@ -157,8 +157,8 @@ function Atualizar-DetalhePrograma {
     $selecionados=@(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     $global:UI.BotaoDetalhesPrograma.IsEnabled=($selecionados.Count -eq 1)
     $bloqueados=@($selecionados | Where-Object { -not $_.classificacao.podeDesinstalar })
-    $global:UI.BotaoDesinstalarProg.IsEnabled=(-not $global:ModoProtegido -and $selecionados.Count -gt 0 -and $bloqueados.Count -eq 0)
-    $global:UI.BotaoVarrerRastros.IsEnabled=(-not $global:ModoProtegido -and $selecionados.Count -eq 1 -and $selecionados[0].classificacao.risco -ne 'Bloqueado')
+    $global:UI.BotaoDesinstalarProg.IsEnabled=((Testar-PermissaoPrevia 'desinstalar') -and $selecionados.Count -gt 0 -and $bloqueados.Count -eq 0)
+    $global:UI.BotaoVarrerRastros.IsEnabled=((Testar-PermissaoPrevia 'rastros') -and $selecionados.Count -eq 1 -and $selecionados[0].classificacao.risco -ne 'Bloqueado')
     if ($selecionados.Count -eq 1) {
         $pr=$selecionados[0]; $info=$pr.classificacao
         $global:UI.DetalhePrograma.Text=('{0}: {1}. {2}' -f $info.categoria,$info.finalidade,$info.motivo)
@@ -290,7 +290,7 @@ function Confirmar-ExecutavelDesinstalacao {
 
 function Desinstalar-Programa {
     param($Prog)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'desinstalar'
     $info = Validar-ProtecaoPrograma $Prog -Desinstalar
     if ([string]$Prog.chavePs -notmatch '^Microsoft\.PowerShell\.Core\\Registry::HKEY_LOCAL_MACHINE\\SOFTWARE\\(?:WOW6432Node\\)?Microsoft\\Windows\\CurrentVersion\\Uninstall\\[^\\]+$') {
         throw 'Entrada por usuario ou fora da raiz de desinstalacao confiavel. Use Aplicativos instalados do Windows.'
@@ -323,7 +323,7 @@ function Desinstalar-Programa {
     $msg = ('Executar o desinstalador de {0}?{1}{1}{2}{1}{3}{1}{1}Confirme que reconhece este arquivo.' -f $nome,[Environment]::NewLine,$exe,$argumentos)
     if (-not (Perguntar 'Confirmar desinstalador' $msg)) { throw 'Desinstalacao cancelada pelo usuario.' }
     # Revalidate after the confirmation dialog; no stale identity or changed binary.
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'desinstalar'
     [void](Validar-ProtecaoPrograma $Prog -Desinstalar)
     if ($hashExe -and (Confirmar-ExecutavelDesinstalacao $exe) -cne $hashExe) {throw 'Executavel alterado desde a confirmacao; operacao cancelada.'}
     $params = @{ FilePath=$exe; Wait=$true; PassThru=$true; ErrorAction='Stop' }
@@ -336,7 +336,7 @@ function Desinstalar-Programa {
 }
 
 function Clique-DesinstalarProg {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'desinstalar'
     $selecionados = @(Obter-Selecionados $global:UI.ListaProgramas $global:ProgramasExibidos)
     if ($selecionados.Count -eq 0) {
         Avisar 'Nada selecionado' 'Escolha na lista o(s) programa(s) que quer desinstalar.'
@@ -724,7 +724,7 @@ function Clique-VarrerRastros {
 
 function Apagar-Rastro {
     param($Rastro, [string]$PastaSessao, [int]$Num)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'rastros'
 
     # servico orfao: para e desativa (nunca apaga; desfazer restaura tipo e estado)
     if ($Rastro.tipo -eq 'servico') {
@@ -760,8 +760,9 @@ function Apagar-Rastro {
             existiaDepois = $false; tipoDepois = $leitura.tipo
             valorDepoisEstruturado = [pscustomobject]@{ valor = $null }
         }
-        Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='registro';caminho=$Rastro.chave;nome=$Rastro.valor})
+        Confirmar-NovaAcao ([pscustomobject]@{tipo='registro';caminho=$Rastro.chave;nome=$Rastro.valor;remover=$true})
         Registrar-Jornal $entrada
+        Confirmar-PermissaoAlteracao 'rastros'
         if (-not (Registro-Corresponde (Ler-ValorRegistro $Rastro.chave $Rastro.valor) $true $leitura.tipo $leitura.valor)) {throw 'Entrada Run mudou; preservada.'}
         Remove-ItemProperty -LiteralPath $Rastro.chave -Name $Rastro.valor -ErrorAction Stop
         if ((Ler-ValorRegistro $Rastro.chave $Rastro.valor).existia) {throw 'Remocao Run nao confirmada.'}
@@ -782,6 +783,7 @@ function Apagar-Rastro {
         if ([string]$bruto.tipo -notin @('String','ExpandString')) {throw 'Tipo PATH nao suportado.'}
         $entrada=[pscustomobject]@{ tipo = 'path-entrada'; escopo = $Rastro.escopo; entrada = $Rastro.entrada; valorAnterior = $bruto.valor; valorDepois = $nova; tipoAnterior = [string]$bruto.tipo }
         Registrar-Jornal $entrada
+        Confirmar-PermissaoAlteracao 'path'
         $releitura=Obter-PathBruto $Rastro.escopo
         if (-not $releitura -or $releitura.valor -cne $bruto.valor -or $releitura.tipo -ne $bruto.tipo) {throw 'PATH mudou durante preparacao; preservado.'}
         $ck = $null
@@ -815,6 +817,7 @@ function Apagar-Rastro {
         [void](Confirmar-BackupQuarentena $arqReg $hash)
         $entrada=[pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg;hashBackup=$hash }
         Registrar-Jornal $entrada
+        Confirmar-PermissaoAlteracao 'rastros'
         Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
         if (Test-Path -LiteralPath $Rastro.caminho) {throw 'Remocao de chave nao confirmada.'}
         Confirmar-EfeitoJournal $entrada
@@ -830,6 +833,7 @@ function Apagar-Rastro {
         $hash=if ($origem.PSIsContainer) {Obter-HashPastaQuarentena $Rastro.caminho} else {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash}
         $entrada=[pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino;hashBackup=$hash;pasta=[bool]$origem.PSIsContainer }
         Registrar-Jornal $entrada
+        Confirmar-PermissaoAlteracao 'rastros'
         if (-not (Caminho-RastroSeguro $Rastro.caminho)) {throw 'Origem mudou durante preparacao.'}
         $releitura=if ($origem.PSIsContainer) {Obter-HashPastaQuarentena $Rastro.caminho} else {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash}
         if ($releitura -ine $hash) {throw 'Conteudo mudou durante preparacao; preservado.'}
@@ -875,7 +879,7 @@ function Confirmar-ProgramaAusenteParaLimpeza {
 }
 
 function Clique-ApagarRastros {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'rastros'
     $lb = $global:UI.ListaRastros
     $selecionados = @(Obter-RastrosMarcados $lb)
     Log ('limpeza de rastros: {0} marcado(s) de {1} exibido(s).' -f $selecionados.Count, $lb.Items.Count)

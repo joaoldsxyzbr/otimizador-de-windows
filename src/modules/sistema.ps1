@@ -35,12 +35,14 @@ function Detectar-AmbienteTrabalho {
                 if ($v.EnrollmentState -eq 1 -and ($v.ProviderID -or $v.EnrollmentType)) { $achados+='Sinal de inscricao de gerenciamento de dispositivo (MDM).'; break }
             }
         }
+    } catch { $achados+='Inconclusivo: consulta de inscricao MDM indisponivel.' }
+    try {
         $wu='HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
         if (Test-Path -LiteralPath $wu -ErrorAction Stop) {
             $v=Get-ItemProperty -LiteralPath $wu -ErrorAction Stop
             if ($v.WUServer -or $v.WUStatusServer -or $v.SetPolicyDrivenUpdateSourceForQualityUpdates -eq 1) { $achados+='Sinal de politica de atualizacao organizacional.' }
         }
-    } catch { $achados+='Inconclusivo: consulta de gerenciamento/politicas indisponivel.' }
+    } catch { $achados+='Inconclusivo: consulta de politica de atualizacao indisponivel.' }
     try {
         $agentes=@(Get-Service -ErrorAction Stop | Where-Object {Testar-AgenteGerenciamento $_})
         if ($agentes.Count -gt 0) { $achados+='Sinal de agente de gerenciamento ou seguranca de endpoint organizacional.' }
@@ -60,12 +62,14 @@ function Obter-SinaisRedeGerenciada {
                 if ($null -ne $v.ProxySettingsPerUser -or $null -ne $v.ProxyEnable -or $v.ProxyServer -or $v.AutoConfigURL) { $sinais+='Sinal de politica de proxy.'; break }
             }
         }
+    } catch { $sinais+='Inconclusivo: consulta de politica de proxy indisponivel.' }
+    try {
         $p='HKLM:\SOFTWARE\Policies\Microsoft\Cryptography\AutoEnrollment'
         if (Test-Path -LiteralPath $p -ErrorAction Stop) {
             $v=Get-ItemProperty -LiteralPath $p -ErrorAction Stop
             if ($v.AEPolicy -gt 0) { $sinais+='Sinal de politica de inscricao automatica de certificados.' }
         }
-    } catch { $sinais+='Inconclusivo: politicas de rede/certificados.' }
+    } catch { $sinais+='Inconclusivo: consulta de politica de certificados indisponivel.' }
     # VPN pode ser pessoal; sua mera presenca nao classifica a maquina.
     return @($sinais | Sort-Object -Unique)
 }
@@ -220,24 +224,26 @@ function Obter-ResumoDriversPnP {
 function Resolver-ModoOtimizador {
     param([bool]$Admin,[bool]$Diagnostico,$Sinais,[bool]$Pessoal=$false)
     if ($Diagnostico -or -not $Admin) { return 'Diagnostico' }
-    if (@($Sinais | Where-Object {$_}).Count -gt 0) { return 'Corporativo/Protetivo' }
     if (-not $Pessoal) { return 'Diagnostico' }
-    return 'Pessoal (sem sinais detectados)'
+    return 'Autorizacao por operacao'
 }
 
 function Inicializar-ModoOtimizador {
     param([switch]$Diagnostico,[switch]$Pessoal)
     $global:ModoProtegido=$true
-    $global:AmbienteTrabalho=@(Detectar-AmbienteTrabalho)
+    $global:ContextoAutorizacaoInicial=$null
+    $sinais=@();$confirmados=$false
+    try {$sinais=@(Detectar-AmbienteTrabalho);$confirmados=$true}
+    catch {$sinais=@('Inconclusivo: consulta de gerenciamento indisponivel.')}
+    $global:AmbienteTrabalho=$sinais
     $ctx=Obter-ContextoAjustes
-    if (-not $ctx -or -not $ctx.cliente -or $ctx.build -lt 10240) { $global:AmbienteTrabalho+= 'Windows cliente compativel nao confirmado; modo protegido.' }
-    $id=[Security.Principal.WindowsIdentity]::GetCurrent()
-    try {
-        $principal=New-Object Security.Principal.WindowsPrincipal($id)
-        $admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    } finally { $id.Dispose() }
-    $global:ModoOtimizador=Resolver-ModoOtimizador -Admin $admin -Diagnostico ([bool]$Diagnostico) -Sinais $global:AmbienteTrabalho -Pessoal ([bool]$Pessoal)
-    $global:ModoProtegido=($global:ModoOtimizador -ne 'Pessoal (sem sinais detectados)')
+    $id=Obter-IdentidadeAutorizacao
+    $usuario=if ($id.admin -and $Pessoal -and -not $Diagnostico) {Testar-UsuarioInterativo $id.sid} else {$false}
+    $global:ContextoAutorizacaoInicial=@{identidade=$id;windows=$ctx;diagnostico=[bool]$Diagnostico;consentiu=[bool]$Pessoal;usuarioCorreto=$usuario;sinais=$sinais;sinaisConfirmados=$confirmados}
+    $global:ModoOtimizador=Resolver-ModoOtimizador -Admin $id.admin -Diagnostico ([bool]$Diagnostico) -Sinais $sinais -Pessoal ([bool]$Pessoal)
+    # This flag denotes an explicit read-only session or missing base privilege, NOT PC classification.
+    $global:ModoProtegido=($global:ModoOtimizador -eq 'Diagnostico' -or -not $id.visaoCorreta -or -not $ctx -or -not $ctx.cliente -or $ctx.build -lt 10240)
+    if ($global:ModoProtegido) {$global:ModoOtimizador='Diagnostico'}
 }
 
 # Recomendacoes conservadoras, sem modificar configuracoes.
@@ -333,7 +339,7 @@ function Mostrar-SnapshotInicio {
     $UI.InfoDisco.Text=if ($disco -and $disco.Size -gt 0 -and $null -ne $disco.FreeSpace -and $disco.FreeSpace -ge 0 -and $disco.FreeSpace -le $disco.Size) {('{0}: {1:N1} GB livres de {2:N1} GB' -f $env:SystemDrive,($disco.FreeSpace/1GB),($disco.Size/1GB))} else {'Indisponivel'}
     $UI.InfoUptime.Text=if ($os -and $os.LastBootUpTime) {$up=$Dados.data-$os.LastBootUpTime; ('{0}d {1}h {2}min' -f $up.Days,$up.Hours,$up.Minutes)} else {'Indisponivel'}
     $UI.InfoRestore.Text=if ($null -eq $Dados.pontos) {'estado da restauracao indisponivel'} elseif ($Dados.pontos -gt 0) {('{0} ponto(s) listado(s); protecao atual nao confirmada' -f $Dados.pontos)} else {'sem pontos de restauracao ainda'}
-    $UI.InfoAmbiente.Text=if (@($global:AmbienteTrabalho | Where-Object {$_}).Count) {$global:ModoOtimizador+': '+($global:AmbienteTrabalho -join ' | ')} else {$global:ModoOtimizador+' - nenhum sinal consultado; nao comprova ausencia de gerenciamento.'}
+    $UI.InfoAmbiente.Text=if (@($global:AmbienteTrabalho | Where-Object {$_}).Count) {$global:ModoOtimizador+' - indicadores por operacao: '+($global:AmbienteTrabalho -join ' | ')} else {$global:ModoOtimizador+' - nenhum sinal consultado; nao comprova ausencia de gerenciamento.'}
     $UI.InfoDiagnostico.Text=Obter-DiagnosticoLocal $os $disco $Dados.inicio $Dados.reinicio $Dados.bateria $Dados.data
 }
 

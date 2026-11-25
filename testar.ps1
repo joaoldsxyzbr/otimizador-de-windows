@@ -256,6 +256,7 @@ $testeJournal = Join-Path ([System.IO.Path]::GetTempPath()) ('otimizadorpc-teste
 try {
     New-Item -ItemType Directory -Path $testeJournal -ErrorAction Stop | Out-Null
     . (Join-Path $raiz 'src\modules\comum.ps1')
+        . (Join-Path $raiz 'testes\contexto-autorizacao.ps1')
     . (Join-Path $raiz 'src\modules\motor.ps1')
     $arquivoTeste = Join-Path $testeJournal 'sessao.json'
     Gravar-JSONAtomico -Arquivo $arquivoTeste -Objeto @{ itens = @(@{ tipo = 'teste'; estadoReversao = 'em_andamento' }) }
@@ -569,6 +570,7 @@ try {
     if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
         & {
             . (Join-Path $raiz 'src\modules\comum.ps1')
+        . (Join-Path $raiz 'testes\contexto-autorizacao.ps1')
             $tmpAcl = Join-Path ([IO.Path]::GetTempPath()) ('otimizadorpc-acl-' + [guid]::NewGuid().ToString('N'))
             try {
                 New-Item -ItemType Directory -Path $tmpAcl -ErrorAction Stop | Out-Null
@@ -618,6 +620,7 @@ try {
         )
         $script:appxJournal = @()
         function Log { param($Mensagem,[switch]$Erro) if ($Erro) { throw $Mensagem } }
+        function Confirmar-PoliticaAppxLocal {}
         function Testar-AppxCatalogado { param($Nome) return ($Nome -eq 'Microsoft.Example') }
         function Get-AppxPackage { [CmdletBinding()] param() return $script:appxTeste }
         function Registrar-Jornal { param($Item) $script:appxJournal += $Item }
@@ -681,6 +684,7 @@ Secao 'progresso em lote'
 try {
     & {
         . (Join-Path $raiz 'src\modules\comum.ps1')
+        . (Join-Path $raiz 'testes\contexto-autorizacao.ps1')
         $estado = @{ cancelado=$false; atual=0; total=2; janela=$null }
         if (-not (Continuar-ProgressoLote $estado 'primeiro') -or $estado.atual -ne 1) { throw 'Progresso inicial incorreto.' }
         $estado.cancelado=$true
@@ -718,6 +722,7 @@ Secao 'temas'
 try {
     & {
         . (Join-Path $raiz 'src\modules\comum.ps1')
+        . (Join-Path $raiz 'testes\contexto-autorizacao.ps1')
         Add-Type -AssemblyName PresentationFramework -ErrorAction Stop
         $texto=Get-Content -LiteralPath (Join-Path $raiz 'src\ui\principal.xaml') -Raw -Encoding UTF8
         foreach ($tema in @('escuro','claro')) {
@@ -914,7 +919,7 @@ try {
 # ---- decisao conservadora e motor protegido ----
 Secao 'modo corporativo'
 try {
-    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Corporativo/Protetivo' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @() $true) -ne 'Pessoal (sem sinais detectados)' -or (Resolver-ModoOtimizador $true $false @('MDM') $true) -ne 'Corporativo/Protetivo') { throw 'Decisao de modo incorreta.' }
+    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @() $true) -ne 'Autorizacao por operacao' -or (Resolver-ModoOtimizador $true $false @('MDM') $true) -ne 'Autorizacao por operacao') { throw 'Decisao de modo incorreta.' }
     foreach ($nome in @('Norton Antivirus','ESET Service','Malwarebytes Service','Bitdefender','Kaspersky','Avast','McAfee','Sophos Home')) {
         if (Testar-AgenteGerenciamento ([pscustomobject]@{Name=$nome;DisplayName=$nome})) {throw ('Antivirus comum tratado como gerenciamento: '+$nome)}
     }
@@ -1035,6 +1040,7 @@ try {
         $script:removeuDependente=$false
         $script:erroDependente=$false
         function Log {param($Mensagem,[switch]$Erro) if ($Erro -and $Mensagem -match 'dependentes declarados') {$script:erroDependente=$true}}
+        function Confirmar-PoliticaAppxLocal {}
         function Testar-AppxCatalogado {return $true}
         function Get-AppxPackage {[CmdletBinding()]param() $p;$q}
         function Remove-AppxPackage {$script:removeuDependente=$true}
@@ -1239,8 +1245,8 @@ try {
                     if ($global:Janela.FindName('Pagina'+$p).Visibility.ToString() -ne $esperada) {throw ('Visibilidade incorreta: '+$p)}
                 }
             }
-            foreach ($nome in @('BotaoPreviaEssencial','BotaoAnalisarArmazenamento','BotaoBuscarAtualizacoes')) {if (-not $global:UI[$nome].IsEnabled) {throw ('Consulta segura desabilitada: '+$nome)}}
-            foreach ($nome in @('BotaoAplicarAjustes','BotaoRemoverUwp','BotaoDesinstalarProg','BotaoVarrerRastros','BotaoInstalarApps','BotaoInstalarRecursos','BotaoFixRede','BotaoLimparTemp','BotaoDesfazer','BotaoCriarRestore','BotaoVerificarRelease','BotaoExportarPlano')) {
+            foreach ($nome in @('BotaoPreviaEssencial','BotaoAnalisarArmazenamento','BotaoBuscarAtualizacoes','BotaoFixRede')) {if (-not $global:UI[$nome].IsEnabled) {throw ('Consulta segura desabilitada: '+$nome)}}
+            foreach ($nome in @('BotaoAplicarAjustes','BotaoRemoverUwp','BotaoDesinstalarProg','BotaoVarrerRastros','BotaoInstalarApps','BotaoInstalarRecursos','BotaoLimparTemp','BotaoDesfazer','BotaoCriarRestore','BotaoVerificarRelease','BotaoExportarPlano')) {
                 if ($global:UI[$nome].IsEnabled) {throw ('Acao habilitada no modo protegido: '+$nome)}
             }
             Passou 'nove abas navegaveis no modo protegido e acoes bloqueadas'
@@ -1401,7 +1407,7 @@ try {
     & {
         function Perguntar {return $true}
         function Executar-NoConsole {
-            param($Titulo,$Bloco)
+            param($Titulo,$Bloco,$Operacao)
             if ($Bloco -notmatch 'System32\\chkdsk\.exe' -or $Bloco -match "'/(f|r|x|scan)'") {throw 'Verificacao solicitou reparo ou caminho ambiguo.'}
             return 0
         }
@@ -1704,6 +1710,93 @@ try {
     }
     Passou '42 decisoes, presets conservadores, valores exatos e politicas adicionais'
 } catch {Falhou 'auditoria dos 42 ajustes' $_.Exception.Message}
+
+# ---- F2: one authorization contract, deny unknown, per-operation policy ----
+Secao 'contrato central de seguranca F2'
+try {
+    $ids=@('estado-local','exportar','download','registro-usuario','registro-local','registro-maquina','servico','tarefa','tarefa-reversao','energia','recurso','appx','winget','desinstalar','rastros','path','restore','temp','dns','hora','reparo','diagnostico-admin','consulta-winget','nativo')
+    foreach ($id in $ids) {
+        $d=Obter-DescritorOperacao $id
+        if (-not $d -or $d.id -ne $id -or -not $d.escopo -or -not $d.risco -or -not $d.politica -or -not $d.backup -or -not $d.reversao -or -not $d.verificacao) {throw ('Descritor incompleto: '+$id)}
+    }
+    $ctx=Obter-ContextoAutorizacaoAtual 'registro-usuario'
+    foreach ($id in $ids) {
+        $esperado=if ($id -eq 'tarefa') {'bloqueado'} else {'permitido'}
+        if ((Resolver-AutorizacaoOperacao $id $ctx).estado -ne $esperado) {throw ('Contexto autorizado incorreto: '+$id)}
+    }
+    if ((Resolver-AutorizacaoOperacao 'arbitrario' $ctx).estado -ne 'bloqueado') {throw 'Operacao desconhecida aceita.'}
+    if ((Resolver-AutorizacaoOperacao 'tarefa' $ctx).estado -ne 'bloqueado') {throw 'Tarefa nao classificada liberada.'}
+    foreach ($edicao in @('Core','Professional','Enterprise')) {
+        $ctx.windows.edicao=$edicao
+        if ((Resolver-AutorizacaoOperacao 'registro-usuario' $ctx).estado -ne 'permitido') {throw 'Edicao de cliente nao reconhecida.'}
+    }
+    $ctx.sinais=@('Sinal de politica de atualizacao organizacional.','Sinal de politica de proxy.')
+    if ((Resolver-AutorizacaoOperacao 'registro-usuario' $ctx).estado -ne 'permitido' -or (Resolver-AutorizacaoOperacao 'winget' $ctx).estado -ne 'conflitante' -or (Resolver-AutorizacaoOperacao 'dns' $ctx).estado -ne 'conflitante') {throw 'Politicas nao separadas por operacao.'}
+    $ctx.sinais=@('Inconclusivo: consulta de politica de proxy indisponivel.')
+    if ((Resolver-AutorizacaoOperacao 'registro-usuario' $ctx).estado -ne 'permitido' -or (Resolver-AutorizacaoOperacao 'dns' $ctx).estado -ne 'desconhecido') {throw 'Consulta inconclusiva nao foi isolada por operacao.'}
+    $ctx.sinais=@('Sinal de inscricao de gerenciamento de dispositivo (MDM).')
+    foreach ($id in @('registro-usuario','registro-local','servico','tarefa-reversao','energia','recurso','appx','winget','desinstalar','rastros','path','restore','temp','dns','hora','reparo','exportar','download')) {
+        if ((Resolver-AutorizacaoOperacao $id $ctx).estado -ne 'conflitante') {throw ('MDM ignorado: '+$id)}
+    }
+    foreach ($id in @('nativo','diagnostico-admin','estado-local')) {if ((Resolver-AutorizacaoOperacao $id $ctx).estado -ne 'permitido') {throw 'Consulta ou estado privado indevidamente classificado como mutacao de sistema.'}}
+    $ctx.sinais=@('Inconclusivo: consulta de dominio indisponivel.')
+    if ((Resolver-AutorizacaoOperacao 'registro-usuario' $ctx).estado -ne 'desconhecido' -or (Resolver-AutorizacaoOperacao 'nativo' $ctx).estado -ne 'permitido') {throw 'Falha de consulta nao tratada por operacao.'}
+    $ctx.sinais=@();$ctx.usuarioCorreto=$false
+    foreach ($id in @('registro-usuario','registro-local','appx','temp','winget','rastros','path','desinstalar')) {if ((Resolver-AutorizacaoOperacao $id $ctx).estado -ne 'desconhecido') {throw ('SID interativo ignorado: '+$id)}}
+    if ((Resolver-AutorizacaoOperacao 'diagnostico-admin' $ctx).estado -ne 'permitido') {throw 'SID interativo bloqueou consulta administrativa.'}
+    $ctx.usuarioCorreto=$true;$ctx.sidInicial='outro'
+    if ((Resolver-AutorizacaoOperacao 'registro-maquina' $ctx).estado -ne 'desconhecido') {throw 'Mudanca de identidade ignorada.'}
+    $ctx.sidInicial=$ctx.identidade;$ctx.visaoCorreta=$false
+    if ((Resolver-AutorizacaoOperacao 'registro-usuario' $ctx).estado -ne 'desconhecido') {throw 'Visao de registro insegura aceita.'}
+    $ctx.visaoCorreta=$true;$ctx.windows=$null
+    if ((Resolver-AutorizacaoOperacao 'energia' $ctx).estado -ne 'desconhecido') {throw 'Build desconhecida aceita.'}
+    $ctx.windows=[pscustomobject]@{build=26100;edicao='Professional';cliente=$false}
+    if ((Resolver-AutorizacaoOperacao 'recurso' $ctx).estado -ne 'incompativel') {throw 'Windows servidor aceito.'}
+    $ctx.windows.cliente=$true;$ctx.admin=$false
+    if ((Resolver-AutorizacaoOperacao 'temp' $ctx).estado -ne 'exige-autorizacao' -or (Resolver-AutorizacaoOperacao 'nativo' $ctx).estado -ne 'permitido') {throw 'Privilegio ou consulta sem admin incorretos.'}
+    $ctx.admin=$true;$ctx.consentiu=$false
+    if ((Resolver-AutorizacaoOperacao 'registro-local' $ctx).estado -ne 'exige-autorizacao') {throw 'Consentimento ausente aceito.'}
+    & {
+        $script:mutacaoF2=$false
+        function Obter-ContextoAutorizacaoAtual {param($Id,[switch]$Previa) $x=Obter-ContextoF2Teste; $x.sinais=@('MDM confirmado');return $x}
+        function Obter-ContextoF2Teste {[pscustomobject]@{admin=$true;diagnostico=$false;consentiu=$true;identidade='teste';sidInicial='teste';visaoCorreta=$true;usuarioCorreto=$true;windows=[pscustomobject]@{build=26100;edicao='Professional';cliente=$true};sinaisConfirmados=$true;sinais=@()}}
+        function Registrar-Jornal {$script:mutacaoF2=$true}
+        function Ler-ValorRegistro {$script:mutacaoF2=$true;throw 'Nao deve consultar alvo de escrita recusada.'}
+        function Log {param($Mensagem,[switch]$Erro)}
+        $a=[pscustomobject]@{tipo='registro';caminho='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced';nome='HideFileExt';tipoValor='DWord';dados=0}
+        Executar-Acao $a 'teste F2'
+        if ($script:mutacaoF2) {throw 'Executor acessou alvo ou journal apos recusa.'}
+        if (Desfazer-Item ([pscustomobject]@{tipo='registro';caminho=$a.caminho;nome=$a.nome})) {throw 'Reversao ignorou contexto.'}
+        if ($script:mutacaoF2) {throw 'Reversao consultou alvo apos recusa.'}
+    }
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $true}
+        $recusou=$false
+        try {Confirmar-PoliticaAppxLocal} catch {$recusou=$_.Exception.Message -match 'politica AppX'}
+        if (-not $recusou) {throw 'Politica AppX ignorada.'}
+    }
+    $recusou=$false
+    try {Confirmar-AlvoRegistroReversao ([pscustomobject]@{caminho='HKLM:\SYSTEM\CurrentControlSet\Control\TimeZoneInformation';nome='RealTimeIsUniversal'})} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Reversao de alvo historico nao revisado aceita.'}
+    $recusou=$false
+    try {Confirmar-CompatibilidadeRecurso 'Microsoft-Hyper-V-All' ([pscustomobject]@{build=26100;edicao='Core';cliente=$true})} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Hyper-V sem edicao suportada aceito.'}
+    & {
+        $anterior=$global:ContextoAutorizacaoInicial
+        try {
+            $idInicial=[pscustomobject]@{sid='sid-original';admin=$true;visaoCorreta=$true}
+            $global:ContextoAutorizacaoInicial=@{identidade=$idInicial;windows=[pscustomobject]@{build=26100;edicao='Core';cliente=$true};diagnostico=$false;consentiu=$true;usuarioCorreto=$true;sinais=@();sinaisConfirmados=$true}
+            function Obter-IdentidadeAutorizacao {[pscustomobject]@{sid='sid-novo';admin=$true;visaoCorreta=$true}}
+            function Detectar-AmbienteTrabalho {return 'MDM confirmado depois da previa'}
+            function Testar-UsuarioInterativo {param($Sid) return ($Sid -eq 'sid-original')}
+            function Obter-ContextoAjustes {[pscustomobject]@{build=26100;edicao='Professional';cliente=$true}}
+            $live=& $script:ContextoAutorizacaoReal 'registro-usuario'
+            if ($live.identidade -ne 'sid-novo' -or $live.sidInicial -ne 'sid-original' -or $live.usuarioCorreto -or $live.windows.edicao -ne 'Professional' -or $live.sinais -notcontains 'MDM confirmado depois da previa') {throw 'Revalidacao real nao leu contexto atualizado.'}
+            if ((Resolver-AutorizacaoOperacao 'registro-usuario' $live).estado -ne 'desconhecido') {throw 'Mudanca de SID durante operacao aceita.'}
+        } finally {$global:ContextoAutorizacaoInicial=$anterior}
+    }
+    Passou 'descritores, privilegio, SID, GPO/MDM, contexto, executor, reversao e consulta independente'
+} catch {Falhou 'contrato central de seguranca F2' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

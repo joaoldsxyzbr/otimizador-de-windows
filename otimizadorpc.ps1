@@ -9,7 +9,7 @@ param(
     # modo cli: aplica um preset (seguro/balanceado/agressivo) sem abrir janela
     [string]$Cli,
     # junto com -Cli: so descreve o que faria, nao altera nada
-    [switch]$Pessoal,
+    [Alias('AutorizarAlteracoes')][switch]$Pessoal,
     [switch]$Diagnostico,
     [switch]$Simular
 )
@@ -42,10 +42,14 @@ $pastaModulos = Join-Path $PSScriptRoot 'src\modules'
 $travaInstancia = $null
 try {
     Inicializar-ModoOtimizador -Pessoal:$Pessoal -Diagnostico:($Diagnostico -or ($Cli -and $Simular))
-    if ($Cli -and -not $Simular -and $global:ModoProtegido) { throw 'Preset real exige -Pessoal, administrador e nenhum sinal de gerenciamento. Use -Cli essencial -Simular.' }
+    if ($Cli -and -not $Simular -and $global:ModoProtegido) { throw 'Preset real exige -AutorizarAlteracoes e administrador; cada operacao verifica seu contexto. Use -Cli essencial -Simular.' }
     if (-not $global:ModoProtegido) {
-        Garantir-Pastas
-        $travaInstancia = Obter-TravaInstancia
+        try {Garantir-Pastas; $travaInstancia=Obter-TravaInstancia}
+        catch {
+            $global:ModoProtegido=$true;$global:ModoOtimizador='Diagnostico - estado privado indisponivel'
+            if ($Cli -and -not $Simular) {throw}
+            Write-Warning 'Estado privado/trava indisponivel; consultas preservadas, nenhuma alteracao habilitada.'
+        }
     }
 
 # ---- catalogos ----
@@ -78,13 +82,13 @@ if ($Cli) {
         }
         $linha = ("{0}[{1}] {2}" -f $prefixo, (Get-Date -Format 'HH:mm:ss'), $Mensagem)
         Write-Host $linha
-        if (-not $global:ModoProtegido) { try { Add-Content -LiteralPath $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { } }
+        if (-not $global:ModoProtegido) { try { Confirmar-PermissaoAlteracao 'estado-local'; Verificar-PastaPrivada $global:PastaLog; Add-Content -LiteralPath $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { } }
     }
 
     Log ('otimizadorpc modo cli - ' + (Nome-Windows))
     if (-not $global:ModoProtegido) { Log ('log desta execucao: ' + $global:ArquivoLog) } else { Log 'Diagnostico/simulacao: sem log persistente.' }
     if ($global:AmbienteTrabalho.Count -gt 0) {
-        Log 'AMBIENTE: este pc parece gerenciado pela empresa; revise o log com atencao.'
+        Log 'Indicadores de politica/gerenciamento detectados; cada operacao avalia seus requisitos.'
     }
     $ok = Aplicar-Preset -Nivel $Cli -Simular:$Simular
     if (-not $global:ModoProtegido) { Log ('log completo salvo em: ' + $global:ArquivoLog) }
@@ -142,7 +146,7 @@ if ($global:ModoProtegido) {
     Log 'Somente diagnostico local. Sem elevacao automatica, alteracoes, exportacao ou log persistente.'
     foreach ($a in $global:AmbienteTrabalho) { Log ('  - ' + $a) }
 } else {
-    Log 'Nenhum sinal consultado de gerenciamento; isso nao prova que o PC seja pessoal.'
+    Log 'Autorizacao explicita da sessao nao comprova ausencia de gerenciamento; cada operacao sera avaliada.'
     Log 'Revise ajustes e pontos de restauracao antes de aplicar.'
 }
 $global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - ' + $global:ModoOtimizador)

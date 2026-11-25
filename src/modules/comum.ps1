@@ -14,9 +14,136 @@ $global:UI            = @{}
 
 # A protecao e uma regra do app, nao uma fronteira de seguranca do Windows.
 # O entrypoint inicializa o modo antes de qualquer operacao de estado.
-function Confirmar-PermissaoAlteracao {
-    if ($global:ModoProtegido -ne $false) { throw 'Modo protegido: alteracoes e exportacoes indisponiveis. Consulte o TI.' }
+# Application authorization contract. Windows ACL/UAC/GPO/MDM remain authoritative.
+# Unknown operation IDs are denied. The user's explicit consent is not a policy bypass.
+function Obter-DescritorOperacao {
+    param([string]$Id)
+    $mapa=@{
+        'estado-local'=@('aplicativo','baixo','estado privado e trava','nao se aplica','ACL e identidade')
+        'exportar'=@('usuario','cautela','destino escolhido','manual','politicas de dados nao confirmadas')
+        'download'=@('usuario','cautela','destino escolhido','manual','politicas de origem nao confirmadas')
+        'registro-usuario'=@('usuario','cautela','journal de valor','por snapshot','preferencias e GPO/MDM')
+        'registro-local'=@('usuario','cautela','journal de valor','por snapshot','gerenciamento e escopo restrito')
+        'registro-maquina'=@('computador','alto','journal de valor','por snapshot','politica efetiva nao confirmada')
+        'servico'=@('computador','alto','journal de servico','por snapshot','dependentes e gerenciamento')
+        'tarefa'=@('computador','alto','nenhuma escrita nova','manual','dependencias e identidade funcional nao confirmadas')
+        'tarefa-reversao'=@('computador','alto','journal e assinatura','por snapshot','definicao e gerenciamento')
+        'energia'=@('computador','cautela','journal de plano','por snapshot','politica e plano disponivel')
+        'recurso'=@('computador','alto','journal de dependencias','condicional','servicing e build')
+        'appx'=@('usuario','alto','journal de pacote','parcial/manual','dependencias, Store e gerenciamento')
+        'winget'=@('misto','alto','consentimento','manual','App Installer e origem')
+        'desinstalar'=@('misto','alto','journal de identidade','manual','identidade, assinatura e gerenciamento')
+        'rastros'=@('misto','alto','quarentena/journal','condicional','identidade e gerenciamento')
+        'path'=@('misto','alto','journal de valor','por snapshot','escopo e gerenciamento')
+        'restore'=@('computador','cautela','ponto confirmado','Windows','protecao de sistema')
+        'temp'=@('usuario','cautela','previa e consentimento','irreversivel','identidade e caminhos')
+        'dns'=@('computador','cautela','consentimento','nao se aplica','rede e gerenciamento')
+        'hora'=@('computador','cautela','consentimento','manual','fonte configurada e gerenciamento')
+        'reparo'=@('computador','alto','consentimento','manual','servicing e gerenciamento')
+        'diagnostico-admin'=@('consulta','baixo','consentimento quando aplicavel','nao se aplica','comando nativo sem reparo')
+        'consulta-winget'=@('consulta','cautela','consentimento','nao se aplica','fontes e App Installer')
+        'nativo'=@('consulta','baixo','nenhuma alteracao automatica','nao se aplica','permissoes nativas')
+    }
+    if (-not $Id -or -not $mapa.ContainsKey($Id)) {return $null}
+    $v=$mapa[$Id]
+    [pscustomobject]@{id=$Id;escopo=$v[0];risco=$v[1];backup=$v[2];reversao=$v[3];politica=$v[4];exigeElevacao=($Id -notin @('nativo'));buildMin=10240;edicoes=@('cliente');precondicao='identidade, permissao, contexto e verificacoes do alvo';verificacao='executor especifico; confirmar efeito ou informar limites'}
 }
+
+function Resolver-AutorizacaoOperacao {
+    param([string]$Id,$Contexto)
+    $d=Obter-DescritorOperacao $Id
+    $estado='permitido';$motivo='Precondicoes gerais confirmadas; verificacoes do alvo continuam obrigatorias.'
+    $proximo='Revisar previa e confirmar a operacao.'
+    if (-not $d) {$estado='bloqueado';$motivo='Operacao nao catalogada.'}
+    elseif ($Id -eq 'tarefa') {$estado='bloqueado';$motivo='Tarefa sem identidade funcional revisada; alteracao nova somente pela ferramenta nativa.'}
+    elseif ($Id -eq 'nativo') {$motivo='Somente abertura da ferramenta nativa; Windows controla qualquer acao.'}
+    elseif (-not $Contexto -or $Contexto.admin -isnot [bool] -or $Contexto.diagnostico -isnot [bool] -or $Contexto.consentiu -isnot [bool]) {$estado='desconhecido';$motivo='Contexto de autorizacao indisponivel.'}
+    elseif (-not $Contexto.admin -or $Contexto.diagnostico -or -not $Contexto.consentiu) {$estado='exige-autorizacao';$motivo='Exige elevacao e autorizacao explicita; diagnostico permanece disponivel.'}
+    elseif (-not $Contexto.identidade -or $Contexto.identidade -ne $Contexto.sidInicial -or $Contexto.visaoCorreta -ne $true) {$estado='desconhecido';$motivo='Identidade ou arquitetura da sessao nao confirmada.'}
+    elseif (-not $Contexto.windows -or $Contexto.windows.cliente -isnot [bool] -or -not $Contexto.windows.edicao -or -not $Contexto.windows.build) {$estado='desconhecido';$motivo='Build/edicao indisponivel.'}
+    elseif (-not $Contexto.windows.cliente -or $Contexto.windows.build -lt $d.buildMin) {$estado='incompativel';$motivo='Windows cliente compativel exigido.'}
+    elseif ($d.escopo -in @('usuario','misto') -and $Contexto.usuarioCorreto -ne $true) {$estado='desconhecido';$motivo='Usuario interativo nao confirmado; nao alterar HKCU, AppX ou dados de outro usuario.'}
+    elseif ($Id -notin @('estado-local','diagnostico-admin')) {
+        if ($Contexto.sinaisConfirmados -ne $true) {$estado='desconhecido';$motivo='Consulta de politicas/gerenciamento necessaria indisponivel.'}
+        else {
+            $sinais=@($Contexto.sinais | Where-Object {$_})
+            if ($Id -in @('registro-usuario','restore')) {
+                # Update-source and proxy policy do not decide an Explorer preference.
+                # Device join, enrollment, security management and unknown core state still do.
+                $sinais=@($sinais | Where-Object {$_ -notmatch '^Sinal de politica de (atualizacao organizacional|proxy)\.$' -and $_ -notmatch '^Inconclusivo: consulta de politica de (atualizacao|proxy) indisponivel\.$'})
+            }
+            if ($sinais.Count -gt 0) {
+                $estado=if (@($sinais | Where-Object {$_ -match '^Inconclusivo:'}).Count) {'desconhecido'} else {'conflitante'}
+                $motivo='Indicadores relevantes exigem revisao autorizada: '+($sinais -join '; ')
+            }
+        }
+    }
+    if ($estado -ne 'permitido') {$proximo='Use consulta ou ferramenta nativa autorizada; consulte o administrador/TI. Nao contorne a politica.'}
+    [pscustomobject]@{id=$Id;estado=$estado;motivo=$motivo;proximo=$proximo;descritor=$d}
+}
+
+function Obter-IdentidadeAutorizacao {
+    $id=[Security.Principal.WindowsIdentity]::GetCurrent()
+    try {
+        $principal=New-Object Security.Principal.WindowsPrincipal($id)
+        [pscustomobject]@{sid=$id.User.Value;admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);visaoCorreta=(-not [Environment]::Is64BitOperatingSystem -or [Environment]::Is64BitProcess)}
+    } finally {$id.Dispose()}
+}
+
+function Testar-UsuarioInterativo {
+    param([string]$Sid)
+    try {
+        $sessao=[Diagnostics.Process]::GetCurrentProcess().SessionId
+        if ($sessao -eq 0) {return $false}
+        $p=@(Get-CimInstance -ClassName Win32_Process -Filter ("Name='explorer.exe' AND SessionId="+$sessao) -OperationTimeoutSec 8 -ErrorAction Stop)
+        if (-not $p.Count) {return $false}
+        $sids=@(foreach ($proc in $p) {
+            $dono=Invoke-CimMethod -InputObject $proc -MethodName GetOwnerSid -OperationTimeoutSec 8 -ErrorAction Stop
+            if ($dono.ReturnValue -ne 0 -or -not $dono.Sid) {throw 'SID indisponivel.'}
+            $dono.Sid
+        })
+        return (@($sids | Sort-Object -Unique).Count -eq 1 -and $sids[0] -eq $Sid)
+    } catch {return $false}
+}
+
+function Obter-ContextoAutorizacaoAtual {
+    param([string]$Id,[switch]$Previa)
+    $cfg=$global:ContextoAutorizacaoInicial
+    if (-not $cfg) {return $null}
+    $d=Obter-DescritorOperacao $Id
+    try {
+        $ident=if ($Previa) {$cfg.identidade} else {Obter-IdentidadeAutorizacao}
+        $sinais=$cfg.sinais
+        $confirmados=$cfg.sinaisConfirmados
+        if (-not $Previa -and $Id -notin @('estado-local','diagnostico-admin','nativo')) {
+            try {$sinais=@(Detectar-AmbienteTrabalho);$confirmados=$true}
+            catch {$sinais=@('Inconclusivo: consulta de gerenciamento indisponivel.');$confirmados=$false}
+        }
+        $usuario=$cfg.usuarioCorreto
+        if (-not $Previa -and $d.escopo -in @('usuario','misto')) {$usuario=Testar-UsuarioInterativo $ident.sid}
+        $windows=if ($Previa -or $Id -eq 'estado-local') {$cfg.windows} else {Obter-ContextoAjustes}
+        [pscustomobject]@{admin=$ident.admin;diagnostico=([bool]$cfg.diagnostico -or $global:ModoProtegido -ne $false);consentiu=[bool]$cfg.consentiu;identidade=$ident.sid;sidInicial=$cfg.identidade.sid;visaoCorreta=($ident.visaoCorreta -and $cfg.identidade.visaoCorreta);windows=$windows;usuarioCorreto=$usuario;sinais=$sinais;sinaisConfirmados=$confirmados}
+    } catch {return $null}
+}
+
+function Avaliar-PermissaoOperacao {
+    param([string]$Id,[switch]$Previa)
+    if ($Id -in @('nativo','tarefa') -or -not (Obter-DescritorOperacao $Id)) {return (Resolver-AutorizacaoOperacao $Id $null)}
+    Resolver-AutorizacaoOperacao $Id (Obter-ContextoAutorizacaoAtual $Id -Previa:$Previa)
+}
+
+function Confirmar-PermissaoAlteracao {
+    param([string]$Id)
+    if ($global:ModoProtegido -ne $false -and $Id -ne 'nativo') {throw 'Modo protegido: sessao somente leitura ou sem autorizacao explicita.'}
+    $decisao=Avaliar-PermissaoOperacao $Id
+    if ($decisao.estado -ne 'permitido') {throw ('Operacao recusada ['+$decisao.estado+']: '+$decisao.motivo)}
+}
+
+function Testar-PermissaoPrevia {
+    param([string]$Id)
+    return ((Avaliar-PermissaoOperacao $Id -Previa).estado -eq 'permitido')
+}
+
 
 # Estado novo com ACL explicita. Nao confia retroativamente em journals antigos.
 function Nova-ACLPrivada {
@@ -59,6 +186,7 @@ function Verificar-PastaPrivada {
 
 function Garantir-PastaPrivada {
     param([string]$Pasta)
+    Confirmar-PermissaoAlteracao 'estado-local'
     if (-not (Test-Path -LiteralPath $Pasta)) {
         [void][IO.Directory]::CreateDirectory($Pasta,(Nova-ACLPrivada))
     }
@@ -66,7 +194,7 @@ function Garantir-PastaPrivada {
 }
 
 function Garantir-Pastas {
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao 'estado-local'
     Garantir-PastaPrivada $global:RaizEstado
     foreach ($p in @($global:PastaLog, $global:PastaDesfazer, $global:PastaQuarantena)) {
         Garantir-PastaPrivada $p
@@ -77,6 +205,7 @@ function Garantir-Pastas {
 # O arquivo permanece; o handle e liberado ao fechar ou morrer o processo.
 function Obter-TravaInstancia {
     param([string]$Pasta = $global:RaizEstado)
+    Confirmar-PermissaoAlteracao 'estado-local'
     Verificar-PastaPrivada $Pasta
     $arquivo = Join-Path $Pasta 'instancia.lock'
     if (Test-Path -LiteralPath $arquivo) {
@@ -149,7 +278,7 @@ function Log {
         Cor-Status 'vermelho'
     }
     $linha = ("{0}[{1}] {2}" -f $prefixo, (Get-Date -Format 'HH:mm:ss'), $Mensagem)
-    if (-not $global:ModoProtegido) { try { Add-Content -LiteralPath $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { } }
+    if (-not $global:ModoProtegido) { try { Confirmar-PermissaoAlteracao 'estado-local'; Verificar-PastaPrivada $global:PastaLog; Add-Content -LiteralPath $global:ArquivoLog -Value $linha -Encoding UTF8 -ErrorAction Stop } catch { } }
     if ($global:UI.ContainsKey('LogBox') -and $null -ne $global:UI.LogBox) {
         $global:UI.LogBox.AppendText($linha + "`r`n")
         $global:UI.LogBox.ScrollToEnd()
@@ -249,18 +378,14 @@ function Avisar {
 }
 
 # reinicia o explorador de arquivos (aplica tweaks visuais sem reiniciar o pc)
-function Reiniciar-Explorer {
-    Confirmar-PermissaoAlteracao
-    Log 'Reiniciando o Explorador de Arquivos...'
-    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-    Log 'Explorador reiniciado.'
-}
+function Reiniciar-Explorer { throw 'Encerramento de Explorer indisponivel; use a sessao do Windows.' }
 
 # Windows PowerShell 5.1 transforma stderr nativo em ErrorRecord mesmo com exit 0.
 # Executa somente utilitarios nativos conhecidos e decide pelo codigo de saida.
 function Executar-RegNativo {
     param([ValidateSet('export','import','delete')][string]$Operacao, [string]$Alvo, [string]$Arquivo)
-    Confirmar-PermissaoAlteracao
+    Confirmar-PermissaoAlteracao $(if ($Operacao -eq 'export') {'estado-local'} else {'rastros'})
+    if ($Operacao -eq 'delete') {throw 'Exclusao integral por reg.exe indisponivel.'}
     foreach ($valor in @($Alvo,$Arquivo)) {
         if ($valor -match '["\r\n]') { throw 'Argumento de registro invalido.' }
     }
