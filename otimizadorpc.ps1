@@ -152,8 +152,15 @@ if ($global:ModoProtegido) {
 $global:Janela.Title = ('OtimizadorPC ' + $global:VersaoOtimizador + ' - ' + (Nome-Windows) + ' - ' + $global:ModoOtimizador)
 [void]$global:Janela.ShowDialog()
 $pendentes=Finalizar-ConsultasPendentes
-if ($pendentes -gt 0) {Write-Warning ('Consultas ainda encerrando: '+$pendentes+'. Nenhuma espera indefinida foi solicitada.')}
+if ($pendentes -gt 0) {
+    Write-Warning ('Consultas ainda encerrando: '+$pendentes+'. Consultas sao somente leitura; o host sera encerrado apos liberar o estado local.')
+    $global:EncerrarHostForcado=$true
+}
 
 } finally {
     if ($null -ne $travaInstancia) { $travaInstancia.Dispose() }
 }
+
+# Um worker que ignora cancelamento cooperativo nao pode manter o host vivo
+# depois da janela fechada; nenhum estado mutavel do app sobrevive aqui.
+if ($global:EncerrarHostForcado) { [Environment]::Exit(0) }
