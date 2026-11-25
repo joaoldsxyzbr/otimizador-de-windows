@@ -345,6 +345,14 @@ try {
             throw 'Confirmacao manual nao permitiu retomar sem repetir.'
         }
         Passou 'confirmacao manual registra atestado e permite retomada'
+        $manual=Join-Path $testeJournal 'manual.json'
+        Gravar-JSONAtomico -Arquivo $manual -Objeto @{itens=@(@{tipo='temp';estadoAplicacao='confirmado';estadoReversao='pendente'})}
+        $script:acoesTeste=@()
+        if ((Reverter-Sessao $manual) -or $script:acoesTeste.Count) {throw 'Operacao irreversivel tentou rollback.'}
+        Confirmar-ReversaoManual -Arquivo $manual -Indice 0 -SemRestauracao
+        $estado=Ler-JSON ($manual+'.revertido')
+        if ($estado.itens[0].estadoReversao -ne 'manual-sem-restauracao' -or -not $estado.itens[0].encerradoManualEm -or $estado.itens[0].confirmadoManualEm) {throw 'Encerramento sem restauracao confundido com rollback.'}
+        Passou 'operacao irreversivel encerrada sem afirmar restauracao'
     }
 
     $falha = $false
@@ -386,6 +394,7 @@ try {
     [IO.File]::WriteAllText($origem, 'teste')
     & {
         function Confirmar-PastaSessaoQuarentena {param($Pasta) return $Pasta}
+        function Confirmar-ArvorePrivadaQuarentena {}
         function Caminho-RastroSeguro {return $true}
         $script:atingiuJournal=$false
         function Registrar-Jornal { param($Item) $script:atingiuJournal=$true; throw 'Falha simulada de journal' }
@@ -1816,6 +1825,72 @@ try {
     }
     Passou 'descritores, privilegio, SID, GPO/MDM, contexto, executor, reversao e consulta independente'
 } catch {Falhou 'contrato central de seguranca F2' $_.Exception.Message}
+
+# ---- F3: intent durability, fail-stop, report privacy and malformed journals ----
+Secao 'transacoes e relatorio F3'
+try {
+    & {
+        $global:SessaoItens=$null;$global:JournalFalhou=$false
+        $script:escritasF3=0;$script:falharF3=$false;$script:ultimoF3=$null
+        function Obter-ArquivoSessao {return 'teste.json'}
+        function Gravar-JournalSeguro {
+            param($Arquivo,$Objeto)
+            $script:escritasF3++
+            if ($script:falharF3) {throw [IO.IOException]::new('Disco cheio simulado')}
+            $script:ultimoF3=ConvertTo-Json -InputObject $Objeto -Depth 12 -Compress | ConvertFrom-Json
+        }
+        Iniciar-Sessao 'privado'
+        $a=[pscustomobject]@{tipo='registro';nome='nome-secreto';caminho='HKCU:\Software\privado';valorAnterior='segredo-123';valorDepois='segredo-456';backupReg='C:\Users\privado\backup.reg'}
+        Registrar-Jornal $a
+        if ($script:ultimoF3.itens[0].estadoAplicacao -ne 'intencao' -or -not $a.idOperacao -or -not $a.registradoEm -or $a.reversibilidade -ne 'por-snapshot') {throw 'Intencao nao persistida antes do efeito.'}
+        $script:falharF3=$true;$recusou=$false
+        try {Confirmar-EfeitoJournal $a} catch {$recusou=$true}
+        if (-not $recusou -or -not $global:JournalFalhou -or $a.estadoAplicacao -ne 'intencao' -or $script:ultimoF3.itens[0].estadoAplicacao -ne 'intencao') {throw 'Falha apos efeito descartou a intencao.'}
+        $recusou=$false
+        try {Registrar-Jornal ([pscustomobject]@{tipo='registro'})} catch {$recusou=$true}
+        if (-not $recusou -or $global:SessaoItens.Count -ne 1) {throw 'Lote continuou apos falha duravel.'}
+        $script:falharF3=$false
+        Iniciar-Sessao 'privado'
+        $a=[pscustomobject]@{tipo='desinstalado-app';nome='nome-secreto';chaveOriginal='HKCU:\Software\privado'}
+        Registrar-Jornal $a
+        Registrar-FalhaOperacao
+        if ($script:ultimoF3.itens[0].estadoAplicacao -ne 'falhou' -or -not $script:ultimoF3.itens[0].falhouEm -or -not (Testar-SessaoInterrompida)) {throw 'Falha nao registrada ou lote nao interrompido.'}
+        $r=Obter-RelatorioRecuperacao $script:ultimoF3
+        $s=ConvertTo-Json -InputObject $r -Depth 6
+        if ($s -match 'nome-secreto|privado|usuarioSid|maquina|chaveOriginal|idOperacao|falhouEm' -or $r.total -ne 1 -or $r.itens[0].recuperacao -ne 'manual-sem-garantia' -or $r.itens[0].aplicacao -ne 'falhou') {throw 'Relatorio sanitizado revelou dados ou perdeu estado.'}
+        $script:falharF3=$true
+        Iniciar-Sessao 'disco-cheio'
+        $recusou=$false
+        try {Registrar-Jornal ([pscustomobject]@{tipo='registro'})} catch {$recusou=$true}
+        if (-not $recusou -or $global:SessaoItens.Count -or -not $global:JournalFalhou) {throw 'Falha antes do efeito nao bloqueou lote.'}
+        $global:SessaoItens=$null;$global:JournalFalhou=$false
+    }
+    $id=[guid]::NewGuid().ToString('N')
+    foreach ($j in @([pscustomobject]@{itens='invalido'},[pscustomobject]@{itens=@([pscustomobject]@{tipo='registro';estadoAplicacao='invalido'})},[pscustomobject]@{itens=@([pscustomobject]@{tipo='registro';idOperacao=$id},[pscustomobject]@{tipo='registro';idOperacao=$id})})) {
+        $recusou=$false
+        try {Confirmar-FormatoJournal $j} catch {$recusou=$true}
+        if (-not $recusou) {throw 'Journal malformado ou duplicado aceito.'}
+    }
+    Passou 'falhas antes/depois do journal, interrupcao, relatorio sanitizado e formato invalido'
+} catch {Falhou 'transacoes e relatorio F3' $_.Exception.Message}
+finally {$global:SessaoItens=$null;$global:JournalFalhou=$false}
+
+Secao 'limites do backup de registro'
+$arquivoReg=Join-Path ([IO.Path]::GetTempPath()) ('otimizador-reg-'+[guid]::NewGuid().ToString('N')+'.reg')
+try {
+    $alvo='HKEY_CURRENT_USER\Software\OtimizadorTeste'
+    $ok=@('Windows Registry Editor Version 5.00','',('['+$alvo+']'),'"valor"="teste"',('['+$alvo+'\Sub]'),'"numero"=dword:00000001') -join [Environment]::NewLine
+    [IO.File]::WriteAllText($arquivoReg,$ok,[Text.Encoding]::Unicode)
+    Confirmar-ConteudoBackupRegistro $arquivoReg $alvo
+    foreach ($s in @('[HKEY_CURRENT_USER\Software\Outro]','[-HKEY_CURRENT_USER\Software\OtimizadorTeste]','"valor"=-')) {
+        [IO.File]::WriteAllText($arquivoReg,($ok+[Environment]::NewLine+$s),[Text.Encoding]::Unicode)
+        $recusou=$false
+        try {Confirmar-ConteudoBackupRegistro $arquivoReg $alvo} catch {$recusou=$true}
+        if (-not $recusou) {throw 'Diretiva fora do escopo aceita.'}
+    }
+    Passou 'backup de registro restrito a uma arvore, sem exclusao'
+} catch {Falhou 'limites do backup de registro' $_.Exception.Message}
+finally {if (Test-Path -LiteralPath $arquivoReg) {Remove-Item -LiteralPath $arquivoReg -Force}}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

@@ -568,6 +568,7 @@ function Clique-AplicarAjustes {
             foreach ($acao in $t.acoes) {
                 if (-not (Continuar-ProgressoLote $progresso $t.nome)) { break ajustes }
                 Executar-Acao $acao $t.nome
+                if (Testar-SessaoInterrompida) {break ajustes}
                 Atualizar-UI
             }
         }
@@ -612,6 +613,7 @@ function Clique-RemoverUwp {
             $p = $cb.Tag
             if (-not (Continuar-ProgressoLote $progresso $p.nome)) { break }
             Executar-Acao ([pscustomobject]@{ tipo='appx'; pacote=$p.pacote }) $p.nome
+            if (Testar-SessaoInterrompida) {break}
             Atualizar-UI
         }
     } finally { Fechar-ProgressoLote $progresso }
@@ -647,6 +649,7 @@ function Clique-InstalarRecursos {
             $r = $cb.Tag
             if (-not (Continuar-ProgressoLote $progresso $r.nome)) { break }
             Executar-Acao ([pscustomobject]@{ tipo='recurso'; nome=$r.feat; ativar=$true }) $r.nome
+            if (Testar-SessaoInterrompida) {break}
             Atualizar-UI
         }
     } finally { Fechar-ProgressoLote $progresso }
@@ -760,7 +763,8 @@ function Clique-Desfazer {
         return
     }
     $caminho = $lb.Tag[$lb.SelectedIndex]
-    if (-not $caminho -or -not (Test-Path $caminho)) {
+    if ($caminho -like '*.revertido') {Avisar 'Historico arquivado' 'Esta sessao nao permite nova reversao. Use Detalhes para consultar.';return}
+    if (-not $caminho -or -not (Test-Path -LiteralPath $caminho)) {
         Avisar 'Arquivo nao encontrado' 'A sessao escolhida nao esta disponivel.'
         Atualizar-ListaDesfazer
         return
@@ -783,7 +787,7 @@ function Clique-Desfazer {
     Atualizar-ListaDesfazer
     if ($resultado -eq $true) {
         if (Test-Path -LiteralPath $caminho) { Status 'uma acao revertida; restam itens.' }
-        else { Status 'sessao revertida.' }
+        else { Status 'sessao arquivada; confira itens manuais.' }
     } else {
         Status 'reversao incompleta - consulte o log.'
         Cor-Status 'vermelho'
@@ -802,10 +806,21 @@ function Clique-ConfirmarManual {
         if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo)) { throw 'Sessao indisponivel.' }
         $arquivo=Confirmar-ArquivoJournal $arquivo
         $json = Ler-JSON $arquivo
+        Confirmar-ContextoJournal $json
+        Confirmar-FormatoJournal $json
         $itens = @($json.itens)
         for ($i = $itens.Count - 1; $i -ge 0; $i--) {
             $item = $itens[$i]
-            if ($item.estadoReversao -eq 'concluido') { continue }
+            if ($item.estadoReversao -in @('concluido','manual-sem-restauracao')) { continue }
+            $manual=(Obter-TipoRecuperacao $item) -eq 'manual-sem-garantia'
+            if ($manual) {
+                if (Perguntar 'Encerrar sem restauracao' ('Acao '+$i+' ('+$item.tipo+') nao tem desfazer automatico. Encerrar a revisao SEM afirmar que o estado anterior foi recuperado?')) {
+                    Confirmar-ReversaoManual -Arquivo $arquivo -Indice $i -SemRestauracao
+                    Atualizar-ListaDesfazer
+                    Status 'Encerramento manual registrado, sem garantia de restauracao.'
+                }
+                return
+            }
             if ($item.estadoReversao -ne 'em_andamento') { throw 'A ultima acao pendente nao esta incerta.' }
             $alvo = @($item.caminho,$item.origem,$item.chave,$item.nome,$item.pacote,$item.contexto) -join ' '
             $msg = ('Acao {0}: {1} - {2}. Confirme SOMENTE se voce verificou e restaurou manualmente o estado anterior. O programa nao testa nem repete essa operacao. Confirmar?' -f $i,$item.tipo,$alvo)
@@ -1087,11 +1102,34 @@ function Obter-DetalheRecuperacao {
         'recurso' { $linhas+=('Anterior: '+$Item.estadoAnterior+'; alvo: '+$Item.estadoDepois); $linhas+=('Dependencias alteradas: '+@($Item.alteracoes).Count); $linhas+='Pode exigir reinicio ou revisao manual.' }
         'appx' { $linhas+='Reinstalacao condicionada a disponibilidade do pacote; dados nao garantidos.' }
         'desinstalado-app' { $linhas+='Reinstalacao manual; o journal nao e backup do aplicativo.' }
+        'instalacao-app' { $linhas+='Instalador delegado; codigo do processo nao prova todos os efeitos. Sem rollback automatico.' }
+        'temp' {$linhas+='Exclusao definitiva; registro agregado, nao backup de arquivo.'}
+        'manutencao' {$linhas+='Comando nativo; sem restauracao automatica e sem garantia de resultado funcional.'}
+        'path-entrada' {$linhas+=('Escopo: '+$Item.escopo);$linhas+='Snapshot do PATH preservado no journal local. Nao compartilhe o valor bruto.'}
         'comando' { $linhas+='Recuperacao manual de comando legado.' }
         'reg-import' { $linhas+='Recuperacao manual de importacao integral legada.' }
         default { $linhas+='Consulte o snapshot e os backups; recuperacao depende do estado atual.' }
     }
     return $linhas
+}
+
+function Exportar-RelatorioRecuperacao {
+    param([string]$Arquivo)
+    Confirmar-PermissaoAlteracao 'exportar'
+    $origem=Confirmar-ArquivoJournal $Arquivo -PermitirArquivado
+    $relatorio=Obter-RelatorioRecuperacao (Ler-JSON $origem)
+    if (-not (Perguntar 'Exportar resumo sanitizado' 'O resumo inclui somente tipos e estados, sem nomes, valores, caminhos, identidade da maquina, SID, datas ou mensagens de erro. Ainda revele apenas a destinatarios autorizados. Continuar?')) {return}
+    $dlg=New-Object Microsoft.Win32.SaveFileDialog
+    $dlg.Filter='Relatorio JSON (*.json)|*.json';$dlg.FileName='recuperacao-resumo.json';$dlg.OverwritePrompt=$true
+    if (-not $dlg.ShowDialog()) {return}
+    Confirmar-PermissaoAlteracao 'exportar'
+    $destino=[IO.Path]::GetFullPath($dlg.FileName)
+    if ($destino -notmatch '^[A-Za-z]:\\' -or [IO.Path]::GetExtension($destino) -ine '.json' -or $destino.Substring(2).Contains(':')) {throw 'Destino local JSON exigido.'}
+    if ([IO.File]::Exists($destino)) {throw 'Escolha um arquivo novo; nenhum arquivo existente sera sobrescrito.'}
+    $bytes=[Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $relatorio -Depth 6))
+    $stream=[IO.File]::Open($destino,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
+    try {$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)} finally {$stream.Dispose()}
+    Avisar 'Exportacao concluida' 'Resumo sanitizado salvo. Nao e um backup restauravel.'
 }
 
 function Clique-DetalhesSessao {
@@ -1100,21 +1138,26 @@ function Clique-DetalhesSessao {
         if ($lb.SelectedIndex -lt 0) { Avisar 'Selecione' 'Escolha uma sessao na lista.'; return }
         $arquivo = $lb.Tag[$lb.SelectedIndex]
         if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo -PathType Leaf)) { Avisar 'Sessao ausente' 'Atualize a lista de sessoes.'; return }
-        $arquivo=Confirmar-ArquivoJournal $arquivo
+        $arquivo=Confirmar-ArquivoJournal $arquivo -PermitirArquivado
         $json = Ler-JSON $arquivo
         Confirmar-ContextoJournal $json
-        $linhas = @('Journal: ' + $arquivo, ('Sessao: ' + $json.rotulo), ('Criada: ' + $json.criado), '', 'Inspecao somente leitura; nao apague backups manualmente.', '')
+        Confirmar-FormatoJournal $json
+        $linhas = @('Sessao: ' + $json.rotulo, ('Criada: ' + $json.criado), '', 'Inspecao local somente leitura; pode conter dados privados. Compartilhe apenas o relatorio sanitizado.', 'Nao apague backups manualmente.', '')
         foreach ($item in @($json.itens)) {
             $estado = 'pendente'
             if ($item.estadoReversao -eq 'concluido') { $estado = 'revertido' }
             elseif ($item.estadoReversao -eq 'em_andamento') {
-                $estado=if ($json.versaoEsquema -eq 2 -and (Testar-RegistroJaRestaurado $item)) {'incerto - estado anterior confirmado; pode reconciliar'} else {'incerto - verificacao ao desfazer ou revisao manual'}
+                $estado=if ($json.versaoEsquema -eq 2 -and (Testar-ItemJaRestaurado $item)) {'incerto - estado anterior confirmado; pode reconciliar'} else {'incerto - verificacao ao desfazer ou revisao manual'}
             }
             if ($item.reconciliadoEm) {$estado='reconciliado por leitura'}
             $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '
             if ($item.confirmadoManualEm) { $estado = 'confirmado manualmente' }
+            if ($item.estadoReversao -eq 'manual-sem-restauracao') {$estado='encerrado sem afirmar restauracao'}
             $aplicacao=if ($item.estadoAplicacao) {$item.estadoAplicacao} else {'legado / nao confirmado'}
             $linhas += ('[{0}] {1}: {2} | aplicacao: {3}' -f $estado, $item.tipo, $alvo,$aplicacao)
+            $linhas+=('    Recuperacao: '+(Obter-TipoRecuperacao $item))
+            if ($item.erroAplicacao) {$linhas+='    Aplicacao nao confirmada; consulte estado real e backups.'}
+            if ($item.erroReversao) {$linhas+='    Reversao nao confirmada ou conflito; nao repetir sem verificar.'}
             foreach ($detalhe in @(Obter-DetalheRecuperacao $item)) { $linhas += ('    '+$detalhe) }
             foreach ($backup in @($item.destino, $item.arquivoReg, $item.backupReg) + @($item.backups)) {
                 if (-not $backup) { continue }
@@ -1137,7 +1180,16 @@ function Clique-DetalhesSessao {
         $caixa.TextWrapping = 'Wrap'
         $caixa.VerticalScrollBarVisibility = 'Auto'
         $caixa.Text = ($linhas -join [Environment]::NewLine)
-        $dlg.Content = $caixa
+        $painel=New-Object System.Windows.Controls.DockPanel
+        $exportar=New-Object System.Windows.Controls.Button
+        $exportar.Content='Exportar resumo sanitizado (sem valores, nomes ou caminhos)'
+        $exportar.Margin='8';$exportar.Padding='8,4'
+        $exportar.IsEnabled=Testar-PermissaoPrevia 'exportar'
+        $exportar.Tag=$arquivo
+        $exportar.Add_Click({try {Exportar-RelatorioRecuperacao $this.Tag} catch {Avisar 'Exportacao indisponivel' $_.Exception.Message}})
+        [System.Windows.Controls.DockPanel]::SetDock($exportar,'Bottom')
+        [void]$painel.Children.Add($exportar);[void]$painel.Children.Add($caixa)
+        $dlg.Content = $painel
         [void]$dlg.ShowDialog()
     } catch {
         Log ('falha ao consultar sessao: ' + $_.Exception.Message) -Erro
@@ -1355,6 +1407,7 @@ function Executar-OperacaoUI {
     $janela.IsEnabled = $false
     try { & $Acao }
     catch {
+        try {Registrar-FalhaOperacao 'interrompido'} catch {Log 'Resultado nao persistido; preserve o journal.' -Erro}
         Log ('operacao interrompida: ' + $_.Exception.Message) -Erro
         Status 'operacao interrompida; consulte o log.'
         Avisar 'Operacao interrompida' $_.Exception.Message
@@ -1721,7 +1774,7 @@ function Solicitar-ConsultaPainel {
             [void]$ps.AddScript($fonte)
         } elseif ($Tipo -eq 'Historico') {
             $fonte='param([string]$Pasta)'+[Environment]::NewLine+'$ErrorActionPreference="Stop"; $global:PastaDesfazer=$Pasta'+[Environment]::NewLine
-            foreach ($fn in @('Verificar-PastaPrivada','Listar-Sessoes','Ler-JSON','Obter-ContextoJournal','Confirmar-ContextoJournal','Confirmar-ArquivoJournal','Obter-SnapshotHistorico')) {
+            foreach ($fn in @('Verificar-PastaPrivada','Listar-Sessoes','Ler-JSON','Obter-ContextoJournal','Confirmar-ContextoJournal','Confirmar-ACLArquivoPrivado','Confirmar-ArquivoJournal','Confirmar-FormatoJournal','Obter-SnapshotHistorico')) {
                 $fonte+=('function '+$fn+' {'+(Get-Command $fn -CommandType Function).ScriptBlock.ToString()+'}'+[Environment]::NewLine)
             }
             $fonte+='Obter-SnapshotHistorico'

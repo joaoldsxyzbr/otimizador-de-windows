@@ -248,10 +248,18 @@ try {
 $dirArquivo = Join-Path $env:LOCALAPPDATA ('OtimizadorPC-CI-Arquivo-' + [guid]::NewGuid().ToString('N'))
 $dirBackup = Join-Path $global:PastaQuarantena ('ci-arquivo-' + [guid]::NewGuid().ToString('N'))
 try {
-    New-Item -Path $dirArquivo -ItemType Directory -ErrorAction Stop | Out-Null
+    Garantir-PastaPrivada $dirArquivo
     Garantir-PastaPrivada $dirBackup
+    $inseguro=Join-Path $dirArquivo 'acl-nao-confirmada.bin'
+    [IO.File]::WriteAllText($inseguro,'preservar')
+    Iniciar-Sessao 'ci-acl-insegura'
+    $recusou=$false
+    try {Apagar-Rastro ([pscustomobject]@{tipo='arquivo';caminho=$inseguro}) $dirBackup 99} catch {$recusou=$_.Exception.Message -match 'ACL herdada'}
+    if (-not $recusou -or -not (Test-Path -LiteralPath $inseguro) -or $global:SessaoItens.Count) {throw 'ACL nao confirmada permitiu movimentacao.'}
+    Log 'CI ok: origem com ACL herdada preservada'
     $origem = Join-Path $dirArquivo 'dados [teste].bin'
     [IO.File]::WriteAllBytes($origem,[byte[]]@(0,1,2,255))
+    [IO.File]::SetAccessControl($origem,(Nova-ACLJournal))
     $hash = (Get-FileHash -LiteralPath $origem -Algorithm SHA256).Hash
     Iniciar-Sessao 'ci-arquentena-arquivo'
     Apagar-Rastro ([pscustomobject]@{ tipo='arquivo'; caminho=$origem }) $dirBackup 1
@@ -272,6 +280,7 @@ try {
     Log 'CI ok: conflito preserva arquivo novo e backup'
     $origem2=Join-Path $dirArquivo 'integridade.bin'
     [IO.File]::WriteAllText($origem2,'original')
+    [IO.File]::SetAccessControl($origem2,(Nova-ACLJournal))
     Iniciar-Sessao 'ci-integridade'
     Apagar-Rastro ([pscustomobject]@{tipo='arquivo';caminho=$origem2}) $dirBackup 3
     $arq2=Salvar-Sessao
@@ -281,8 +290,10 @@ try {
     Log 'CI ok: hash divergente impede restauracao'
     # Folder manifest covers nested content and empty directories, and detects tampering.
     $pasta=Join-Path $dirArquivo 'pasta [teste]'
-    New-Item -ItemType Directory -Path (Join-Path $pasta 'vazia') -Force -ErrorAction Stop | Out-Null
+    Garantir-PastaPrivada $pasta
+    Garantir-PastaPrivada (Join-Path $pasta 'vazia')
     [IO.File]::WriteAllText((Join-Path $pasta 'dados.txt'),'original')
+    [IO.File]::SetAccessControl((Join-Path $pasta 'dados.txt'),(Nova-ACLJournal))
     $manifesto=Obter-HashPastaQuarentena $pasta
     Iniciar-Sessao 'ci-pasta'
     Apagar-Rastro ([pscustomobject]@{tipo='pasta';caminho=$pasta}) $dirBackup 4

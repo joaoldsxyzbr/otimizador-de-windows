@@ -326,6 +326,8 @@ function Desinstalar-Programa {
     Confirmar-PermissaoAlteracao 'desinstalar'
     [void](Validar-ProtecaoPrograma $Prog -Desinstalar)
     if ($hashExe -and (Confirmar-ExecutavelDesinstalacao $exe) -cne $hashExe) {throw 'Executavel alterado desde a confirmacao; operacao cancelada.'}
+    $entrada=[pscustomobject]@{tipo='desinstalado-app';nome=$Prog.nome;versao=$Prog.versao;editor=$Prog.editor;chaveOriginal=$Prog.chavePs}
+    Registrar-Jornal $entrada
     $params = @{ FilePath=$exe; Wait=$true; PassThru=$true; ErrorAction='Stop' }
     if ($argumentos) { $params.ArgumentList = $argumentos }
     $proc = Start-Process @params
@@ -333,6 +335,8 @@ function Desinstalar-Programa {
         if ($proc.ExitCode -notin @(0,3010,1641)) { throw ('Desinstalador falhou ou foi cancelado: ' + $proc.ExitCode) }
         Log ('desinstalador finalizado, codigo de saida: ' + $proc.ExitCode)
     } finally { $proc.Dispose() }
+    try {[void](Confirmar-ProgramaAusenteParaLimpeza $Prog);Confirmar-EfeitoJournal $entrada;return $true}
+    catch {Registrar-FalhaOperacao;Log ('Remocao nao confirmada; rastros preservados: '+$Prog.nome) -Erro;return $false}
 }
 
 function Clique-DesinstalarProg {
@@ -357,15 +361,13 @@ function Clique-DesinstalarProg {
     foreach ($pr in $selecionados) {
         $i++
         Status ('desinstalando {0}/{1}: {2}' -f $i, $selecionados.Count, $pr.nome)
-        $entrada=[pscustomobject]@{tipo='desinstalado-app';nome=$pr.nome;versao=$pr.versao;editor=$pr.editor;chaveOriginal=$pr.chavePs}
-        Registrar-Jornal $entrada
         try {
-            Desinstalar-Programa $pr
-            try { [void](Confirmar-ProgramaAusenteParaLimpeza $pr); Confirmar-EfeitoJournal $entrada; $concluidos += $pr }
-            catch { Log ('Remocao ainda nao confirmada; rastros preservados: '+$pr.nome) -Erro }
+            if (Desinstalar-Programa $pr) {$concluidos += $pr}
         } catch {
+            try {Registrar-FalhaOperacao} catch {Log 'Persistencia do resultado indisponivel.' -Erro}
             Log ('falha ao desinstalar {0}: {1}' -f $pr.nome, $_.Exception.Message) -Erro
         }
+        if (Testar-SessaoInterrompida) {break}
         Atualizar-UI
     }
     $arq = Salvar-Sessao
@@ -811,13 +813,18 @@ function Apagar-Rastro {
         $folha = ($folha -replace '[^a-zA-Z0-9_.{}-]', '')
         if ($folha.Length -gt 70) { $folha = $folha.Substring($folha.Length - 70) }
         $arqReg = Join-Path $PastaSessao ('{0:00}_registro_{1}.reg' -f $Num, $folha)
+        if (Test-Path -LiteralPath $arqReg -ErrorAction Stop) {throw 'Backup ja existe; preserve o original.'}
         Executar-RegNativo -Operacao export -Alvo $nativa -Arquivo $arqReg
         if (-not (Test-Path -LiteralPath $arqReg -PathType Leaf)) { throw 'Backup do registro falhou; chave preservada.' }
+        [IO.File]::SetAccessControl($arqReg,(Nova-ACLJournal))
+        Confirmar-ACLArquivoPrivado $arqReg
+        Confirmar-ConteudoBackupRegistro $arqReg $nativa
         $hash=(Get-FileHash -LiteralPath $arqReg -Algorithm SHA256 -ErrorAction Stop).Hash
         [void](Confirmar-BackupQuarentena $arqReg $hash)
         $entrada=[pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg;hashBackup=$hash }
         Registrar-Jornal $entrada
         Confirmar-PermissaoAlteracao 'rastros'
+        Confirmar-RegistroIgualAoBackup $nativa $arqReg $hash
         Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
         if (Test-Path -LiteralPath $Rastro.caminho) {throw 'Remocao de chave nao confirmada.'}
         Confirmar-EfeitoJournal $entrada
@@ -830,6 +837,8 @@ function Apagar-Rastro {
         $destino = Join-Path $PastaSessao ('{0:00}_{1}' -f $Num, $folha)
         if (Test-Path -LiteralPath $destino) { throw 'Destino da quarentena ja existe.' }
         $origem=Get-Item -LiteralPath $Rastro.caminho -Force -ErrorAction Stop
+        if ([IO.Path]::GetPathRoot($Rastro.caminho) -ine [IO.Path]::GetPathRoot($destino)) {throw 'Quarentena entre volumes indisponivel; preserve e revise manualmente.'}
+        Confirmar-ArvorePrivadaQuarentena $Rastro.caminho
         $hash=if ($origem.PSIsContainer) {Obter-HashPastaQuarentena $Rastro.caminho} else {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash}
         $entrada=[pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino;hashBackup=$hash;pasta=[bool]$origem.PSIsContainer }
         Registrar-Jornal $entrada
@@ -837,8 +846,10 @@ function Apagar-Rastro {
         if (-not (Caminho-RastroSeguro $Rastro.caminho)) {throw 'Origem mudou durante preparacao.'}
         $releitura=if ($origem.PSIsContainer) {Obter-HashPastaQuarentena $Rastro.caminho} else {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash}
         if ($releitura -ine $hash) {throw 'Conteudo mudou durante preparacao; preservado.'}
+        Confirmar-ArvorePrivadaQuarentena $Rastro.caminho
         Move-Item -LiteralPath $Rastro.caminho -Destination $destino -ErrorAction Stop
         [void](Confirmar-BackupQuarentena $destino $hash -PastaPermitida:([bool]$origem.PSIsContainer))
+        Confirmar-ArvorePrivadaQuarentena $destino
         if (Test-Path -LiteralPath $Rastro.caminho) {throw 'Movimentacao nao confirmada.'}
         Confirmar-EfeitoJournal $entrada
         Log ('rastro movido pra quarantena: ' + $Rastro.caminho)
@@ -901,7 +912,7 @@ function Clique-ApagarRastros {
     $msg = ('Apagar {0} rastro(s)' -f $selecionados.Count)
     if ($nomeProg -ne '') { $msg = $msg + (' de "{0}"' -f $nomeProg) }
     if ($info.risco -ne 'Normal') { $msg += (' - CAUTELA: ' + $info.motivo) }
-    $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. A recuperacao pode exigir revisao manual. Continuar?")
+    $msg = $msg + ("`n`n" + $resumo + "`n`nConfirme que o aplicativo ja foi desinstalado. A varredura por nome pode encontrar dados de aplicativos ainda instalados; apagar a entrada de desinstalacao nao desinstala o programa. Arquivos e chaves selecionados recebem journal antes da alteracao. Arquivos e pastas com ACL nao privada, links ou outros volumes ficam preservados para backup manual. A recuperacao pode exigir revisao manual. Continuar?")
     if (-not (Perguntar 'Apagar rastros' $msg)) { return }
     try { [void](Confirmar-ProgramaAusenteParaLimpeza $global:ProgVarredura) }
     catch { Avisar 'Limpeza bloqueada' $_.Exception.Message; return }
@@ -925,8 +936,10 @@ function Clique-ApagarRastros {
             Apagar-Rastro $r $pastaSessao $i
             $apagados++
         } catch {
+            try {Registrar-FalhaOperacao} catch {Log 'Persistencia do resultado indisponivel.' -Erro}
             Log ('falha ao apagar {0}: {1}' -f $r.caminho, $_.Exception.Message) -Erro
         }
+        if (Testar-SessaoInterrompida) {break}
         Atualizar-UI
     } } finally { Fechar-ProgressoLote $progresso }
     $arq = Salvar-Sessao

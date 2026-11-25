@@ -32,14 +32,14 @@ else { Write-Host 'Operacao interrompida com erro.' -ForegroundColor Yellow }
 }
 
 function Executar-NoConsole {
-    param([string]$Titulo, [string]$Bloco,[string]$Operacao)
+    param([string]$Titulo, [string]$Bloco,[string]$Operacao,$Plano=$null)
     Confirmar-PermissaoAlteracao $Operacao
     if ($Operacao -notin @('diagnostico-admin','reparo','winget','consulta-winget')) {throw 'Console fora do catalogo de operacoes.'}
     if ($Operacao -eq 'reparo') {Confirmar-PoliticaRecursosLocal}
     if ($Operacao -in @('winget','consulta-winget')) {Confirmar-PoliticaWingetLocal}
     Status ('executando: ' + $Titulo)
     Ocupado $true
-    $codigo = 1
+    $codigo = 1;$entrada=$null
     try {
         Log ('abrindo janela do powershell para: ' + $Titulo)
         $cmd = Montar-ComandoConsole -Bloco $Bloco
@@ -47,6 +47,12 @@ function Executar-NoConsole {
         $enc = [Convert]::ToBase64String($bytes)
         $psExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
         Confirmar-PermissaoAlteracao $Operacao
+        if ($Operacao -in @('winget','reparo')) {
+            Iniciar-Sessao $Operacao
+            $entrada=[pscustomobject]@{tipo=$(if ($Operacao -eq 'winget') {'instalacao-app'} else {'manutencao'});operacao=$Operacao;nome=$Titulo;plano=$Plano}
+            Registrar-Jornal $entrada
+            Confirmar-PermissaoAlteracao $Operacao
+        }
         $proc = Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -ErrorAction Stop
         try {
             while (-not $proc.WaitForExit(100)) { Atualizar-UI }
@@ -54,6 +60,12 @@ function Executar-NoConsole {
         } finally { $proc.Dispose() }
     } catch { Log ('falha ao abrir console: ' + $_.Exception.Message) -Erro }
     finally { Ocupado $false }
+    if ($entrada -and $entrada.idOperacao -and -not $global:JournalFalhou) {
+        $entrada | Add-Member -NotePropertyName codigoSaida -NotePropertyValue $codigo -Force
+        if ($codigo -eq 0) {Confirmar-EfeitoJournal $entrada 'pendente'} else {Registrar-FalhaOperacao}
+        [void](Salvar-Sessao)
+    }
+    if ($global:JournalFalhou -and $entrada) {throw 'Persistencia de journal indisponivel; nenhuma conclusao confirmada.'}
     if ($codigo -eq 0) { Log ('comandos concluidos: ' + $Titulo); Status 'pronto; confira os avisos.' }
     else { Log ('operacao com falha: ' + $Titulo + ' (codigo ' + $codigo + ')') -Erro; Status 'falha; consulte o log.' }
     return $codigo
@@ -207,10 +219,13 @@ function Limpar-Temporarios {
     $msg=('Encontrados {0} arquivo(s), {1:N2} MB estimados. Somente arquivos na raiz do Temp do usuario atual, modificados ha mais de 7 dias. O Temp do Windows nao sera limpo por esta rotina. Nao inclui subpastas, documentos ou links.' -f $plano.itens.Count,($plano.bytes/1MB))
     if ($plano.limitado) { $msg += ' Lista limitada; outros arquivos podem existir.' }
     $msg += "`n" + ($plano.avisos -join "`n") + "`nAmostra:`n" + (($plano.itens | Select-Object -First 8 | ForEach-Object {$_.caminho}) -join "`n")
-    $msg += "`n`nExclusao definitiva, sem journal de recuperacao. Arquivos em uso ou alterados serao ignorados. Continuar?"
+    $msg += "`n`nExclusao definitiva, com relatorio agregado, sem backup nem desfazer. Arquivos em uso ou alterados serao ignorados. Continuar?"
     if (-not (Perguntar 'Revisar limpeza de temporarios' $msg)) { return }
     Status 'limpando arquivos temporarios...'
     Ocupado $true
+    Iniciar-Sessao 'temporarios'
+    $entrada=[pscustomobject]@{tipo='temp';planejados=$plano.itens.Count;bytesPlanejados=$plano.bytes}
+    Registrar-Jornal $entrada
     $apagados=0; $ignorados=0; $bytes=0L
     $progresso=Iniciar-ProgressoLote 'Limpeza de temporarios' $plano.itens.Count
     try {
@@ -227,6 +242,11 @@ function Limpar-Temporarios {
             } catch { $ignorados++; Log ('temporario preservado: '+$f.caminho) }
         }
     } finally { Fechar-ProgressoLote $progresso; Ocupado $false }
+    $entrada | Add-Member -NotePropertyName apagados -NotePropertyValue $apagados -Force
+    $entrada | Add-Member -NotePropertyName ignorados -NotePropertyValue $ignorados -Force
+    $entrada | Add-Member -NotePropertyName bytes -NotePropertyValue $bytes -Force
+    Confirmar-EfeitoJournal $entrada $(if ($progresso.cancelado -or $ignorados -gt 0 -or $apagados -ne $plano.itens.Count) {'pendente'} else {'confirmado'})
+    [void](Salvar-Sessao)
     $res=('Removidos {0} arquivo(s), {1:N2} MB de tamanho logico; {2} ignorado(s).' -f $apagados,($bytes/1MB),$ignorados)
     if ($progresso.cancelado) { $res+=' Lote interrompido.' }
     Log $res; Status $res
@@ -236,9 +256,15 @@ function Limpar-DNS {
     Confirmar-PermissaoAlteracao 'dns'
     if (-not (Perguntar 'Limpar cache DNS' 'Limpar apenas o cache local de resolucao de nomes? Nao altera servidores DNS, VPN ou configuracao de rede. Use somente em problema de resolucao.')) {return}
     Confirmar-PermissaoAlteracao 'dns'
+    Iniciar-Sessao 'dns'
+    $entrada=[pscustomobject]@{tipo='manutencao';operacao='dns'}
+    Registrar-Jornal $entrada
+    Confirmar-PermissaoAlteracao 'dns'
     & (Join-Path $env:SystemRoot 'System32\ipconfig.exe') /flushdns | Out-Null
-    if ($LASTEXITCODE -ne 0) {throw 'Falha ao limpar DNS.'}
-    Log 'cache local do DNS limpo.'
+    if ($LASTEXITCODE -ne 0) {Registrar-FalhaOperacao;throw 'Falha ao limpar DNS.'}
+    Confirmar-EfeitoJournal $entrada 'pendente'
+    [void](Salvar-Sessao)
+    Log 'Comando de limpeza DNS aceito; efeito nao verificado independentemente.'
 }
 
 
@@ -249,10 +275,16 @@ function Sincronizar-Hora {
     Ocupado $true
     try {
         Confirmar-PermissaoAlteracao 'hora'
+        Iniciar-Sessao 'hora'
+        $entrada=[pscustomobject]@{tipo='manutencao';operacao='hora'}
+        Registrar-Jornal $entrada
+        Confirmar-PermissaoAlteracao 'hora'
         $saida=& (Join-Path $env:SystemRoot 'System32\w32tm.exe') /resync 2>&1
         $codigo=$LASTEXITCODE
         foreach ($linha in $saida) {Log ('  '+$linha)}
-        if ($codigo -ne 0) {throw ('Sincronizacao nao confirmada; codigo '+$codigo)}
+        if ($codigo -ne 0) {Registrar-FalhaOperacao;throw ('Sincronizacao nao confirmada; codigo '+$codigo)}
+        Confirmar-EfeitoJournal $entrada 'pendente'
+        [void](Salvar-Sessao)
         Log 'Solicitacao de sincronizacao aceita; confira a hora do Windows.'
         Status 'solicitacao concluida.'
     } finally {Ocupado $false}
@@ -395,7 +427,7 @@ function Instalar-Aplicativos {
     Confirmar-PoliticaWingetLocal
     foreach ($app in $Selecionados) {Confirmar-AppCatalogado $app}
     if ((Obter-WingetExe) -cne $exe) {throw 'WinGet mudou durante a confirmacao; refaca a operacao.'}
-    Executar-NoConsole -Operacao 'winget' -Titulo $titulo -Bloco $linhas.ToString()
+    Executar-NoConsole -Operacao 'winget' -Titulo $titulo -Bloco $linhas.ToString() -Plano @($Selecionados | ForEach-Object {[pscustomobject]@{id=$_.id;fonte=$_.fonte;versao=$_.versao;operacao=$Operacao}})
 }
 
 function Atualizar-Tudo {

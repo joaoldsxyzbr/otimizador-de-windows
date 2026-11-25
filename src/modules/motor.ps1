@@ -128,6 +128,7 @@ function Iniciar-Sessao {
     $global:SessaoItens = New-Object System.Collections.ArrayList
     $global:RotuloSessao = $Rotulo
     $global:ErrosSessao = 0
+    $global:JournalFalhou=$false
     $global:CarimboSessao = (Get-Date -Format 'yyyy-MM-dd_HH-mm-ss') + '_' + [guid]::NewGuid().ToString('N').Substring(0, 12)
     $global:SessaoCriado = (Get-Date -Format 'o')
     $global:BackupN = 0
@@ -146,6 +147,7 @@ function Obter-ArquivoSessao {
 # grava o journal inteiro no arquivo (chamado a CADA acao: se o pc ou o app
 # morrer no meio, o que ja foi feito continua desfazivel)
 function Gravar-SessaoArquivo {
+    try {
     Confirmar-ContextoJournal ([pscustomobject]@{versaoEsquema=2;contexto=$global:ContextoSessaoJournal})
     $arquivo = Obter-ArquivoSessao
     $obj = [pscustomobject]@{
@@ -157,6 +159,7 @@ function Gravar-SessaoArquivo {
     }
     Gravar-JournalSeguro -Arquivo $arquivo -Objeto $obj
     return $arquivo
+    } catch {$global:JournalFalhou=$true;throw}
 }
 
 # Make the file ACL explicit: NTFS inheritance and File.Replace can differ by host.
@@ -180,14 +183,17 @@ function Gravar-JournalSeguro {
     $full=[IO.Path]::GetFullPath($Arquivo)
     if ([IO.Path]::GetDirectoryName($full) -ine $pasta -or [IO.Path]::GetExtension($full) -ine '.json' -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Destino de journal invalido.'}
     Verificar-PastaPrivada $pasta
+    Confirmar-FormatoJournal $Objeto
     if (Test-Path -LiteralPath $full) {[void](Confirmar-ArquivoJournal $full)}
     $backup=$full+'.bak'
     if (Test-Path -LiteralPath $backup) {
         $b=Get-Item -LiteralPath $backup -Force -ErrorAction Stop
         if ($b.PSIsContainer -or ($b.Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Backup de journal redirecionado.'}
+        Confirmar-ACLArquivoPrivado $backup
     }
     Gravar-JSONAtomico -Arquivo $full -Objeto $Objeto -AclJournal
     [void](Confirmar-ArquivoJournal $full)
+    if (Test-Path -LiteralPath $backup) {Confirmar-ACLArquivoPrivado $backup}
 }
 
 function Gravar-JSONAtomico {
@@ -198,6 +204,7 @@ function Gravar-JSONAtomico {
     $temporario = $arquivo + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
     try {
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        if ($AclJournal -and $bytes.Length -gt 67108864) {throw 'Journal acima do limite de tamanho.'}
         $stream = [System.IO.File]::Open($temporario, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
         try {
             $stream.Write($bytes, 0, $bytes.Length)
@@ -216,13 +223,81 @@ function Gravar-JSONAtomico {
     }
 }
 
+# Classification describes the recovery contract, not a promise of data recovery.
+function Obter-TipoRecuperacao {
+    param($Item)
+    switch ($Item.tipo) {
+        {$_ -in @('registro','energia','servico','tarefa','path-entrada')} {return 'por-snapshot'}
+        {$_ -in @('quarantena-arquivo','quarantena-registro','recurso','appx')} {return 'condicional'}
+        default {return 'manual-sem-garantia'}
+    }
+}
+
+# Keep the durable intent when the effect cannot be verified. Do not persist
+# exception messages that may contain credentials or private paths.
+function Registrar-FalhaOperacao {
+    param([string]$Categoria='efeito-nao-confirmado')
+    if ($global:JournalFalhou -or -not $global:SessaoItens -or $Categoria -notin @('efeito-nao-confirmado','interrompido')) {return}
+    $item=$global:SessaoItens[$global:SessaoItens.Count-1]
+    if ($item.estadoAplicacao -ne 'intencao') {return}
+    $item.estadoAplicacao='falhou'
+    $item | Add-Member -NotePropertyName falhouEm -NotePropertyValue (Get-Date -Format 'o') -Force
+    $item | Add-Member -NotePropertyName erroAplicacao -NotePropertyValue $Categoria -Force
+    try {[void](Gravar-SessaoArquivo)}
+    catch {$item.estadoAplicacao='intencao';$item.PSObject.Properties.Remove('falhouEm');$item.PSObject.Properties.Remove('erroAplicacao');throw}
+}
+
+function Testar-SessaoInterrompida {
+    return ([bool]$global:JournalFalhou -or @($global:SessaoItens | Where-Object {$_.estadoAplicacao -in @('intencao','falhou','pendente')}).Count -gt 0)
+}
+
+# A sanitized report is constructed from an allowlist, never by removing
+# selected keys from the original journal. No IDs, paths, values, dates,
+# names, SID, machine identifier, raw errors or arbitrary strings.
+function Obter-RelatorioRecuperacao {
+    param($Journal)
+    Confirmar-ContextoJournal $Journal
+    Confirmar-FormatoJournal $Journal
+    $n=0
+    $itens=@(foreach ($item in @($Journal.itens)) {
+        $n++
+        $tipo=if ($item.tipo -in @('registro','energia','servico','tarefa','path-entrada','quarantena-arquivo','quarantena-registro','recurso','appx','desinstalado-app','reg-import','comando','regra-firewall','firewall-estado','instalacao-app','temp','manutencao')) {[string]$item.tipo} else {'outro'}
+        $aplicacao=if ($item.estadoAplicacao -in @('intencao','confirmado','pendente','falhou')) {[string]$item.estadoAplicacao} else {'nao-confirmado'}
+        $reversao=if ($item.confirmadoManualEm) {'atestado-manual'} elseif ($item.reconciliadoEm) {'reconciliado'} elseif ($item.estadoReversao -in @('pendente','em_andamento','concluido','manual-sem-restauracao')) {[string]$item.estadoReversao} else {'pendente'}
+        [pscustomobject]@{ordem=$n;tipo=$tipo;aplicacao=$aplicacao;reversao=$reversao;recuperacao=(Obter-TipoRecuperacao $item);backupRegistrado=[bool]($item.destino -or $item.arquivoReg -or $item.backupReg)}
+    })
+    [pscustomobject]@{formato='relatorio-recuperacao-sanitizado-v1';total=$itens.Count;itens=$itens;nota='Resumo de estados registrados, nao e journal importavel nem prova de integridade dos backups.'}
+}
+
+# Old schema 2 journals may omit later status fields. Validate structural
+# invariants without manufacturing missing snapshots or identity.
+function Confirmar-FormatoJournal {
+    param($Journal)
+    if (-not $Journal -or $null -eq $Journal.itens -or $Journal.itens -isnot [array] -or @($Journal.itens).Count -gt 10000) {throw 'Estrutura de journal invalida.'}
+    $ids=@{}
+    foreach ($item in @($Journal.itens)) {
+        if (-not $item -or $item.tipo -isnot [string] -or -not $item.tipo) {throw 'Item de journal invalido.'}
+        if ($item.PSObject.Properties['estadoAplicacao'] -and $item.estadoAplicacao -notin @('intencao','confirmado','pendente','falhou')) {throw 'Estado de aplicacao invalido.'}
+        if ($item.PSObject.Properties['estadoReversao'] -and $item.estadoReversao -notin @('pendente','em_andamento','concluido','manual-sem-restauracao')) {throw 'Estado de reversao invalido.'}
+        if ($item.PSObject.Properties['idOperacao']) {
+            $id=[guid]::Empty
+            if (-not [guid]::TryParse([string]$item.idOperacao,[ref]$id) -or $id -eq [guid]::Empty -or $ids.ContainsKey($id.ToString())) {throw 'Identidade de operacao invalida ou duplicada.'}
+            $ids[$id.ToString()]=$true
+        }
+    }
+}
+
 function Registrar-Jornal {
     param($Item)
     Confirmar-PermissaoAlteracao 'estado-local'
     if ($null -eq $global:SessaoItens) { throw 'Sessao de journal nao iniciada.' }
+    if ($global:JournalFalhou) {throw 'Persistencia do journal falhou; lote interrompido. Preserve os arquivos.'}
+    if (@($global:SessaoItens | Where-Object {$_.estadoAplicacao -in @('intencao','falhou','pendente')}).Count) {throw 'Existe efeito nao confirmado nesta sessao; nao iniciar outra mutacao.'}
     $Item | Add-Member -NotePropertyName idOperacao -NotePropertyValue ([guid]::NewGuid().ToString('N')) -Force
     $Item | Add-Member -NotePropertyName estadoAplicacao -NotePropertyValue 'intencao' -Force
     $Item | Add-Member -NotePropertyName registradoEm -NotePropertyValue (Get-Date -Format 'o') -Force
+    $Item | Add-Member -NotePropertyName reversibilidade -NotePropertyValue (Obter-TipoRecuperacao $Item) -Force
+    $Item | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'pendente' -Force
     [void]$global:SessaoItens.Add($Item)
     try {
         [void](Gravar-SessaoArquivo)
@@ -236,27 +311,23 @@ function Registrar-Jornal {
 function Confirmar-EfeitoJournal {
     param($Item,[ValidateSet('confirmado','pendente')][string]$Estado='confirmado')
     if (-not $Item.PSObject.Properties['idOperacao']) {return}
+    if ($global:JournalFalhou -or $Item.estadoAplicacao -ne 'intencao') {throw 'Transicao de journal indisponivel.'}
     $Item.estadoAplicacao=$Estado
     $Item | Add-Member -NotePropertyName verificadoEm -NotePropertyValue (Get-Date -Format 'o') -Force
-    [void](Gravar-SessaoArquivo)
+    try {[void](Gravar-SessaoArquivo)} catch {$Item.estadoAplicacao='intencao';$Item.PSObject.Properties.Remove('verificadoEm');throw}
 }
 
 function Salvar-Sessao {
     if ($null -eq $global:SessaoItens -or $global:SessaoItens.Count -eq 0) { return $null }
+    if ($global:JournalFalhou) {throw 'Journal nao confirmado; preserve a ultima copia duravel.'}
+    if (@($global:SessaoItens | Where-Object {$_.estadoAplicacao -eq 'intencao'}).Count) {Registrar-FalhaOperacao 'interrompido'}
     return (Gravar-SessaoArquivo)
 }
 
 # Only summaries cross to WPF. Invalid or foreign journals are never selectable targets.
 # Validate a recovery target at the point of reading or mutating the journal.
-function Confirmar-ArquivoJournal {
-    param([string]$Arquivo)
-    if (-not $global:PastaDesfazer -or $Arquivo -notmatch '^[A-Za-z]:\\' -or [IO.Path]::GetExtension($Arquivo) -ine '.json') {throw 'Caminho de journal invalido.'}
-    $pasta=[IO.Path]::GetFullPath($global:PastaDesfazer).TrimEnd('\')
-    $full=[IO.Path]::GetFullPath($Arquivo)
-    if ([IO.Path]::GetDirectoryName($full) -ine $pasta -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Journal fora da pasta de recuperacao.'}
-    Verificar-PastaPrivada $pasta
-    $item=Get-Item -LiteralPath $full -Force -ErrorAction Stop
-    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Journal redirecionado ou invalido.'}
+function Confirmar-ACLArquivoPrivado {
+    param([string]$full)
     $acl=Get-Acl -LiteralPath $full -ErrorAction Stop
     $regras=@($acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier]))
     $esperados=@('S-1-5-32-544','S-1-5-18','S-1-3-4')
@@ -273,6 +344,18 @@ function Confirmar-ArquivoJournal {
     $dono=$acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
     $ownerRules=@($regras | Where-Object {$_.IdentityReference.Value -eq 'S-1-3-4'}).Count
     if ($ownerRules -gt 1 -or ($ownerRules -ne 1 -and $dono -notin @('S-1-5-32-544','S-1-5-18'))) {throw 'Proprietario do journal nao protegido.'}
+}
+
+function Confirmar-ArquivoJournal {
+    param([string]$Arquivo,[switch]$PermitirArquivado)
+    if (-not $global:PastaDesfazer -or $Arquivo -notmatch '^[A-Za-z]:\\' -or ($Arquivo -notmatch '\.json$' -and (-not $PermitirArquivado -or $Arquivo -notmatch '\.json\.revertido$'))) {throw 'Caminho de journal invalido.'}
+    $pasta=[IO.Path]::GetFullPath($global:PastaDesfazer).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Arquivo)
+    if ([IO.Path]::GetDirectoryName($full) -ine $pasta -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Journal fora da pasta de recuperacao.'}
+    Verificar-PastaPrivada $pasta
+    $item=Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Length -gt 67108864) {throw 'Journal redirecionado ou invalido.'}
+    Confirmar-ACLArquivoPrivado $full
     return $full
 }
 
@@ -282,22 +365,26 @@ function Obter-SnapshotHistorico {
         $rotulo=$s.BaseName
         $valido=$false
         try {
-            $arquivo=Confirmar-ArquivoJournal $s.FullName
+            $arquivo=Confirmar-ArquivoJournal $s.FullName -PermitirArquivado
             $json=Ler-JSON $arquivo
             if ($null -eq $json -or $null -eq $json.itens) {throw 'Journal invalido.'}
             Confirmar-ContextoJournal $json
-            $concluidos=@($json.itens | Where-Object {$_.estadoReversao -eq 'concluido'}).Count
+            Confirmar-FormatoJournal $json
+            $concluidos=@($json.itens | Where-Object {$_.estadoReversao -in @('concluido','manual-sem-restauracao')}).Count
             $incertos=@($json.itens | Where-Object {$_.estadoReversao -eq 'em_andamento'}).Count
             $intencoes=@($json.itens | Where-Object {$_.estadoAplicacao -eq 'intencao'}).Count
             $pendentes=@($json.itens | Where-Object {$_.estadoAplicacao -eq 'pendente'}).Count
-            $rotulo+=(' - {0}/{1} revertidas: {2}' -f $concluidos,@($json.itens).Count,$json.rotulo)
+            $rotulo+=(' - {0}/{1} encerradas: {2}' -f $concluidos,@($json.itens).Count,$json.rotulo)
             if ($incertos -gt 0) {$rotulo+=' [reversao incerta: verificar estado anterior]'}
             if ($intencoes -gt 0) {$rotulo+=(' [intencoes nao confirmadas: '+$intencoes+']')}
             if ($pendentes -gt 0) {$rotulo+=(' [efeitos pendentes: '+$pendentes+']')}
+            $falhas=@($json.itens | Where-Object {$_.estadoAplicacao -eq 'falhou'}).Count
+            if ($falhas) {$rotulo+=(' [efeitos nao confirmados apos falha: '+$falhas+']')}
+            if ($s.Name -like '*.revertido') {$rotulo+=' [arquivado]'}
             if (-not $json.PSObject.Properties['versaoEsquema']) {$rotulo+=' [legado: identidade nao confirmada]'}
             $valido=$true
         } catch {$rotulo+=' [invalido ou contexto diferente]'}
-        [pscustomobject]@{rotulo=$rotulo;arquivo=$s.FullName;valido=$valido}
+        [pscustomobject]@{rotulo=$rotulo;arquivo=$s.FullName;valido=$valido;arquivado=($s.Name -like '*.revertido')}
     })
     [pscustomobject]@{itens=$itens}
 }
@@ -305,7 +392,7 @@ function Obter-SnapshotHistorico {
 function Listar-Sessoes {
     if (-not (Test-Path $global:PastaDesfazer)) { return @() }
     Verificar-PastaPrivada $global:PastaDesfazer
-    return @(Get-ChildItem -LiteralPath $global:PastaDesfazer -File -Filter '*.json' | Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } | Sort-Object LastWriteTime -Descending)
+    return @(Get-ChildItem -LiteralPath $global:PastaDesfazer -File | Where-Object { $_.Name -match '\.json(?:\.revertido)?$' -and -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) } | Sort-Object LastWriteTime -Descending)
 }
 
 # descreve em texto o que uma acao faria (usado no modo simulacao)
@@ -736,7 +823,9 @@ function Executar-Acao {
 
     Confirmar-PermissaoAlteracao 'estado-local'
     $ErrorActionPreference = 'Stop'
+    $antesItens=@($global:SessaoItens | Where-Object {$_}).Count
     try {
+        if (Testar-SessaoInterrompida) {throw 'Lote interrompido por efeito anterior nao confirmado.'}
         Confirmar-NovaAcao $Acao
         Confirmar-PermissaoAlteracao (Obter-IdOperacaoAcao $Acao)
         switch ($Acao.tipo) {
@@ -744,16 +833,8 @@ function Executar-Acao {
             'registro' {
                 Confirmar-PoliticaPreferenciaLocal $Acao.caminho $Acao.nome
                 $leitura = Ler-ValorRegistro -CaminhoPS $Acao.caminho -Nome $Acao.nome
-                # cinto e suspensorios: exporta a chave inteira em .reg antes de mexer
-                $arqBackup = $null
-                try {
-                    $global:BackupN++
-                    $folha = ($leitura.rede -replace '\\', '_')
-                    if ($folha.Length -gt 60) { $folha = $folha.Substring($folha.Length - 60) }
-                    $arqBackup = Join-Path $global:PastaDesfazer ('{0}_reg_{1:00}_{2}.reg' -f $global:CarimboSessao, $global:BackupN, $folha)
-                    Executar-RegNativo -Operacao export -Alvo $leitura.rede -Arquivo $arqBackup
-                    if (-not (Test-Path $arqBackup)) { $arqBackup = $null }
-                } catch { $arqBackup = $null }
+                # The durable per-value snapshot is the backup; do not export unrelated sibling values.
+                $arqBackup=$null
                 $kind = Converter-Kind $Acao.tipoValor
                 $dados = $Acao.dados
                 if (-not $Acao.remover) {
@@ -884,6 +965,7 @@ function Executar-Acao {
             }
         }
     } catch {
+        if (@($global:SessaoItens | Where-Object {$_}).Count -gt $antesItens) {try {Registrar-FalhaOperacao} catch {Log 'Falha ao persistir resultado; lote interrompido.' -Erro}}
         Log ("falha ao aplicar '{0}': {1}" -f $desc, $_.Exception.Message) -Erro
     }
 }
@@ -939,6 +1021,68 @@ function Confirmar-PastaSessaoQuarentena {
     Verificar-PastaPrivada $root
     Verificar-PastaPrivada $full
     return $full
+}
+
+# A .reg backup must be the export of exactly one reviewed subtree. Never
+# accept key-deletion directives or a second unrelated key in an import.
+function Confirmar-ConteudoBackupRegistro {
+    param([string]$Arquivo,[string]$Chave)
+    if (-not (Chave-RastroSegura $Chave)) {throw 'Chave de backup fora do escopo.'}
+    $f=Get-Item -LiteralPath $Arquivo -Force -ErrorAction Stop
+    if ($f.PSIsContainer -or ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $f.Length -gt 16777216) {throw 'Backup de registro invalido ou acima de 16 MiB.'}
+    $linhas=@(Get-Content -LiteralPath $Arquivo -Encoding Unicode -ErrorAction Stop)
+    if ($linhas.Count -lt 2 -or $linhas[0] -ne 'Windows Registry Editor Version 5.00') {throw 'Cabecalho .reg invalido.'}
+    $raiz=$false;$continuacao=$false
+    foreach ($linha in ($linhas | Select-Object -Skip 1)) {
+        $s=$linha.Trim()
+        if (-not $s) {if ($continuacao) {throw 'Continuacao .reg incompleta.'};continue}
+        if ($continuacao) {
+            if ($s -notmatch '^(?:[0-9a-fA-F]{2},)*[0-9a-fA-F]{2},?\\?$') {throw 'Continuacao .reg invalida.'}
+            $continuacao=$s.EndsWith('\')
+            continue
+        }
+        if ($s -match '^\[(.+)\]$') {
+            $alvo=$Matches[1]
+            if ($alvo -ieq $Chave) {$raiz=$true}
+            elseif (-not $raiz -or -not $alvo.StartsWith($Chave+'\',[StringComparison]::OrdinalIgnoreCase)) {throw 'Backup .reg contem alvo externo ou exclusao.'}
+        } elseif ($raiz -and $s -match '^(?:@|"(?:[^"\\]|\\.)*")=(?:"(?:[^"\\]|\\.)*"|dword:[0-9a-fA-F]{8}|hex(?:\([0-9a-fA-F]+\))?:(?:[0-9a-fA-F]{2},)*[0-9a-fA-F]{0,2},?\\?)$') {
+            $continuacao=$s.EndsWith('\')
+        } else {throw 'Diretiva .reg fora do formato de exportacao revisado.'}
+    }
+    if (-not $raiz -or $continuacao) {throw 'Backup .reg incompleto.'}
+}
+
+function Confirmar-RegistroIgualAoBackup {
+    param([string]$Chave,[string]$Backup,[string]$Hash)
+    $pasta=Confirmar-PastaSessaoQuarentena (Split-Path -Parent $Backup)
+    $temp=Join-Path $pasta ('verificacao-'+[guid]::NewGuid().ToString('N')+'.reg')
+    try {
+        Executar-RegNativo -Operacao export -Alvo $Chave -Arquivo $temp
+        [IO.File]::SetAccessControl($temp,(Nova-ACLJournal))
+        Confirmar-ACLArquivoPrivado $temp
+        Confirmar-ConteudoBackupRegistro $temp $Chave
+        if ((Get-FileHash -LiteralPath $temp -Algorithm SHA256 -ErrorAction Stop).Hash -ine $Hash) {throw 'Conteudo da chave divergente do backup; preserve o estado.'}
+    } finally {if (Test-Path -LiteralPath $temp) {Remove-Item -LiteralPath $temp -Force -ErrorAction Stop}}
+}
+
+# Do not change source permissions to make an object eligible.
+function Confirmar-ArvorePrivadaQuarentena {
+    param([string]$Caminho,[int]$Limite=2001)
+    $fila=New-Object 'System.Collections.Generic.Stack[string]'
+    $fila.Push($Caminho)
+    $n=0
+    while ($fila.Count) {
+        $atual=$fila.Pop();$n++
+        if ($n -gt $Limite) {throw 'Arvore acima do limite de verificacao ACL.'}
+        $i=Get-Item -LiteralPath $atual -Force -ErrorAction Stop
+        if ($i.Attributes -band [IO.FileAttributes]::ReparsePoint -or $i.LinkType) {throw 'Link na arvore; preserve e revise manualmente.'}
+        $acl=Get-Acl -LiteralPath $atual -ErrorAction Stop
+        if (-not $acl.AreAccessRulesProtected) {throw 'ACL herdada ou nao privada; quarentena automatica indisponivel. Preserve e faca backup autorizado.'}
+        Confirmar-ACLArquivoPrivado $atual
+        if ($i.PSIsContainer) {
+            foreach ($filho in @(Get-ChildItem -LiteralPath $atual -Force -ErrorAction Stop)) {$fila.Push($filho.FullName)}
+        }
+    }
 }
 
 function Confirmar-BackupQuarentena {
@@ -1086,12 +1230,13 @@ function Desfazer-Item {
                 Confirmar-PoliticaAppxLocal
                 if (-not (Testar-AppxCatalogado $Item.pacote)) {throw 'Pacote fora do catalogo atual; reinstale manualmente.'}
                 if (-not $Item.usuarioSid -or $Item.usuarioSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) { throw 'A sessao AppX pertence a outro usuario.' }
-                if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0) { Log 'appx ja esta instalado no usuario atual.'; return $true }
+                if (Testar-ItemJaRestaurado $Item) {Log 'Versao registrada do AppX presente; dados nao verificados.'; return $true}
+                if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0) {throw 'Outra versao do AppX presente; revise manualmente, sem substituir.'}
                 $fez = $false
                 if (-not [string]::IsNullOrWhiteSpace([string]$Item.familia) -and $Item.familia -match ('^'+[regex]::Escape([string]$Item.pacote)+'_[a-z0-9]{13}$')) {
                     try {
                         Add-AppxPackage -RegisterByFamilyName -MainPackage $Item.familia -ErrorAction Stop
-                        $fez = (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.Name -eq $Item.pacote }).Count -gt 0)
+                        $fez = (Testar-ItemJaRestaurado $Item)
                     } catch { $fez = $false }
                 }
                 if ($fez) {
@@ -1147,7 +1292,10 @@ function Desfazer-Item {
             }
 
             'quarantena-arquivo' {
+                if (Testar-ItemJaRestaurado $Item) {return $true}
                 $backup=Confirmar-BackupQuarentena $Item.destino $Item.hashBackup -PastaPermitida:([bool]$Item.pasta)
+                Confirmar-ArvorePrivadaQuarentena $backup
+                if ([IO.Path]::GetPathRoot($backup) -ine [IO.Path]::GetPathRoot($Item.origem)) {throw 'Restauracao entre volumes nao suportada.'}
                 if (-not (Caminho-RastroSeguro $Item.origem -PermitirAusente)) {throw 'Destino original fora dos locais revisados.'}
                 if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $Item.origem)) {
                     $pai = Split-Path -Parent $Item.origem
@@ -1161,6 +1309,7 @@ function Desfazer-Item {
                         $atual = $superior
                     }
                     Move-Item -LiteralPath $backup -Destination $Item.origem -ErrorAction Stop
+                    Confirmar-ArvorePrivadaQuarentena $Item.origem
                     $hashRestaurado=if ($Item.pasta) {Obter-HashPastaQuarentena $Item.origem} else {(Get-FileHash -LiteralPath $Item.origem -Algorithm SHA256 -ErrorAction Stop).Hash}
                     if ($hashRestaurado -ine $Item.hashBackup) {throw 'Conteudo restaurado nao confirmado.'}
                     Log ("rastro restaurado da quarantena: " + $Item.origem)
@@ -1172,9 +1321,14 @@ function Desfazer-Item {
             'quarantena-registro' {
                 $backup=Confirmar-BackupQuarentena $Item.arquivoReg $Item.hashBackup
                 if (-not (Chave-RastroSegura $Item.chave)) {throw 'Alvo de registro protegido; revise manualmente.'}
+                Confirmar-ACLArquivoPrivado $backup
+                Confirmar-ConteudoBackupRegistro $backup $Item.chave
                 if (Test-Path -LiteralPath $backup) {
                     if (Test-Path -LiteralPath ('Registry::' + $Item.chave)) { throw 'Chave recriada desde a limpeza; nao sobrescrevendo.' }
+                    Confirmar-PermissaoAlteracao 'rastros'
+                    if (Test-Path -LiteralPath ('Registry::'+$Item.chave) -ErrorAction Stop) {throw 'Chave recriada durante preparacao.'}
                     Executar-RegNativo -Operacao import -Alvo $backup
+                    Confirmar-RegistroIgualAoBackup $Item.chave $backup $Item.hashBackup
                     if (-not (Test-Path -LiteralPath ('Registry::' + $Item.chave))) { throw 'Importacao terminou sem restaurar a chave.' }
                     Log ("chave de registro restaurada: " + $Item.chave)
                 } else {
@@ -1230,10 +1384,24 @@ function Testar-ItemJaRestaurado {
                 $atual=@(Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop)
                 return ($atual.Count -eq 1 -and $atual[0].TaskName -eq $Item.tarefaNome -and $atual[0].TaskPath -eq $Item.tarefaPath -and $atual[0].State -eq 'Ready')
             }
+            'path-entrada' {
+                if ($Item.escopo -notin @('Machine','User') -or $Item.tipoAnterior -notin @('String','ExpandString') -or -not $Item.PSObject.Properties['valorDepois']) {return $false}
+                $bruto=Obter-PathBruto $Item.escopo
+                return ($null -ne $bruto -and [string]$bruto.tipo -eq $Item.tipoAnterior -and [string]$bruto.valor -ceq [string]$Item.valorAnterior)
+            }
+            'recurso' {
+                if (-not (Testar-RecursoCatalogado $Item.nome) -or $Item.estadoAnterior -notin @('Enabled','Disabled') -or $Item.estadoDepois -notin @('Enabled','Disabled') -or @($Item.alteracoes).Count -ne 1 -or $Item.alteracoes[0].nome -ne $Item.nome) {return $false}
+                return ((Get-WindowsOptionalFeature -Online -FeatureName $Item.nome -ErrorAction Stop).State.ToString() -eq $Item.estadoAnterior)
+            }
+            'appx' {
+                if (-not $Item.completo -or -not $Item.familia -or -not $Item.usuarioSid -or $Item.usuarioSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) {return $false}
+                return (@(Get-AppxPackage -ErrorAction Stop | Where-Object {$_.PackageFullName -eq $Item.completo -and $_.PackageFamilyName -eq $Item.familia}).Count -eq 1)
+            }
             'quarantena-arquivo' {
                 if ($Item.pasta -isnot [bool] -or $Item.hashBackup -notmatch '^[0-9a-fA-F]{64}$' -or -not (Caminho-RastroSeguro $Item.origem)) {return $false}
                 [void](Confirmar-PastaSessaoQuarentena (Split-Path -Parent $Item.destino))
                 if (Test-Path -LiteralPath $Item.destino -ErrorAction Stop) {return $false}
+                Confirmar-ArvorePrivadaQuarentena $Item.origem
                 $atual=Get-Item -LiteralPath $Item.origem -Force -ErrorAction Stop
                 if ([bool]$atual.PSIsContainer -ne $Item.pasta) {return $false}
                 $hash=if ($Item.pasta) {Obter-HashPastaQuarentena $Item.origem} else {(Get-FileHash -LiteralPath $Item.origem -Algorithm SHA256 -ErrorAction Stop).Hash}
@@ -1253,11 +1421,12 @@ function Reverter-Sessao {
         $json = Ler-JSON $Arquivo
         if ($null -eq $json -or $null -eq $json.itens) { throw 'Journal invalido.' }
         Confirmar-ContextoJournal $json
+        Confirmar-FormatoJournal $json
         $itens = @($json.itens)
         $feitas = 0
         for ($i = $itens.Count - 1; $i -ge 0; $i--) {
             $item = $itens[$i]
-            if ($item.estadoReversao -eq 'concluido') { continue }
+            if ($item.estadoReversao -in @('concluido','manual-sem-restauracao')) { continue }
             if ($item.estadoReversao -eq 'em_andamento') {
                 if ($json.versaoEsquema -ne 2 -or -not (Testar-ItemJaRestaurado $item)) {
                     throw ("Acao {0} com resultado incerto. Revise manualmente antes de continuar." -f $i)
@@ -1270,24 +1439,30 @@ function Reverter-Sessao {
                 if ($UmaAcao -and $feitas -ge 1) {break}
                 continue
             }
+            if ((Obter-TipoRecuperacao $item) -eq 'manual-sem-garantia' -and $item.tipo -in @('desinstalado-app','instalacao-app','temp','manutencao','reg-import','comando','regra-firewall','firewall-estado')) {throw 'Operacao sem desfazer automatico. Use encerramento manual sem restauracao.'}
             $item | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force
             Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
             if (-not (Desfazer-Item $item)) {
+                $item | Add-Member -NotePropertyName erroReversao -NotePropertyValue 'efeito-nao-confirmado-ou-conflito' -Force
+                $item | Add-Member -NotePropertyName falhaReversaoEm -NotePropertyValue (Get-Date -Format 'o') -Force
+                Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
                 throw ("Falha na acao {0}. Journal preservado; revisao manual necessaria." -f $i)
             }
             $item.estadoReversao = 'concluido'
+            $item | Add-Member -NotePropertyName revertidoEm -NotePropertyValue (Get-Date -Format 'o') -Force
             Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
             $feitas++
             Atualizar-UI
             if ($UmaAcao -and $feitas -ge 1) { break }
         }
-        if (@($itens | Where-Object { $_.estadoReversao -ne 'concluido' }).Count -gt 0) {
+        if (@($itens | Where-Object { $_.estadoReversao -notin @('concluido','manual-sem-restauracao') }).Count -gt 0) {
             Log 'Uma acao revertida. Restam itens nesta sessao.'
             return $true
         }
         $novoNome = (Split-Path -Leaf $Arquivo) + '.revertido'
+        if (Test-Path -LiteralPath ($Arquivo+'.revertido') -ErrorAction Stop) {throw 'Arquivo de historico ja existe; journal preservado.'}
         Rename-Item -LiteralPath $Arquivo -NewName $novoNome -ErrorAction Stop
-        Log 'sessao revertida. algumas mudancas podem exigir relogar no windows.'
+        Log 'Sessao arquivada. Itens manuais nao equivalem a restauracao; confira os detalhes.'
         return $true
     } catch {
         Log ('Reversao interrompida: ' + $_.Exception.Message) -Erro
@@ -1297,22 +1472,31 @@ function Reverter-Sessao {
 
 # Atestado manual: registra a verificacao feita pelo usuario, sem repetir a acao.
 function Confirmar-ReversaoManual {
-    param([string]$Arquivo, [int]$Indice)
+    param([string]$Arquivo, [int]$Indice,[switch]$SemRestauracao)
     Confirmar-PermissaoAlteracao 'estado-local'
     $ErrorActionPreference = 'Stop'
     $Arquivo=Confirmar-ArquivoJournal $Arquivo
     $json = Ler-JSON $Arquivo
     if ($null -eq $json -or $null -eq $json.itens) {throw 'Journal invalido.'}
     Confirmar-ContextoJournal $json
+    Confirmar-FormatoJournal $json
     $itens = @($json.itens)
     for ($i = $itens.Count - 1; $i -ge 0; $i--) {
-        if ($itens[$i].estadoReversao -eq 'concluido') { continue }
-        if ($i -ne $Indice -or $itens[$i].estadoReversao -ne 'em_andamento') { throw 'Somente a ultima acao incerta pode ser confirmada.' }
-        $itens[$i].estadoReversao = 'concluido'
-        $itens[$i] | Add-Member -NotePropertyName confirmadoManualEm -NotePropertyValue (Get-Date -Format 'o') -Force
+        if ($itens[$i].estadoReversao -in @('concluido','manual-sem-restauracao')) { continue }
+        if ($i -ne $Indice) {throw 'Somente a ultima acao pendente pode ser encerrada.'}
+        if ($SemRestauracao) {
+            if ((Obter-TipoRecuperacao $itens[$i]) -ne 'manual-sem-garantia' -and $itens[$i].estadoReversao -ne 'em_andamento') {throw 'Recuperacao ainda nao avaliada.'}
+            $itens[$i] | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'manual-sem-restauracao' -Force
+            $itens[$i] | Add-Member -NotePropertyName encerradoManualEm -NotePropertyValue (Get-Date -Format 'o') -Force
+        } else {
+            if ($itens[$i].estadoReversao -ne 'em_andamento') {throw 'Somente a ultima acao incerta pode ser confirmada.'}
+            $itens[$i].estadoReversao='concluido'
+            $itens[$i] | Add-Member -NotePropertyName confirmadoManualEm -NotePropertyValue (Get-Date -Format 'o') -Force
+        }
         Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
-        Log ('Acao ' + $i + ' confirmada manualmente pelo usuario, sem repetir a operacao.')
-        if (@($itens | Where-Object { $_.estadoReversao -ne 'concluido' }).Count -eq 0) {
+        Log ('Acao '+$i+' encerrada manualmente; consulte o estado registrado, sem repetir a operacao.')
+        if (@($itens | Where-Object { $_.estadoReversao -notin @('concluido','manual-sem-restauracao') }).Count -eq 0) {
+            if (Test-Path -LiteralPath ($Arquivo+'.revertido') -ErrorAction Stop) {throw 'Arquivo de historico ja existe; journal preservado.'}
             Rename-Item -LiteralPath $Arquivo -NewName ((Split-Path -Leaf $Arquivo) + '.revertido') -ErrorAction Stop
         }
         return
@@ -1598,7 +1782,8 @@ function Aplicar-Preset {
         $i++
         Log ('aplicando {0}/{1}: {2}' -f $i, $selecionados.Count, $t.nome)
         try {Confirmar-AutorizacaoAjuste $t (Obter-ContextoAjustes)} catch {Log ('Ajuste preservado: '+$_.Exception.Message) -Erro;continue}
-        foreach ($acao in $t.acoes) { Executar-Acao $acao $t.nome }
+        foreach ($acao in $t.acoes) { Executar-Acao $acao $t.nome; if (Testar-SessaoInterrompida) {break} }
+        if (Testar-SessaoInterrompida) {break}
     }
     $arq = Salvar-Sessao
     if ($global:ErrosSessao -gt 0) {
