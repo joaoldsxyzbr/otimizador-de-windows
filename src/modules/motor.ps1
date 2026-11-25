@@ -219,6 +219,9 @@ function Registrar-Jornal {
     param($Item)
     Confirmar-PermissaoAlteracao
     if ($null -eq $global:SessaoItens) { throw 'Sessao de journal nao iniciada.' }
+    $Item | Add-Member -NotePropertyName idOperacao -NotePropertyValue ([guid]::NewGuid().ToString('N')) -Force
+    $Item | Add-Member -NotePropertyName estadoAplicacao -NotePropertyValue 'intencao' -Force
+    $Item | Add-Member -NotePropertyName registradoEm -NotePropertyValue (Get-Date -Format 'o') -Force
     [void]$global:SessaoItens.Add($Item)
     try {
         [void](Gravar-SessaoArquivo)
@@ -226,6 +229,15 @@ function Registrar-Jornal {
         $global:SessaoItens.RemoveAt($global:SessaoItens.Count - 1)
         throw
     }
+}
+
+# An intent without verified effect is not proof that a change succeeded.
+function Confirmar-EfeitoJournal {
+    param($Item,[ValidateSet('confirmado','pendente')][string]$Estado='confirmado')
+    if (-not $Item.PSObject.Properties['idOperacao']) {return}
+    $Item.estadoAplicacao=$Estado
+    $Item | Add-Member -NotePropertyName verificadoEm -NotePropertyValue (Get-Date -Format 'o') -Force
+    [void](Gravar-SessaoArquivo)
 }
 
 function Salvar-Sessao {
@@ -342,10 +354,11 @@ function Alterar-ServicoComJournal {
     $ant = Obter-EstadoServico $Nome
     if ($ant.tipo -eq $Inicio -and ($Inicio -ne 'Disabled' -or $ant.estado -eq 'Stopped')) { return }
     $depois = if ($Inicio -eq 'Disabled') { 'Stopped' } else { $ant.estado }
-    Registrar-Jornal ([pscustomobject]@{
+    $entrada=[pscustomobject]@{
         tipo='servico'; nome=$Nome; tipoAnterior=$ant.tipo; estadoAnterior=$ant.estado; atrasoAnterior=$ant.atraso
         tipoDepois=$Inicio; estadoDepois=$depois; atrasoDepois=$false
-    })
+    }
+    Registrar-Jornal $entrada
     if ($Inicio -eq 'Disabled' -and $ant.estado -eq 'Running') {
         Stop-Service -Name $Nome -ErrorAction Stop
         (Get-Service -Name $Nome).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(20))
@@ -353,6 +366,7 @@ function Alterar-ServicoComJournal {
     Definir-InicioServico $Nome $Inicio $false
     $novo = Obter-EstadoServico $Nome
     if ($novo.tipo -ne $Inicio -or $novo.estado -ne $depois -or $novo.atraso) { throw 'Estado do servico diferente do esperado.' }
+    Confirmar-EfeitoJournal $entrada
 }
 
 # Importacao restrita: apenas valores simples em HKCU Software, sem apagar chaves.
@@ -419,9 +433,11 @@ function Desativar-TarefaComJournal {
     if ($atual.State -eq 'Disabled') { return }
     if ($atual.State -ne 'Ready') { throw 'Tarefa em execucao ou estado incerto; nao modificada.' }
     $assinatura = Obter-AssinaturaTarefa $Caminho $Nome
-    Registrar-Jornal ([pscustomobject]@{ tipo='tarefa'; tarefaPath=$Caminho; tarefaNome=$Nome; estadoAnterior='Ready'; estadoDepois='Disabled'; assinatura=$assinatura })
+    $entrada=[pscustomobject]@{ tipo='tarefa'; tarefaPath=$Caminho; tarefaNome=$Nome; estadoAnterior='Ready'; estadoDepois='Disabled'; assinatura=$assinatura }
+    Registrar-Jornal $entrada
     Disable-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop | Out-Null
     if ((Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Disabled') { throw 'Desativacao nao confirmada.' }
+    Confirmar-EfeitoJournal $entrada
 }
 
 function Testar-AppxProtegido {
@@ -592,7 +608,7 @@ function Executar-Acao {
                     if ($kind -eq [Microsoft.Win32.RegistryValueKind]::Binary) { $dados = [byte[]]@($Acao.dados) }
                     if ($kind -eq [Microsoft.Win32.RegistryValueKind]::MultiString) { $dados = [string[]]@($Acao.dados) }
                 }
-                Registrar-Jornal ([pscustomobject]@{
+                $entrada=[pscustomobject]@{
                     tipo         = 'registro'
                     caminho      = $Acao.caminho
                     nome         = $Acao.nome
@@ -604,7 +620,8 @@ function Executar-Acao {
                     tipoDepois = $kind.ToString()
                     valorDepoisEstruturado = [pscustomobject]@{ valor = $dados }
                     backupReg    = $arqBackup
-                })
+                }
+                Registrar-Jornal $entrada
                 if ($Acao.remover) {
                     if ($leitura.existia) {
                         $partes = $leitura.rede -split '\\',2
@@ -614,11 +631,13 @@ function Executar-Acao {
                         try { $chave.DeleteValue([string]$Acao.nome,$true) } finally { $chave.Dispose() }
                     }
                     if ((Ler-ValorRegistro $Acao.caminho $Acao.nome).existia) { throw 'Remocao de valor nao confirmada.' }
+                    Confirmar-EfeitoJournal $entrada
                     Log ('valor de registro removido: ' + $Acao.nome)
                     return
                 }
                 [Microsoft.Win32.Registry]::SetValue($leitura.rede, $Acao.nome, $dados, $kind) | Out-Null
                 if (-not (Registro-Corresponde (Ler-ValorRegistro $Acao.caminho $Acao.nome) $true $kind.ToString() $dados)) { throw 'Gravacao de registro nao confirmada.' }
+                Confirmar-EfeitoJournal $entrada
                 Log ("registro: {0} -> {1} = {2}" -f $Acao.caminho, $Acao.nome, $Acao.dados)
             }
 
@@ -646,12 +665,14 @@ function Executar-Acao {
                     if (Testar-AppxProtegido $p) { throw ('Pacote protegido: ' + $p.Name) }
                     $dependentes=@(Obter-DependentesAppx $p $todos)
                     if ($dependentes.Count) { throw ('Pacote usado por dependentes declarados: '+($dependentes -join ', ')) }
-                    Registrar-Jornal ([pscustomobject]@{
+                    $entrada=[pscustomobject]@{
                         tipo = 'appx'; pacote = $p.Name; completo = $p.PackageFullName
                         familia = $p.PackageFamilyName; usuarioSid = $sid
-                    })
+                    }
+                    Registrar-Jornal $entrada
                     Remove-AppxPackage -Package $p.PackageFullName -ErrorAction Stop
                     if (@(Get-AppxPackage -ErrorAction Stop | Where-Object { $_.PackageFullName -eq $p.PackageFullName }).Count -gt 0) { throw 'Pacote continua instalado.' }
+                    Confirmar-EfeitoJournal $entrada
                     $global:CacheAppxCarregadoEm = $null
                     Log ('appx removido do usuario atual: ' + $p.Name)
                 }
@@ -674,9 +695,8 @@ function Executar-Acao {
                 $mapa = @{}
                 foreach ($f in $depois) { $mapa[$f.FeatureName]=$f.State.ToString() }
                 $entrada.alteracoes = @($antes | Where-Object { $mapa[$_.nome] -ne $_.estado } | ForEach-Object { [pscustomobject]@{ nome=$_.nome; antes=$_.estado; depois=$mapa[$_.nome] } })
-                [void](Gravar-SessaoArquivo)
-                if ($resultado.RestartNeeded -or $mapa[$Acao.nome] -ne $alvo) { Log 'Recurso processado; reinicio ou revisao necessarios.' }
-                else { Log ('recurso verificado: ' + $Acao.nome) }
+                if ($resultado.RestartNeeded -or $mapa[$Acao.nome] -ne $alvo) { Confirmar-EfeitoJournal $entrada 'pendente'; Log 'Recurso processado; reinicio ou revisao necessarios.' }
+                else { Confirmar-EfeitoJournal $entrada; Log ('recurso verificado: ' + $Acao.nome) }
             }
 
             'energia' {
@@ -684,8 +704,10 @@ function Executar-Acao {
                 $anterior=Obter-PlanoEnergiaAtivo
                 $alvo=[guid]::Parse([string]$Acao.guid).ToString()
                 if ($anterior -eq $alvo) { return }
-                Registrar-Jornal ([pscustomobject]@{tipo='energia';guidAnterior=$anterior;guidDepois=$alvo})
+                $entrada=[pscustomobject]@{tipo='energia';guidAnterior=$anterior;guidDepois=$alvo}
+                Registrar-Jornal $entrada
                 Definir-PlanoEnergia $alvo
+                Confirmar-EfeitoJournal $entrada
                 Log 'Plano de energia alterado e confirmado.'
             }
 
@@ -699,6 +721,27 @@ function Executar-Acao {
 }
 
 # ---- desfazer ----
+
+# Verify the direct child of a protected quarantine session before recovery.
+function Confirmar-BackupQuarentena {
+    param([string]$Arquivo,[string]$Hash,[switch]$PastaPermitida)
+    if ($Arquivo -notmatch '^[A-Za-z]:\\' -or -not $global:PastaQuarantena) {throw 'Backup sem caminho local confirmado.'}
+    $raiz=[IO.Path]::GetFullPath($global:PastaQuarantena).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Arquivo)
+    $sessao=[IO.Path]::GetDirectoryName($full)
+    if ([IO.Path]::GetDirectoryName($sessao) -ine $raiz -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Backup fora da pasta de quarentena.'}
+    Verificar-PastaPrivada $raiz
+    Verificar-PastaPrivada $sessao
+    $item=Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {throw 'Backup redirecionado.'}
+    if ($item.PSIsContainer) {
+        if (-not $PastaPermitida -or $Hash) {throw 'Tipo de backup divergente.'}
+    } else {
+        if ($Hash -notmatch '^[0-9a-fA-F]{64}$') {throw 'Backup sem hash confirmado; revise manualmente.'}
+        if ((Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash -ine $Hash) {throw 'Integridade do backup divergente; preservado.'}
+    }
+    return $full
+}
 
 function Desfazer-Item {
     param($Item)
@@ -828,30 +871,8 @@ function Desfazer-Item {
                 Log ('tarefa reativada: ' + $Item.tarefaNome)
             }
 
-            'firewall-estado' {
-                Set-NetFirewallRule -PolicyStore PersistentStore -Name $Item.nome -Enabled $Item.ativada -ErrorAction Stop | Out-Null
-                Log ('estado da regra de firewall restaurado: ' + $Item.nome)
-            }
-
-            'regra-firewall' {
-                $p = @{ DisplayName = [string]$Item.displayName; Direction = [string]$Item.dir; Action = [string]$Item.acao; Enabled = [string]$Item.ativada }
-                $perfis = @(([string]$Item.perfil -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' })
-                if ($perfis.Count -gt 0) { $p['Profile'] = $perfis }
-                if (-not [string]::IsNullOrWhiteSpace([string]$Item.programa)) { $p['Program'] = [string]$Item.programa }
-                if (-not [string]::IsNullOrWhiteSpace([string]$Item.servico)) { $p['Service'] = [string]$Item.servico }
-                $proto = [string]$Item.protocolo
-                if ($proto -ne '' -and $proto -ne 'Any') { $p['Protocol'] = $proto }
-                $pls = @(([string]$Item.portasLocais -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and $_ -ne 'Any' })
-                if ($pls.Count -gt 0) { $p['LocalPort'] = $pls }
-                $prs = @(([string]$Item.portasRemotas -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and $_ -ne 'Any' })
-                if ($prs.Count -gt 0) { $p['RemotePort'] = $prs }
-                $ils = @(([string]$Item.ipLocal -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and $_ -ne 'Any' })
-                if ($ils.Count -gt 0) { $p['LocalAddress'] = $ils }
-                $irs = @(([string]$Item.ipRemoto -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne '' -and $_ -ne 'Any' })
-                if ($irs.Count -gt 0) { $p['RemoteAddress'] = $irs }
-                New-NetFirewallRule @p | Out-Null
-                Log ("regra de firewall recriada: {0}" -f [string]$Item.displayName)
-            }
+            'firewall-estado' { throw 'Reversao automatica de firewall indisponivel; revise manualmente com autorizacao.' }
+            'regra-firewall' { throw 'Recriacao automatica de regra de firewall indisponivel; revise manualmente.' }
 
             'path-entrada' {
                 $ck2 = $null
@@ -877,7 +898,8 @@ function Desfazer-Item {
             }
 
             'quarantena-arquivo' {
-                if ((Test-Path -LiteralPath $Item.destino) -and -not (Test-Path -LiteralPath $Item.origem)) {
+                $backup=Confirmar-BackupQuarentena $Item.destino $Item.hashBackup -PastaPermitida:([bool]$Item.pasta)
+                if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $Item.origem)) {
                     $pai = Split-Path -Parent $Item.origem
                     if (-not (Test-Path -LiteralPath $pai -PathType Container)) { throw 'Pasta original ausente; revise antes de restaurar.' }
                     $atual = $pai
@@ -888,7 +910,8 @@ function Desfazer-Item {
                         if (-not $superior -or $superior -eq $atual) { break }
                         $atual = $superior
                     }
-                    Move-Item -LiteralPath $Item.destino -Destination $Item.origem -ErrorAction Stop
+                    Move-Item -LiteralPath $backup -Destination $Item.origem -ErrorAction Stop
+                    if ($Item.hashBackup -and (Get-FileHash -LiteralPath $Item.origem -Algorithm SHA256 -ErrorAction Stop).Hash -ine $Item.hashBackup) {throw 'Conteudo restaurado nao confirmado.'}
                     Log ("rastro restaurado da quarantena: " + $Item.origem)
                 } else {
                     throw ("Backup ausente ou conflito no destino: " + $Item.origem)
@@ -896,9 +919,11 @@ function Desfazer-Item {
             }
 
             'quarantena-registro' {
-                if (Test-Path $Item.arquivoReg) {
+                $backup=Confirmar-BackupQuarentena $Item.arquivoReg $Item.hashBackup
+                if (-not (Chave-RastroSegura $Item.chave)) {throw 'Alvo de registro protegido; revise manualmente.'}
+                if (Test-Path -LiteralPath $backup) {
                     if (Test-Path -LiteralPath ('Registry::' + $Item.chave)) { throw 'Chave recriada desde a limpeza; nao sobrescrevendo.' }
-                    Executar-RegNativo -Operacao import -Alvo $Item.arquivoReg
+                    Executar-RegNativo -Operacao import -Alvo $backup
                     if (-not (Test-Path -LiteralPath ('Registry::' + $Item.chave))) { throw 'Importacao terminou sem restaurar a chave.' }
                     Log ("chave de registro restaurada: " + $Item.chave)
                 } else {
@@ -1086,10 +1111,7 @@ function Verificar-Tweak {
 # replica o fluxo do botao aplicar da gui: restore point, journal por acao e log em arquivo.
 # Perfis conservadores: selecao explicita por ID, sem scripts customizados.
 function Obter-PerfilRecomendado {
-    if (@($global:AmbienteTrabalho | Where-Object { $_ }).Count -gt 0) { return 'corporativo' }
-    try {
-        if (@(Get-CimInstance Win32_Battery -ErrorAction Stop).Count -gt 0) { return 'notebook' }
-    } catch { }
+    # No device classification or evidence-free performance promise.
     return 'essencial'
 }
 
@@ -1126,7 +1148,7 @@ function Selecionar-TweaksPreset {
     $legado = @('seguro', 'balanceado', 'agressivo') -contains $Nivel
     if (-not $legado -and -not $perfis.ContainsKey($Nivel)) { throw ('Preset desconhecido: ' + $Nivel) }
     foreach ($t in $Catalogo.tweaks) {
-        if ($t.id -like 'custom-*' -or $t.apenasManual) { continue }
+        if ($t.id -like 'custom-*' -or $t.apenasManual -or (Obter-BloqueioAjuste $t)) { continue }
         if ($PSBoundParameters.ContainsKey('Contexto') -and -not (Testar-CompatibilidadeAjuste $t $Contexto)) {continue}
         if (($t.so -eq 'win11' -and -not $Win11) -or ($t.so -eq 'win10' -and $Win11)) { continue }
         if (($legado -and ($t.niveis -contains $Nivel)) -or (-not $legado -and ($perfis[$Nivel] -contains $t.id))) {

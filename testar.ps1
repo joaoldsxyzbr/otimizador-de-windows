@@ -1418,6 +1418,53 @@ try {
     Passou 'recursos opcionais restritos a habilitacao catalogada e politicas preservadas'
 } catch {Falhou 'recursos opcionais' $_.Exception.Message}
 
+# ---- final batch: explicit catalog, policy, intent and recovery guards ----
+Secao 'limites por operacao'
+try {
+    if ((Obter-PerfilRecomendado) -ne 'essencial') {throw 'Recomendacao depende de classificacao do computador.'}
+    $app=[pscustomobject]@{id='Example.App';fonte='winget';versao='1.2.3'}
+    if ((@(Obter-ArgumentosApp $app install) -join ' ') -notmatch '--version 1\.2\.3 --no-upgrade$') {throw 'Versao explicita ausente.'}
+    $app.versao='--force'
+    $recusou=$false
+    try {$null=Obter-ArgumentosApp $app install} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Versao ambigua aceita.'}
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $true}
+        $recusou=$false
+        try {Confirmar-PoliticaWingetLocal} catch {$recusou=$_.Exception.Message -match 'politica'}
+        if (-not $recusou) {throw 'Politica de instalacao ignorada.'}
+    }
+    & {
+        $anterior=$global:CatalogoApps
+        try {
+            $global:CatalogoApps=[pscustomobject]@{aplicativos=@([pscustomobject]@{id='Example.App';fonte='winget';versao='1.2.3'})}
+            Confirmar-AppCatalogado ([pscustomobject]@{id='Example.App';fonte='winget';versao='1.2.3'})
+            $recusou=$false
+            try {Confirmar-AppCatalogado ([pscustomobject]@{id='Example.App';fonte='msstore';versao='1.2.3'})} catch {$recusou=$true}
+            if (-not $recusou) {throw 'Fonte alterada aceita.'}
+        } finally {$global:CatalogoApps=$anterior}
+    }
+    & {
+        function Log {param($Mensagem,[switch]$Erro)}
+        function Set-NetFirewallRule {throw 'Nao deve modificar firewall.'}
+        function New-NetFirewallRule {throw 'Nao deve recriar firewall.'}
+        foreach ($tipo in @('firewall-estado','regra-firewall')) {
+            if (Desfazer-Item ([pscustomobject]@{tipo=$tipo})) {throw 'Reversao de firewall aceita.'}
+        }
+    }
+    & {
+        $anterior=$global:PastaQuarantena
+        try {
+            $global:PastaQuarantena=Join-Path $env:SystemDrive 'OtimizadorTeste\quarentena'
+            function Verificar-PastaPrivada {throw 'Nao deve consultar pasta externa.'}
+            $recusou=$false
+            try {$null=Confirmar-BackupQuarentena (Join-Path $global:PastaQuarantena '..\fora.reg') ('a'*64)} catch {$recusou=$_.Exception.Message -match 'fora da pasta'}
+            if (-not $recusou) {throw 'Backup externo aceito.'}
+        } finally {$global:PastaQuarantena=$anterior}
+    }
+    Passou 'presets, origem de apps, politicas, firewall e caminho de recuperacao'
+} catch {Falhou 'limites por operacao' $_.Exception.Message}
+
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
 try {

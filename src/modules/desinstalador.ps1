@@ -658,7 +658,7 @@ function Varrer-Rastros {
         $vistos[$id] = $true
         [void]$finais.Add($a)
     }
-    return @($finais)
+    return @($finais | Where-Object {$_.tipo -ne 'firewall'})
 }
 
 function Executar-Varredura {
@@ -742,20 +742,7 @@ function Apagar-Rastro {
     }
 
     # Desativa a regra local pelo ID; preserva todos os filtros e propriedades.
-    if ($Rastro.tipo -eq 'firewall') {
-        $regras = @(Get-NetFirewallRule -PolicyStore PersistentStore -ErrorAction Stop | Where-Object { $_.DisplayName -eq $Rastro.caminho })
-        foreach ($regra in $regras) {
-            $app = $regra | Get-NetFirewallApplicationFilter -ErrorAction Stop
-            if ([string]$app.Program -ne $Rastro.programa -or -not (Caminho-LocalAusente ([string]$app.Program))) { continue }
-            if ([string]$regra.Enabled -ne 'True') { continue }
-            # Nao desative bloqueios: isso poderia enfraquecer a protecao.
-            if ([string]$regra.Action -ne 'Allow') { continue }
-            Registrar-Jornal ([pscustomobject]@{ tipo = 'firewall-estado'; nome = [string]$regra.Name; ativada = [string]$regra.Enabled })
-            $regra | Disable-NetFirewallRule -ErrorAction Stop | Out-Null
-            Log ('regra local de permissao desativada: ' + $regra.DisplayName)
-        }
-        return
-    }
+    if ($Rastro.tipo -eq 'firewall') {throw 'Firewall somente consulta; revise regras pela ferramenta autorizada.'}
 
     # Run: preserva somente o valor removido, nao sobrescreve os outros.
     if ($Rastro.tipo -eq 'run') {
@@ -808,8 +795,13 @@ function Apagar-Rastro {
         $arqReg = Join-Path $PastaSessao ('{0:00}_registro_{1}.reg' -f $Num, $folha)
         Executar-RegNativo -Operacao export -Alvo $nativa -Arquivo $arqReg
         if (-not (Test-Path -LiteralPath $arqReg -PathType Leaf)) { throw 'Backup do registro falhou; chave preservada.' }
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg })
+        $hash=(Get-FileHash -LiteralPath $arqReg -Algorithm SHA256 -ErrorAction Stop).Hash
+        [void](Confirmar-BackupQuarentena $arqReg $hash)
+        $entrada=[pscustomobject]@{ tipo = 'quarantena-registro'; chave = $nativa; arquivoReg = $arqReg;hashBackup=$hash }
+        Registrar-Jornal $entrada
         Remove-Item -LiteralPath $Rastro.caminho -Recurse -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $Rastro.caminho) {throw 'Remocao de chave nao confirmada.'}
+        Confirmar-EfeitoJournal $entrada
         Log ('chave apagada (backup .reg na quarantena): ' + $nativa)
     } elseif ($Rastro.tipo -in @('arquivo','pasta')) {
         if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
@@ -817,8 +809,14 @@ function Apagar-Rastro {
         $folha = Split-Path -Leaf $Rastro.caminho
         $destino = Join-Path $PastaSessao ('{0:00}_{1}' -f $Num, $folha)
         if (Test-Path -LiteralPath $destino) { throw 'Destino da quarentena ja existe.' }
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino })
+        $origem=Get-Item -LiteralPath $Rastro.caminho -Force -ErrorAction Stop
+        $hash=if (-not $origem.PSIsContainer) {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash} else {$null}
+        $entrada=[pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino;hashBackup=$hash;pasta=[bool]$origem.PSIsContainer }
+        Registrar-Jornal $entrada
         Move-Item -LiteralPath $Rastro.caminho -Destination $destino -ErrorAction Stop
+        [void](Confirmar-BackupQuarentena $destino $hash -PastaPermitida:([bool]$origem.PSIsContainer))
+        if (Test-Path -LiteralPath $Rastro.caminho) {throw 'Movimentacao nao confirmada.'}
+        Confirmar-EfeitoJournal $entrada
         Log ('rastro movido pra quarantena: ' + $Rastro.caminho)
     } else { throw ('Tipo de rastro desconhecido: ' + $Rastro.tipo) }
 }

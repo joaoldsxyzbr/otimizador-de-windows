@@ -63,7 +63,7 @@ nao quer janela? modo cli:
 
 ## desenvolvimento v2 (pre-release)
 
-- perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (na interface, selecao essencial; CLI ainda usa a logica anterior). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
+- perfis de selecao: essencial, gamer, notebook, privacidade, corporativo e recomendado (selecao essencial na interface e CLI, sem classificar a maquina). Tambem funcionam no CLI: `.\otimizadorpc.ps1 -Cli notebook -Simular`.
 - tema claro/escuro em Config, aplicado ao reabrir. Preferencia salva na pasta protegida do app, sem alterar tema do Windows.
 - progresso de ajustes, debloat, recursos e quarentena com cancelamento cooperativo entre acoes. Console de manutencao mantem o dispatcher responsivo enquanto aguarda o processo. Nao interrompe comandos administrativos em andamento.
 - inventario com oito abas pesquisaveis e ordenaveis: inicializacao, Run do usuario, servicos, tarefas, discos, rede, drivers e processos; exportacao JSON e atalhos nativos. Acoes com journal limitadas a remover Run do usuario, inicio manual de servicos do catalogo e desativar tarefas nao Microsoft em estado Ready. Alteracoes nativas nao entram no journal. Ajustes exibem rotulos de cautela.
@@ -136,3 +136,7 @@ RC.8 em desenvolvimento: estimativas locais de capacidade de bateria quando corr
 RC.8: matriz de requisitos minimos de build e suporte a allowlist de edicoes; bloqueia aplicacao em contexto desconhecido, Windows Server ou abaixo do limite. Nao certifica efetividade de cada tweak. Simulacao CLI em ambiente nao compativel e hipotetica. Detalhes MSI consultam o cache local em modo leitura e ComponentClients em amostra limitada, sem Win32_Product. Resultado parcial/indisponivel nao autoriza remocao.
 
 RC.8: inventario PnP dos dispositivos presentes correlaciona InstanceId com driver reportado pelo Windows, mostrando versao, fornecedor, codigo de problema e indicador de assinatura sem expor identificadores internos. Nao substitui verificacao de assinatura de arquivos nem autoriza remocao de drivers.
+
+## Estado da integracao V2
+
+A branch de integracao da issue #2 possui inventarios de abas em segundo plano, protecao de alvos, journals com identidade e estados de aplicacao, e verificacao SHA256 de backups de arquivos e registro em quarentena. Backups legados sem hash exigem revisao manual; pastas nao possuem hash integral. Firewall e reparos genericos de rede ficam para ferramentas autorizadas. O modo protegido global continua ate a paridade de protecao por operacao ser demonstrada. Veja [validacao e limites](docs/validacao-v2.md). O CI Windows Server nao substitui aceite em Windows 10/11 cliente.

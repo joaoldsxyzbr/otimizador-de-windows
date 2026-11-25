@@ -113,7 +113,7 @@ $controles = @(
     'PontoStatus', 'StatusTexto', 'BarraProgresso', 'LogBox',
     'BotaoNavInicio', 'BotaoNavAjustes', 'BotaoNavDebloat', 'BotaoNavDesinstalar', 'BotaoNavInstalar',
     'BotaoNavConfig', 'BotaoNavAtualizacoes', 'BotaoNavManutencao', 'BotaoNavDesfazer',
-    'InfoHost', 'InfoSo', 'InfoCpu', 'InfoGpu', 'InfoRam', 'InfoDisco', 'InfoUptime', 'InfoRestore', 'InfoAmbiente', 'InfoDiagnostico', 'BotaoAtualizarInicio', 'BotaoCancelarInicio',
+    'InfoHost', 'InfoSo', 'InfoCpu', 'InfoGpu', 'InfoRam', 'InfoDisco', 'InfoUptime', 'InfoRestore', 'InfoAmbiente', 'InfoDiagnostico', 'BotaoInicioStartup', 'BotaoInicioStorage', 'BotaoInicioUpdate', 'BotaoAtualizarInicio', 'BotaoCancelarInicio',
     'BotaoCriarRestore', 'BotaoInventario', 'BotaoCarga', 'BotaoDiagnosticoAvancado', 'BotaoResumoBateria', 'BotaoResumoDriversPnP', 'BotaoGargalosLocais', 'BotaoMonitor', 'BotaoMedicoes', 'BotaoVerificarRelease',
     'ListaAjustes', 'InfoConsultaAjustes', 'BotaoAtualizarAjustes', 'BotaoCancelarAjustes', 'ChkPontoRestore', 'ChkSimularAjustes', 'BotaoPresetSeguro', 'BotaoPresetBalanceado', 'BotaoPresetAgressivo', 'BotaoPerfilEssencial', 'BotaoPerfilGamer', 'BotaoPerfilNotebook', 'BotaoPerfilPrivacidade', 'BotaoPerfilCorporativo', 'BotaoPerfilRecomendado', 'BotaoAplicarAjustes', 'FiltroAjustes', 'BotaoExportarPlano', 'BotaoImportarPlano',
     'ListaUwp', 'ChkPontoRestoreUwp', 'BotaoRemoverUwp', 'FiltroUwp', 'BotaoAtualizarUwp', 'BotaoCancelarUwp', 'InfoConsultaUwp',

@@ -120,6 +120,8 @@ function Obter-GuiaUwp {
     $categoria=if ($bloqueado -or $Entrada.protegido) {'Sistema/dependencia - bloqueado'} elseif ($Entrada.desconhecido) {'Nao catalogado - bloqueado'} elseif ($Entrada.remover) {'Opcional - se nao usa'} else {'Aplicativo util - cautela'}
     $motivo=if ($bloqueado -or $Entrada.protegido) {'Metadados ou nome indicam componente protegido. Remocao indisponivel.'} elseif ($Entrada.desconhecido) {'Sem classificacao no catalogo local; remocao indisponivel.'} else {'Remover somente se nao usa. Outros recursos podem depender do aplicativo. Dados locais e reinstalacao nao garantidos.'}
     if ($dependentes.Count) { $motivo+=' Dependentes declarados: '+($dependentes -join ', ') }
+    $identidade=if ($achados.Count) {(@($achados | ForEach-Object {('{0} | {1} | {2}' -f $_.Name,$_.Version,$_.Publisher)} | Sort-Object -Unique) -join '; ')} else {'sem pacote instalado confirmado'}
+    $motivo+=' Identidade: '+$identidade+'.'
     return [pscustomobject]@{ categoria=$categoria; permitido=(-not ($bloqueado -or $Entrada.protegido -or $Entrada.desconhecido) -and $achados.Count -gt 0); instalado=($achados.Count -gt 0); texto=($Entrada.desc + "`n" + $motivo + "`nEscopo: usuario atual. Nenhum desprovisionamento.") }
 }
 
@@ -585,7 +587,7 @@ function Clique-Preset {
         return
     }
     foreach ($cb in $cbs) {
-        $cb.IsChecked = ($cb.IsEnabled -and $ids -contains $cb.Tag.id -and $global:ConsultasPaineis.Ajustes.resultados[[string]$cb.Tag.id] -ne 'aplicado')
+        $cb.IsChecked = ($cb.IsEnabled -and $ids -contains $cb.Tag.id -and $global:ConsultasPaineis.Ajustes.resultados[[string]$cb.Tag.id] -in @('nao','parcial'))
     }
     if ($Nivel -eq 'recomendado') {
         $motivo='Sem evidencia para ajustes agressivos; selecao essencial, independente do tipo de computador.'
@@ -1003,7 +1005,8 @@ function Clique-DetalhesSessao {
             elseif ($item.estadoReversao -eq 'em_andamento') { $estado = 'incerto - revisao manual' }
             $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '
             if ($item.confirmadoManualEm) { $estado = 'confirmado manualmente' }
-            $linhas += ('[{0}] {1}: {2}' -f $estado, $item.tipo, $alvo)
+            $aplicacao=if ($item.estadoAplicacao) {$item.estadoAplicacao} else {'legado / nao confirmado'}
+            $linhas += ('[{0}] {1}: {2} | aplicacao: {3}' -f $estado, $item.tipo, $alvo,$aplicacao)
             foreach ($detalhe in @(Obter-DetalheRecuperacao $item)) { $linhas += ('    '+$detalhe) }
             foreach ($backup in @($item.destino, $item.arquivoReg, $item.backupReg) + @($item.backups)) {
                 if (-not $backup) { continue }
@@ -1684,6 +1687,9 @@ function Ligar-Tudo {
     $global:UI.BotaoCancelarUwp.Add_Click({ Cancelar-ConsultaUwp })
     $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
     # navegacao da barra lateral
+    $global:UI.BotaoInicioStartup.Add_Click({ Start-Process 'ms-settings:startupapps' | Out-Null })
+    $global:UI.BotaoInicioStorage.Add_Click({ Start-Process 'ms-settings:storagesense' | Out-Null })
+    $global:UI.BotaoInicioUpdate.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
     $global:UI.BotaoNavInicio.Add_Click({ Trocar-Pagina 'PaginaInicio' })
     $global:UI.BotaoNavAjustes.Add_Click({ Trocar-Pagina 'PaginaAjustes' })
     $global:UI.BotaoNavDebloat.Add_Click({ Trocar-Pagina 'PaginaDebloat' })
@@ -1697,7 +1703,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
+        $permitidos=@('BotaoInicioStartup','BotaoInicioStorage','BotaoInicioUpdate','BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {

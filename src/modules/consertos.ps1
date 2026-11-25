@@ -251,24 +251,13 @@ function Sincronizar-Hora {
 
 function Recuperar-CacheIcones {
     Confirmar-PermissaoAlteracao
-    Status 'reconstruindo cache de icones...'
-    Ocupado $true
-    Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-    $icocache = "$env:LOCALAPPDATA\IconCache.db"
-    if (Test-Path $icocache) { Remove-Item $icocache -Force -ErrorAction SilentlyContinue }
-    $pasta = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"
-    Get-ChildItem -Path $pasta -Filter 'iconcache*' -Force -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-    Start-Process explorer.exe
-    Ocupado $false
-    Log 'cache de icones reconstruido.'
-    Status 'pronto.'
+    if (-not (Perguntar 'Icones e Explorer' 'Abrir configuracoes de personalizacao? Salve o trabalho e encerre a sessao pelo Windows se os icones continuarem incorretos. Nenhum processo sera encerrado nem cache excluido automaticamente.')) {return}
+    Start-Process 'ms-settings:personalization' -ErrorAction Stop | Out-Null
+    Log 'Personalizacao aberta; cache e processos preservados.'
 }
 
 # ---- atualizacoes ----
 
-# Politicas de atualizacao sao apenas consultadas. Nao apagar valores que
-# podem ter origem fora do app; journals antigos continuam recuperaveis.
 function Configurar-Atualizacoes {
     param([bool]$BloquearDrivers,[bool]$AdiarRecursos)
     Confirmar-PermissaoAlteracao
@@ -342,11 +331,33 @@ function Instalar-Winget {
     }
 }
 
+function Confirmar-PoliticaWingetLocal {
+    foreach ($chave in @('HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppInstaller','HKCU:\SOFTWARE\Policies\Microsoft\Windows\AppInstaller','HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\DesktopAppInstaller')) {
+        try {$presente=Test-Path -LiteralPath $chave -ErrorAction Stop}
+        catch {throw 'Consulta de politica WinGet inconclusiva.'}
+        if ($presente) {throw 'Indicador de politica do App Installer presente; use o procedimento autorizado.'}
+    }
+}
+
+function Confirmar-AppCatalogado {
+    param($App)
+    $fonte=if ($App.fonte) {[string]$App.fonte} else {'winget'}
+    $itens=@($global:CatalogoApps.aplicativos | Where-Object {
+        $f=if ($_.fonte) {[string]$_.fonte} else {'winget'}
+        $_.id -ceq $App.id -and $f -ceq $fonte -and [string]$_.versao -ceq [string]$App.versao
+    })
+    if ($itens.Count -ne 1) {throw 'Aplicativo, fonte ou versao fora do catalogo atual.'}
+}
+
 function Obter-ArgumentosApp {
     param($App,[ValidateSet('install','upgrade')][string]$Operacao)
     if ([string]$App.id -notmatch '^[A-Za-z0-9._+\-]+$') { throw 'ID de aplicativo invalido.' }
     $fonte=if (-not $App.fonte -or $App.fonte -eq 'winget') {'winget'} elseif ($App.fonte -eq 'msstore') {'msstore'} else {throw 'Fonte nao permitida.'}
     $argsApp=@($Operacao,'--id',[string]$App.id,'--exact','--source',$fonte)
+    if ($App.versao) {
+        if ([string]$App.versao -notmatch '^[A-Za-z0-9][A-Za-z0-9._+\-]{0,63}$') {throw 'Versao invalida.'}
+        $argsApp+=@('--version',[string]$App.versao)
+    }
     if ($Operacao -eq 'install') { $argsApp+='--no-upgrade' }
     return $argsApp
 }
@@ -354,6 +365,7 @@ function Obter-ArgumentosApp {
 function Instalar-Aplicativos {
     param($Selecionados,[ValidateSet('install','upgrade')][string]$Operacao='install')
     Confirmar-PermissaoAlteracao
+    Confirmar-PoliticaWingetLocal
     if (@($Selecionados).Count -eq 0) { Avisar 'Nada selecionado' 'Selecione aplicativos para a operacao.'; return }
     if (-not (Testar-Winget)) { Avisar 'WinGet indisponivel' 'Use o App Installer oficial em Config.'; return }
     $exe=Obter-WingetExe
@@ -361,6 +373,7 @@ function Instalar-Aplicativos {
     $linhas=New-Object System.Text.StringBuilder
     $plano=@()
     foreach ($app in $Selecionados) {
+        Confirmar-AppCatalogado $app
         $argsApp=@(Obter-ArgumentosApp $app $Operacao)
         $plano+=($app.nome+' | '+($argsApp -join ' '))
         $argsTexto=($argsApp | ForEach-Object { "'"+$_.Replace("'","''")+"'" }) -join ','
@@ -368,11 +381,16 @@ function Instalar-Aplicativos {
     }
     $titulo=if ($Operacao -eq 'install') {'Instalar selecionados'} else {'Atualizar selecionados'}
     if (-not (Perguntar $titulo (($plano -join "`n")+"`n`nA operacao pode instalar dependencias e solicitar aceite de licenca. Nao ha rollback automatico. Continuar?"))) { return }
+    Confirmar-PermissaoAlteracao
+    Confirmar-PoliticaWingetLocal
+    foreach ($app in $Selecionados) {Confirmar-AppCatalogado $app}
+    if ((Obter-WingetExe) -cne $exe) {throw 'WinGet mudou durante a confirmacao; refaca a operacao.'}
     Executar-NoConsole -Titulo $titulo -Bloco $linhas.ToString()
 }
 
 function Atualizar-Tudo {
     Confirmar-PermissaoAlteracao
+    Confirmar-PoliticaWingetLocal
     if (-not (Testar-Winget)) { Avisar 'WinGet indisponivel' 'Use App Installer oficial em Config.'; return }
     if (-not (Perguntar 'Consultar atualizacoes' 'Consultar ofertas do WinGet nas fontes configuradas? Pode acessar a internet e pedir aceite de fonte. Nenhum upgrade sera executado.')) { return }
     $exeSeguro=(Obter-WingetExe).Replace("'","''")

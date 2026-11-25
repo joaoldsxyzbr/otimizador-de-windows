@@ -256,13 +256,13 @@ function Avaliar-SaudeLocal {
         $pct=100.0 * $Disco.FreeSpace / $Disco.Size
         $gb=$Disco.FreeSpace / 1GB
         $estado=if ($pct -lt 15 -or $gb -lt 5) {'atencao'} else {'informacao'}
-        $orientacao=if ($estado -eq 'atencao') {'Abra Manutencao > Analisar armazenamento e revise a previa antes de limpar.'} else {'Espaco livre nao mede latencia nem integridade do disco.'}
+        $orientacao=if ($estado -eq 'atencao') {'Use Revisar armazenamento; examine a previa antes de limpar.'} else {'Espaco livre nao mede latencia nem integridade do disco.'}
         [pscustomobject]@{id='disco';estado=$estado;evidencia=('{0:N1} GB livres ({1:N1}%) no disco do sistema.' -f $gb,$pct);orientacao=$orientacao}
     } else {
         [pscustomobject]@{id='disco';estado='indisponivel';evidencia='Espaco do disco do sistema nao confirmado.';orientacao='Tente novamente; nenhuma limpeza recomendada automaticamente.'}
     }
     if ($null -ne $Inicializacao -and $Inicializacao -ge 0) {
-        [pscustomobject]@{id='inicio';estado='informacao';evidencia=('{0} entradas de inicializacao detectadas nesta consulta.' -f $Inicializacao);orientacao='A quantidade nao mede impacto. Revise no Gerenciador de Tarefas (Aplicativos de inicializacao).'}
+        [pscustomobject]@{id='inicio';estado='informacao';evidencia=('{0} entradas de inicializacao detectadas nesta consulta.' -f $Inicializacao);orientacao='A quantidade nao mede impacto. Use Revisar inicializacao e confira impacto no Gerenciador de Tarefas.'}
     } else {
         [pscustomobject]@{id='inicio';estado='indisponivel';evidencia='Entradas de inicializacao nao consultadas.';orientacao='Consulte o Gerenciador de Tarefas.'}
     }

@@ -250,6 +250,7 @@ try {
     Apagar-Rastro ([pscustomobject]@{ tipo='arquivo'; caminho=$origem }) $dirBackup 1
     $arq = Salvar-Sessao
     $item = (Ler-JSON $arq).itens[0]
+    if ($item.hashBackup -ine $hash -or $item.estadoAplicacao -ne 'confirmado' -or -not $item.idOperacao) {throw 'Journal sem hash ou efeito confirmado.'}
     if ((Test-Path -LiteralPath $origem) -or (Get-FileHash -LiteralPath $item.destino -Algorithm SHA256).Hash -ne $hash) { throw 'Movimentacao incorreta.' }
     if (-not (Reverter-Sessao $arq) -or (Get-FileHash -LiteralPath $origem -Algorithm SHA256).Hash -ne $hash) { throw 'Arquivo nao restaurado byte a byte.' }
     Log 'CI ok: arquivo com caracteres especiais restaurado byte a byte'
@@ -262,6 +263,15 @@ try {
     $item = (Ler-JSON $arq).itens[0]
     if ((Get-FileHash -LiteralPath $item.destino -Algorithm SHA256).Hash -ne $hash) { throw 'Backup perdido no conflito.' }
     Log 'CI ok: conflito preserva arquivo novo e backup'
+    $origem2=Join-Path $dirArquivo 'integridade.bin'
+    [IO.File]::WriteAllText($origem2,'original')
+    Iniciar-Sessao 'ci-integridade'
+    Apagar-Rastro ([pscustomobject]@{tipo='arquivo';caminho=$origem2}) $dirBackup 3
+    $arq2=Salvar-Sessao
+    $item2=(Ler-JSON $arq2).itens[0]
+    [IO.File]::WriteAllText($item2.destino,'alterado')
+    if ((Reverter-Sessao $arq2) -or (Test-Path -LiteralPath $origem2)) {throw 'Backup alterado foi restaurado.'}
+    Log 'CI ok: hash divergente impede restauracao'
 } catch {
     Log ('FALHOU: quarentena de arquivo: ' + $_.Exception.Message) -Erro
     exit 1

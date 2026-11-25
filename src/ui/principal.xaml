@@ -305,12 +305,13 @@
                                     <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Disco do sistema"/><TextBlock x:Name="InfoDisco" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Ligado ha"/><TextBlock x:Name="InfoUptime" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
                                     <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Restauracao"/><TextBlock x:Name="InfoRestore" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Ambiente"/><TextBlock x:Name="InfoAmbiente" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,3"><TextBlock Style="{StaticResource RotuloInfo}" Text="Permissoes"/><TextBlock x:Name="InfoAmbiente" Style="{StaticResource ValorInfo}" Text="..."/></StackPanel>
                                 </StackPanel>
                             </GroupBox>
                             <GroupBox Header="Saude do PC - analise e proximos passos" Foreground="#93c5fd" BorderBrush="#374151" Margin="0,10,0,4">
                                 <StackPanel Margin="6,8">
                                     <TextBlock x:Name="InfoDiagnostico" Foreground="#d1d5db" TextWrapping="Wrap" Text="Coletando informacoes..."/>
+                                    <WrapPanel Margin="0,8,0,0"><Button x:Name="BotaoInicioStartup" Content="Revisar inicializacao" Margin="0,0,8,4"/><Button x:Name="BotaoInicioStorage" Content="Revisar armazenamento" Margin="0,0,8,4"/><Button x:Name="BotaoInicioUpdate" Content="Revisar Windows Update" Margin="0,0,8,4"/></WrapPanel>
                                     <WrapPanel Margin="0,8,0,0">
                                         <Button x:Name="BotaoAtualizarInicio" Content="Atualizar analise" Margin="0,0,8,4"/>
                                         <Button x:Name="BotaoCancelarInicio" Content="Cancelar analise" IsEnabled="False" Margin="0,0,8,4"/>
@@ -358,10 +359,10 @@
                             <TextBlock Text="Perfis:" VerticalAlignment="Center" Foreground="#9ca3af" Margin="0,0,8,0"/>
                             <Button x:Name="BotaoPerfilRecomendado" Content="Recomendado" Margin="0,2,6,2" ToolTip="Seleciona preferencias essenciais sem inferir ganho de desempenho ou tipo de computador."/>
                             <Button x:Name="BotaoPerfilEssencial" Content="Essencial" Margin="0,2,6,2"/>
-                            <Button x:Name="BotaoPerfilGamer" Content="Gamer" Margin="0,2,6,2" ToolTip="Preferencias de mouse e conveniencia; nao promete FPS."/>
+                            <Button x:Name="BotaoPerfilGamer" Content="Gamer" Margin="0,2,6,2" ToolTip="Selecao conservadora; nao promete FPS."/>
                             <Button x:Name="BotaoPerfilNotebook" Content="Notebook" Margin="0,2,6,2" ToolTip="Ajustes leves, sem forcar alto desempenho."/>
                             <Button x:Name="BotaoPerfilPrivacidade" Content="Privacidade" Margin="0,2,6,2"/>
-                            <Button x:Name="BotaoPerfilCorporativo" Content="Corporativo" Margin="0,2,6,2" ToolTip="Apenas exibe extensoes de arquivos. Consulte o administrador."/>
+                            <Button x:Name="BotaoPerfilCorporativo" Content="Conservador" Margin="0,2,6,2" ToolTip="Apenas exibe extensoes de arquivos. Consulte o administrador."/>
                         </WrapPanel>
                         <WrapPanel Margin="0,4,0,0">
                             <TextBlock Text="filtrar:" Foreground="#9ca3af" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="13"/>
@@ -524,7 +525,7 @@
                                     <Button x:Name="BotaoFixUpdate" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Diagnosticar Windows Update nas Configuracoes"/>
                                     <Button x:Name="BotaoFixRede" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Diagnosticar rede nas Configuracoes"/>
                                     <Button x:Name="BotaoFixIntegridade" HorizontalAlignment="Stretch" Margin="0,0,0,6" Content="Verificar integridade do sistema (DISM + SFC)"/>
-                                    <Button x:Name="BotaoFixWinget" HorizontalAlignment="Stretch" Content="Instalar/reparar o winget"/>
+                                    <Button x:Name="BotaoFixWinget" HorizontalAlignment="Stretch" Content="Abrir App Installer oficial"/>
                                 </StackPanel>
                                 <TextBlock FontSize="15" FontWeight="SemiBold" Foreground="#f3f4f6" Margin="0,16,0,4" Text="Paineis classicos do windows"/>
                                 <WrapPanel x:Name="PainelLegado" Margin="0,6,0,0"/>
@@ -572,7 +573,7 @@
                                 <Button x:Name="BotaoLimpezaDism" Content="Limpeza de componentes do Windows (janela)" Margin="4" Padding="10,14" ToolTip="Remove componentes substituidos do Windows. Pode demorar; nao use como rotina de ganho de FPS."/>
                                 <Button x:Name="BotaoVerificarIntegridade" Content="Reparar arquivos do sistema (DISM + SFC)" Margin="4" Padding="10,14" ToolTip="DISM e SFC tentam reparar arquivos do sistema; use quando houver corrupcao ou falhas."/>
                                 <Button x:Name="BotaoVerificarDisco" Content="Verificar volume do sistema (sem reparo)" Margin="4" Padding="10,14" ToolTip="Consulta o volume do sistema; pode consumir recursos."/>
-                                <Button x:Name="BotaoRecuperarIcones" Content="Reconstruir cache de icones" Margin="4" Padding="10,14" ToolTip="Use quando icones estiverem incorretos; reinicia o Explorer."/>
+                                <Button x:Name="BotaoRecuperarIcones" Content="Diagnosticar icones e Explorer" Margin="4" Padding="10,14" ToolTip="Use quando icones estiverem incorretos; reinicia o Explorer."/>
                                 <Button x:Name="BotaoLimparDns" Content="Limpar cache do DNS" Margin="4" Padding="10,14" ToolTip="Use em problemas de resolucao de nomes; nao acelera a internet permanentemente."/>
                                 <Button x:Name="BotaoSincronizarHora" Content="Sincronizar hora pela fonte configurada" Margin="4" Padding="10,14" ToolTip="Use se a hora estiver incorreta. Depende do servico de hora."/>
                                 <Button x:Name="BotaoAnalisarArmazenamento" Content="Analisar arquivos grandes" Margin="4" Padding="10,14" ToolTip="Analise somente leitura. Arquivos grandes nao sao necessariamente descartaveis."/>
