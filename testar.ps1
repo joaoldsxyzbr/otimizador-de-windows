@@ -6,20 +6,20 @@
 # ============================================================
 
 $raiz = $PSScriptRoot
-$global:Ok = 0
-$global:Erros = 0
+$global:TestesOk = 0
+$global:TestesFalhas = 0
 # Somente o harness testa funcoes mutaveis em dados descartaveis/mocks.
 $global:ModoProtegido=$false
 
 function Passou {
     param([string]$Nome)
-    $global:Ok++
+    $global:TestesOk++
     Write-Host ('  [ok]     ' + $Nome) -ForegroundColor Green
 }
 
 function Falhou {
     param([string]$Nome, [string]$Detalhe)
-    $global:Erros++
+    $global:TestesFalhas++
     Write-Host ('  [falhou] ' + $Nome) -ForegroundColor Red
     if (-not [string]::IsNullOrWhiteSpace($Detalhe)) {
         Write-Host ('           ' + $Detalhe) -ForegroundColor DarkYellow
@@ -1879,11 +1879,11 @@ Secao 'limites do backup de registro'
 $arquivoReg=Join-Path ([IO.Path]::GetTempPath()) ('otimizador-reg-'+[guid]::NewGuid().ToString('N')+'.reg')
 try {
     $alvo='HKEY_CURRENT_USER\Software\OtimizadorTeste'
-    $ok=@('Windows Registry Editor Version 5.00','',('['+$alvo+']'),'"valor"="teste"',('['+$alvo+'\Sub]'),'"numero"=dword:00000001') -join [Environment]::NewLine
-    [IO.File]::WriteAllText($arquivoReg,$ok,[Text.Encoding]::Unicode)
+    $conteudoBase=@('Windows Registry Editor Version 5.00','',('['+$alvo+']'),'"valor"="teste"',('['+$alvo+'\Sub]'),'"numero"=dword:00000001') -join [Environment]::NewLine
+    [IO.File]::WriteAllText($arquivoReg,$conteudoBase,[Text.Encoding]::Unicode)
     Confirmar-ConteudoBackupRegistro $arquivoReg $alvo
     foreach ($s in @('[HKEY_CURRENT_USER\Software\Outro]','[-HKEY_CURRENT_USER\Software\OtimizadorTeste]','"valor"=-')) {
-        [IO.File]::WriteAllText($arquivoReg,($ok+[Environment]::NewLine+$s),[Text.Encoding]::Unicode)
+        [IO.File]::WriteAllText($arquivoReg,($conteudoBase+[Environment]::NewLine+$s),[Text.Encoding]::Unicode)
         $recusou=$false
         try {Confirmar-ConteudoBackupRegistro $arquivoReg $alvo} catch {$recusou=$true}
         if (-not $recusou) {throw 'Diretiva fora do escopo aceita.'}
@@ -1974,14 +1974,14 @@ try {
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
-if ($global:Erros -eq 0) {
-    Write-Host ('  tudo certo: ' + $global:Ok + ' teste(s) passaram, 0 falhas.') -ForegroundColor Green
+if ($global:TestesFalhas -eq 0) {
+    Write-Host ('  tudo certo: ' + $global:TestesOk + ' teste(s) passaram, 0 falhas.') -ForegroundColor Green
     Write-Host '  pode abrir o app com rodar-como-admin.bat'
 } else {
-    Write-Host ('  ' + $global:Erros + ' teste(s) falharam, ' + $global:Ok + ' passaram.') -ForegroundColor Red
+    Write-Host ('  ' + $global:TestesFalhas + ' teste(s) falharam, ' + $global:TestesOk + ' passaram.') -ForegroundColor Red
     Write-Host '  corrija as linhas em vermelho antes de usar o app.'
     Write-Host '  (se eu estiver editando os arquivos agora, rode de novo depois)'
 }
 Write-Host '============================================================'
-if ($global:Erros -gt 0) { exit 1 }
+if ($global:TestesFalhas -gt 0) { exit 1 }
 exit 0
