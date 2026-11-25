@@ -888,7 +888,7 @@ function Clique-InventarioLocal {
         $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window
         $dlg.Title = 'Gerenciador local - OtimizadorPC'
-        $dlg.Owner = $global:Janela
+        try { if ($global:Janela -and $global:Janela.IsLoaded) { $dlg.Owner = $global:Janela } } catch { }
         $dlg.WindowStartupLocation = 'CenterOwner'
         $dlg.Width = 760
         $dlg.Height = 560
@@ -1038,7 +1038,7 @@ function Clique-AnalisarArmazenamento {
         $dados = $resultado[0]
         $dlg = New-Object System.Windows.Window
         $dlg.Title = 'Analise de armazenamento - somente leitura'
-        $dlg.Owner = $global:Janela
+        try { if ($global:Janela -and $global:Janela.IsLoaded) { $dlg.Owner = $global:Janela } } catch { }
         $dlg.WindowStartupLocation = 'CenterOwner'
         $dlg.Width = 800
         $dlg.Height = 550
@@ -1170,7 +1170,7 @@ function Clique-DetalhesSessao {
         }
         $dlg = New-Object System.Windows.Window
         $dlg.Title = 'Detalhes da sessao e quarentena'
-        $dlg.Owner = $global:Janela
+        try { if ($global:Janela -and $global:Janela.IsLoaded) { $dlg.Owner = $global:Janela } } catch { }
         $dlg.WindowStartupLocation = 'CenterOwner'
         $dlg.Width = 800
         $dlg.Height = 550
@@ -1209,7 +1209,7 @@ function Executar-ConsultaLocal {
     $estado = @{ chave=[Guid]::NewGuid().ToString(); fase='aguardando'; cancelado=$false; resultado=$null; erro=$null; terminou=$false; abandonado=$false; pediuFechar=$null; esperando=[Diagnostics.Stopwatch]::StartNew(); parada=$null; async=$null; ps=$ps }
     $dlg = New-Object System.Windows.Window
     $dlg.Title = $Titulo
-    $dlg.Owner = $global:Janela
+    try { if ($global:Janela -and $global:Janela.IsLoaded) { $dlg.Owner = $global:Janela } } catch { }
     $dlg.WindowStartupLocation = 'CenterOwner'
     $dlg.Width = 400
     $dlg.Height = 160
