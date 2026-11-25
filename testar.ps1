@@ -1244,6 +1244,40 @@ try {
             }
             if ((Contar-ConsultasAtivas) -gt 0) {throw 'Workers sinteticos nao encerraram.'}
             Passou 'fila WPF automatica, limite, deduplicacao e cancelamento'
+
+            # Dialogos locais usam a mesma admissao global das consultas (F1).
+            Verificar-EstadoUwp -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-SnapshotInicio -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-SnapshotProgramas -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-ConsultaPainel 'Ajustes' -Forcar -Codigo {Start-Sleep -Seconds 20}
+            if ((Contar-ConsultasAtivas) -ne 4) {throw 'Cenario de saturacao invalido.'}
+            $global:ContagemEsperaTeste=New-Object System.Collections.ArrayList
+            [void]$global:Janela.Dispatcher.BeginInvoke([System.Windows.Threading.DispatcherPriority]::Background,[action]{
+                [void]$global:ContagemEsperaTeste.Add((Contar-ConsultasAtivas))
+                Cancelar-ConsultaPainel 'Ajustes'
+            })
+            $dadoDialogo=@(Executar-ConsultaLocal -Titulo 'Dialogo sintetico' -Codigo {Start-Sleep -Milliseconds 300; [pscustomobject]@{valor=7}} -Mensagem 'Teste sintetico de admissao.')
+            if ($global:ContagemEsperaTeste.Count -lt 1 -or $global:ContagemEsperaTeste[0] -ne 4) {throw 'Dialogo ocupou vaga durante a propria espera.'}
+            if ($dadoDialogo.Count -ne 1 -or $dadoDialogo[0].valor -ne 7) {throw 'Dialogo nao executou a consulta sintetica apos a vaga.'}
+            if ($global:ConsultasDialogoAtivas.Count -ne 0) {throw 'Dialogo nao liberou a vaga ao concluir.'}
+            Cancelar-ConsultaUwp; Cancelar-ConsultaInicio; Cancelar-ConsultaProgramas
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            while ((Contar-ConsultasAtivas) -gt 0 -and $sw.Elapsed.TotalSeconds -lt 15) {
+                Start-Sleep -Milliseconds 50
+                [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+            }
+            if ((Contar-ConsultasAtivas) -gt 0) {throw 'Workers sinteticos nao encerraram.'}
+            Passou 'dialogo local espera vaga da admissao global, executa e libera o slot'
+
+            # Worker de dialogo abandonado e drenado no encerramento (F1).
+            $psAbandonado=[PowerShell]::Create()
+            [void]$psAbandonado.AddScript('Start-Sleep -Seconds 1')
+            $asyncAbandonado=$psAbandonado.BeginInvoke()
+            $global:ConsultasDialogoAtivas['teste-adiado']=@{estado=@{chave='teste-adiado';fase='executando';cancelado=$true;terminou=$false;abandonado=$true;pediuFechar=$null;esperando=$null;parada=$null;resultado=$null;erro=$null;ps=$psAbandonado;async=$asyncAbandonado}}
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            $restantesAbandonado=Finalizar-ConsultasPendentes -LimiteMs 5000
+            if ($restantesAbandonado -ne 0 -or $global:ConsultasDialogoAtivas.Count -ne 0 -or $sw.Elapsed.TotalSeconds -ge 7) {throw 'Worker de dialogo adiado nao foi drenado no encerramento.'}
+            Passou 'encerramento drena worker de dialogo adiado'
             # Close with a pending read-only worker; no indefinitely blocked exit.
             Solicitar-ConsultaPainel 'Recursos' -Forcar -Codigo {Start-Sleep -Seconds 10;[pscustomobject]@{itens=@()}}
             $global:Janela.Close()
