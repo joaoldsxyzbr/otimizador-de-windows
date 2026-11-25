@@ -384,10 +384,13 @@ try {
     $origem = Join-Path $testeQuarentena 'origem.txt'
     [IO.File]::WriteAllText($origem, 'teste')
     & {
-        function Registrar-Jornal { param($Item) throw 'Falha simulada de journal' }
+        function Confirmar-PastaSessaoQuarentena {param($Pasta) return $Pasta}
+        function Caminho-RastroSeguro {return $true}
+        $script:atingiuJournal=$false
+        function Registrar-Jornal { param($Item) $script:atingiuJournal=$true; throw 'Falha simulada de journal' }
         $falhou = $false
         try { Apagar-Rastro ([pscustomobject]@{ tipo='arquivo'; caminho=$origem }) $testeQuarentena 1 } catch { $falhou = $true }
-        if (-not $falhou -or -not (Test-Path -LiteralPath $origem) -or (Test-Path -LiteralPath (Join-Path $testeQuarentena '01_origem.txt'))) {
+        if (-not $falhou -or -not $script:atingiuJournal -or -not (Test-Path -LiteralPath $origem) -or (Test-Path -LiteralPath (Join-Path $testeQuarentena '01_origem.txt'))) {
             throw 'Arquivo foi movido sem journal.'
         }
     }
@@ -1615,6 +1618,45 @@ try {
     if ($texto.IndexOf('[ATENCAO]') -lt 0 -or $texto.IndexOf('[ATENCAO]') -gt $texto.IndexOf('[INDISPONIVEL]') -or $texto -notmatch 'Prioridades nesta amostra') {throw 'Priorizacao da triagem incorreta.'}
     Passou 'inventarios separados por tecnologia e triagem priorizada'
 } catch {Falhou 'inventario combinado e triagem' $_.Exception.Message}
+
+# ---- bounded quarantine folder manifest and reconciliation ----
+Secao 'manifesto e recuperacao'
+$dir=Join-Path ([IO.Path]::GetTempPath()) ('otimizador-manifesto-'+[guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path (Join-Path $dir 'vazia') -Force -ErrorAction Stop | Out-Null
+    [IO.File]::WriteAllText((Join-Path $dir 'a [teste].txt'),'conteudo')
+    $hash=Obter-HashPastaQuarentena $dir
+    if ($hash -notmatch '^[0-9A-F]{64}$' -or (Obter-HashPastaQuarentena $dir) -cne $hash) {throw 'Manifesto nao deterministico.'}
+    [IO.File]::WriteAllText((Join-Path $dir 'a [teste].txt'),'alterado')
+    if ((Obter-HashPastaQuarentena $dir) -ceq $hash) {throw 'Conteudo alterado nao detectado.'}
+    [IO.File]::WriteAllText((Join-Path $dir 'a [teste].txt'),'conteudo')
+    Remove-Item -LiteralPath (Join-Path $dir 'vazia') -ErrorAction Stop
+    if ((Obter-HashPastaQuarentena $dir) -ceq $hash) {throw 'Diretorio vazio ausente nao detectado.'}
+    $recusou=$false
+    try {$null=Obter-HashPastaQuarentena $dir -LimiteBytes 1} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Limite de bytes ignorado.'}
+    & {
+        $id='381b4222-f694-41f0-9685-ff5bb260df2e'
+        $energia=[pscustomobject]@{tipo='energia';idOperacao='teste';guidAnterior=$id;guidDepois='8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'}
+        function Obter-PlanoEnergiaAtivo {return $id}
+        if (-not (Testar-ItemJaRestaurado $energia)) {throw 'Plano original nao reconhecido.'}
+        function Obter-PlanoEnergiaAtivo {return '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'}
+        if (Testar-ItemJaRestaurado $energia) {throw 'Plano divergente aceito.'}
+        $svc=[pscustomobject]@{tipo='servico';idOperacao='teste';nome='SysMain';tipoAnterior='Manual';tipoDepois='Disabled';estadoAnterior='Stopped';estadoDepois='Stopped';atrasoAnterior=$false;atrasoDepois=$false}
+        function Obter-EstadoServico {return [pscustomobject]@{tipo='Manual';estado='Stopped';atraso=$false}}
+        if (-not (Testar-ItemJaRestaurado $svc)) {throw 'Estado original de servico nao reconhecido.'}
+        $svc.nome='WinDefend'
+        if (Testar-ItemJaRestaurado $svc) {throw 'Servico fora da lista aceito.'}
+        $recusou=$false
+        try {Confirmar-AlvoTarefa '\Microsoft\Windows\' 'Teste'} catch {$recusou=$true}
+        if (-not $recusou) {throw 'Tarefa de sistema aceita.'}
+        $task=[pscustomobject]@{tipo='tarefa';idOperacao='teste';tarefaPath='\';tarefaNome='Teste';assinatura='original';estadoAnterior='Ready';estadoDepois='Disabled'}
+        function Obter-AssinaturaTarefa {return 'alterado'}
+        if (Testar-ItemJaRestaurado $task) {throw 'Tarefa alterada aceitada.'}
+    }
+    Passou 'manifesto de pasta e reconciliacao de snapshots completos'
+} catch {Falhou 'manifesto e recuperacao' $_.Exception.Message}
+finally {if (Test-Path -LiteralPath $dir) {Remove-Item -LiteralPath $dir -Recurse -Force}}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

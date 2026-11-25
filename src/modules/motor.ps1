@@ -364,6 +364,9 @@ function Alterar-ServicoComJournal {
         tipoDepois=$Inicio; estadoDepois=$depois; atrasoDepois=$false
     }
     Registrar-Jornal $entrada
+    Confirmar-DependenciasServico $Nome $Inicio
+    $releitura=Obter-EstadoServico $Nome
+    if ($releitura.tipo -ne $ant.tipo -or $releitura.estado -ne $ant.estado -or $releitura.atraso -ne $ant.atraso) {throw 'Servico mudou durante preparacao; preservado.'}
     if ($Inicio -eq 'Disabled' -and $ant.estado -eq 'Running') {
         Stop-Service -Name $Nome -ErrorAction Stop
         (Get-Service -Name $Nome).WaitForStatus('Stopped',[TimeSpan]::FromSeconds(20))
@@ -427,11 +430,16 @@ function Obter-AssinaturaTarefa {
     return (Assinatura-TarefaXml (Export-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop))
 }
 
+function Confirmar-AlvoTarefa {
+    param([string]$Caminho,[string]$Nome)
+    if (-not $Nome -or -not $Caminho.StartsWith('\') -or $Caminho.StartsWith('\Microsoft\',[StringComparison]::OrdinalIgnoreCase) -or $Caminho -ieq '\Microsoft') {throw 'Tarefa de sistema ou caminho invalido.'}
+    if ($Nome -match '[*?\[\]\\]' -or $Caminho -match '[*?\[\]]' -or $Caminho -match '(^|\\)\.{1,2}(\\|$)') {throw 'Identificador ambiguo.'}
+}
+
 function Desativar-TarefaComJournal {
     param([string]$Caminho,[string]$Nome)
     Confirmar-PermissaoAlteracao
-    if (-not $Caminho.StartsWith('\') -or $Caminho.StartsWith('\Microsoft\',[StringComparison]::OrdinalIgnoreCase) -or $Caminho -ieq '\Microsoft') { throw 'Tarefa de sistema ou caminho invalido.' }
-    if ($Nome -match '[*?\[\]]' -or $Caminho -match '[*?\[\]]') { throw 'Identificador ambiguo.' }
+    Confirmar-AlvoTarefa $Caminho $Nome
     $tarefas = @(Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop)
     if ($tarefas.Count -ne 1 -or $tarefas[0].TaskName -ne $Nome -or $tarefas[0].TaskPath -ne $Caminho) { throw 'Tarefa nao identificada unicamente.' }
     $atual = $tarefas[0]
@@ -440,6 +448,7 @@ function Desativar-TarefaComJournal {
     $assinatura = Obter-AssinaturaTarefa $Caminho $Nome
     $entrada=[pscustomobject]@{ tipo='tarefa'; tarefaPath=$Caminho; tarefaNome=$Nome; estadoAnterior='Ready'; estadoDepois='Disabled'; assinatura=$assinatura }
     Registrar-Jornal $entrada
+    if ((Obter-AssinaturaTarefa $Caminho $Nome) -ne $assinatura -or (Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Ready') {throw 'Tarefa mudou durante preparacao; preservada.'}
     Disable-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop | Out-Null
     if ((Get-ScheduledTask -TaskPath $Caminho -TaskName $Nome -ErrorAction Stop).State -ne 'Disabled') { throw 'Desativacao nao confirmada.' }
     Confirmar-EfeitoJournal $entrada
@@ -750,6 +759,56 @@ function Executar-Acao {
 # ---- desfazer ----
 
 # Verify the direct child of a protected quarantine session before recovery.
+# Bounded manifest of names, directory structure, lengths and default file streams.
+# Reject links instead of traversing them. Does not attest ACLs or alternate streams.
+function Obter-HashPastaQuarentena {
+    param([string]$Pasta,[int]$LimiteItens=2000,[long]$LimiteBytes=536870912,[int]$LimiteSegundos=30)
+    $root=[IO.Path]::GetFullPath($Pasta).TrimEnd('\')
+    $dir=Get-Item -LiteralPath $root -Force -ErrorAction Stop
+    if (-not $dir.PSIsContainer -or ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)) {throw 'Pasta invalida ou redirecionada.'}
+    $fila=New-Object 'System.Collections.Generic.Stack[string]'
+    $linhas=New-Object 'System.Collections.Generic.List[string]'
+    $fila.Push($root)
+    $bytes=0L;$n=0;$sw=[Diagnostics.Stopwatch]::StartNew()
+    while ($fila.Count -gt 0) {
+        $atual=$fila.Pop()
+        foreach ($item in (Get-ChildItem -LiteralPath $atual -Force -ErrorAction Stop)) {
+            $n++
+            if ($n -gt $LimiteItens -or $sw.Elapsed.TotalSeconds -ge $LimiteSegundos) {throw 'Limite do manifesto de pasta atingido; preserve a pasta.'}
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {throw 'Link ou ponto de redirecionamento dentro da pasta; preservado.'}
+            $rel=$item.FullName.Substring($root.Length+1)
+            if ($item.PSIsContainer) {
+                $linhas.Add((ConvertTo-Json -Compress -InputObject @('D',$rel)))
+                $fila.Push($item.FullName)
+            } else {
+                $bytes+=[long]$item.Length
+                if ($bytes -gt $LimiteBytes) {throw 'Limite de bytes do manifesto atingido; preserve a pasta.'}
+                $hash=(Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256 -ErrorAction Stop).Hash
+                if ($sw.Elapsed.TotalSeconds -ge $LimiteSegundos) {throw 'Tempo de manifesto excedido; preserve a pasta.'}
+                $linhas.Add((ConvertTo-Json -Compress -InputObject @('F',$rel,[long]$item.Length,$hash)))
+            }
+        }
+    }
+    $ordenadas=$linhas.ToArray()
+    [Array]::Sort($ordenadas,[StringComparer]::Ordinal)
+    $sha=[Security.Cryptography.SHA256]::Create()
+    try {
+        $buf=[Text.Encoding]::UTF8.GetBytes(($ordenadas -join [char]10))
+        return ([BitConverter]::ToString($sha.ComputeHash($buf))).Replace('-','')
+    } finally {$sha.Dispose()}
+}
+
+function Confirmar-PastaSessaoQuarentena {
+    param([string]$Pasta)
+    if ($Pasta -notmatch '^[A-Za-z]:\\' -or -not $global:PastaQuarantena) {throw 'Pasta de quarentena invalida.'}
+    $root=[IO.Path]::GetFullPath($global:PastaQuarantena).TrimEnd('\')
+    $full=[IO.Path]::GetFullPath($Pasta).TrimEnd('\')
+    if ([IO.Path]::GetDirectoryName($full) -ine $root -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Pasta fora da quarentena.'}
+    Verificar-PastaPrivada $root
+    Verificar-PastaPrivada $full
+    return $full
+}
+
 function Confirmar-BackupQuarentena {
     param([string]$Arquivo,[string]$Hash,[switch]$PastaPermitida)
     if ($Arquivo -notmatch '^[A-Za-z]:\\' -or -not $global:PastaQuarantena) {throw 'Backup sem caminho local confirmado.'}
@@ -757,12 +816,12 @@ function Confirmar-BackupQuarentena {
     $full=[IO.Path]::GetFullPath($Arquivo)
     $sessao=[IO.Path]::GetDirectoryName($full)
     if ([IO.Path]::GetDirectoryName($sessao) -ine $raiz -or [IO.Path]::GetFileName($full).Contains(':')) {throw 'Backup fora da pasta de quarentena.'}
-    Verificar-PastaPrivada $raiz
-    Verificar-PastaPrivada $sessao
+    [void](Confirmar-PastaSessaoQuarentena $sessao)
     $item=Get-Item -LiteralPath $full -Force -ErrorAction Stop
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {throw 'Backup redirecionado.'}
     if ($item.PSIsContainer) {
-        if (-not $PastaPermitida -or $Hash) {throw 'Tipo de backup divergente.'}
+        if (-not $PastaPermitida -or $Hash -notmatch '^[0-9a-fA-F]{64}$') {throw 'Pasta sem manifesto confirmado; revise manualmente.'}
+        if ((Obter-HashPastaQuarentena $full) -ine $Hash) {throw 'Manifesto da pasta divergente; preservado.'}
     } else {
         if ($Hash -notmatch '^[0-9a-fA-F]{64}$') {throw 'Backup sem hash confirmado; revise manualmente.'}
         if ((Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash -ine $Hash) {throw 'Integridade do backup divergente; preservado.'}
@@ -778,6 +837,7 @@ function Desfazer-Item {
         switch ($Item.tipo) {
 
             'registro' {
+                if (-not $Item.PSObject.Properties['existiaDepois']) {throw 'Journal de registro sem snapshot posterior; revise manualmente.'}
                 $rede = Converter-Hive $Item.caminho
                 if ($Item.PSObject.Properties['existiaDepois']) {
                     $atual = Ler-ValorRegistro -CaminhoPS $Item.caminho -Nome $Item.nome
@@ -890,6 +950,7 @@ function Desfazer-Item {
             }
 
             'tarefa' {
+                Confirmar-AlvoTarefa $Item.tarefaPath $Item.tarefaNome
                 if (-not $Item.assinatura -or (Obter-AssinaturaTarefa $Item.tarefaPath $Item.tarefaNome) -ne $Item.assinatura) { throw 'Definicao da tarefa incerta ou alterada; revise manualmente.' }
                 $atual = (Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop).State
                 if ($atual -eq 'Ready') { return $true }
@@ -903,6 +964,7 @@ function Desfazer-Item {
             'regra-firewall' { throw 'Recriacao automatica de regra de firewall indisponivel; revise manualmente.' }
 
             'path-entrada' {
+                if ($Item.escopo -notin @('Machine','User') -or -not $Item.PSObject.Properties['valorDepois'] -or $Item.tipoAnterior -notin @('String','ExpandString')) {throw 'Snapshot PATH invalido ou legado; revise manualmente.'}
                 $ck2 = $null
                 if ([string]$Item.escopo -eq 'Machine') {
                     $ck2 = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment', $true)
@@ -916,10 +978,11 @@ function Desfazer-Item {
                         $kind = $ck2.GetValueKind('Path')
                         if ($Item.PSObject.Properties['valorDepois']) {
                             $atual = [string]$ck2.GetValue('Path',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)
-                            if ($atual -ceq [string]$Item.valorAnterior) { return $true }
+                            if ($atual -ceq [string]$Item.valorAnterior -and $kind.ToString() -eq $Item.tipoAnterior) { return $true }
                             if ($atual -cne [string]$Item.valorDepois -or $kind.ToString() -ne $Item.tipoAnterior) { throw 'PATH mudou desde a limpeza; nao sobrescrevendo.' }
                         }
                         $ck2.SetValue('Path', [string]$Item.valorAnterior, $kind)
+                        if ([string]$ck2.GetValue('Path',$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames) -cne [string]$Item.valorAnterior -or $ck2.GetValueKind('Path').ToString() -ne $Item.tipoAnterior) {throw 'Restauracao PATH nao confirmada.'}
                     } finally { $ck2.Dispose() }
                     Log ("entrada restaurada no PATH {0}: {1}" -f [string]$Item.escopo, [string]$Item.entrada)
                 }
@@ -927,6 +990,7 @@ function Desfazer-Item {
 
             'quarantena-arquivo' {
                 $backup=Confirmar-BackupQuarentena $Item.destino $Item.hashBackup -PastaPermitida:([bool]$Item.pasta)
+                if (-not (Caminho-RastroSeguro $Item.origem -PermitirAusente)) {throw 'Destino original fora dos locais revisados.'}
                 if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $Item.origem)) {
                     $pai = Split-Path -Parent $Item.origem
                     if (-not (Test-Path -LiteralPath $pai -PathType Container)) { throw 'Pasta original ausente; revise antes de restaurar.' }
@@ -939,7 +1003,8 @@ function Desfazer-Item {
                         $atual = $superior
                     }
                     Move-Item -LiteralPath $backup -Destination $Item.origem -ErrorAction Stop
-                    if ($Item.hashBackup -and (Get-FileHash -LiteralPath $Item.origem -Algorithm SHA256 -ErrorAction Stop).Hash -ine $Item.hashBackup) {throw 'Conteudo restaurado nao confirmado.'}
+                    $hashRestaurado=if ($Item.pasta) {Obter-HashPastaQuarentena $Item.origem} else {(Get-FileHash -LiteralPath $Item.origem -Algorithm SHA256 -ErrorAction Stop).Hash}
+                    if ($hashRestaurado -ine $Item.hashBackup) {throw 'Conteudo restaurado nao confirmado.'}
                     Log ("rastro restaurado da quarantena: " + $Item.origem)
                 } else {
                     throw ("Backup ausente ou conflito no destino: " + $Item.origem)
@@ -981,6 +1046,46 @@ function Testar-RegistroJaRestaurado {
     } catch {return $false}
 }
 
+# Recognize only complete snapshots with the original state already present.
+# This is a read-only check, not permission to repeat a mutation.
+function Testar-ItemJaRestaurado {
+    param($Item)
+    if (-not $Item.idOperacao) {return $false}
+    try {
+        switch ($Item.tipo) {
+            'registro' {return (Testar-RegistroJaRestaurado $Item)}
+            'energia' {
+                $ant=[guid]::Empty;$dep=[guid]::Empty
+                if (-not [guid]::TryParse([string]$Item.guidAnterior,[ref]$ant) -or -not [guid]::TryParse([string]$Item.guidDepois,[ref]$dep) -or $ant -eq [guid]::Empty -or $dep -eq [guid]::Empty) {return $false}
+                return ([guid](Obter-PlanoEnergiaAtivo) -eq $ant)
+            }
+            'servico' {
+                if ($Item.tipoAnterior -notin @('Automatic','Manual','Disabled') -or $Item.tipoDepois -notin @('Automatic','Manual','Disabled') -or $Item.estadoAnterior -notin @('Running','Stopped') -or $Item.estadoDepois -notin @('Running','Stopped') -or $Item.atrasoAnterior -isnot [bool] -or $Item.atrasoDepois -isnot [bool]) {return $false}
+                Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='servico';nome=$Item.nome;inicio=$Item.tipoAnterior})
+                $atual=Obter-EstadoServico $Item.nome
+                return ($atual.tipo -eq $Item.tipoAnterior -and $atual.estado -eq $Item.estadoAnterior -and $atual.atraso -eq $Item.atrasoAnterior)
+            }
+            'tarefa' {
+                if ($Item.estadoAnterior -ne 'Ready' -or $Item.estadoDepois -ne 'Disabled' -or -not $Item.assinatura) {return $false}
+                Confirmar-AlvoTarefa $Item.tarefaPath $Item.tarefaNome
+                if ((Obter-AssinaturaTarefa $Item.tarefaPath $Item.tarefaNome) -ne $Item.assinatura) {return $false}
+                $atual=@(Get-ScheduledTask -TaskPath $Item.tarefaPath -TaskName $Item.tarefaNome -ErrorAction Stop)
+                return ($atual.Count -eq 1 -and $atual[0].TaskName -eq $Item.tarefaNome -and $atual[0].TaskPath -eq $Item.tarefaPath -and $atual[0].State -eq 'Ready')
+            }
+            'quarantena-arquivo' {
+                if ($Item.pasta -isnot [bool] -or $Item.hashBackup -notmatch '^[0-9a-fA-F]{64}$' -or -not (Caminho-RastroSeguro $Item.origem)) {return $false}
+                [void](Confirmar-PastaSessaoQuarentena (Split-Path -Parent $Item.destino))
+                if (Test-Path -LiteralPath $Item.destino -ErrorAction Stop) {return $false}
+                $atual=Get-Item -LiteralPath $Item.origem -Force -ErrorAction Stop
+                if ([bool]$atual.PSIsContainer -ne $Item.pasta) {return $false}
+                $hash=if ($Item.pasta) {Obter-HashPastaQuarentena $Item.origem} else {(Get-FileHash -LiteralPath $Item.origem -Algorithm SHA256 -ErrorAction Stop).Hash}
+                return ($hash -ieq $Item.hashBackup)
+            }
+            default {return $false}
+        }
+    } catch {return $false}
+}
+
 function Reverter-Sessao {
     param([string]$Arquivo, [switch]$UmaAcao)
     Confirmar-PermissaoAlteracao
@@ -996,7 +1101,7 @@ function Reverter-Sessao {
             $item = $itens[$i]
             if ($item.estadoReversao -eq 'concluido') { continue }
             if ($item.estadoReversao -eq 'em_andamento') {
-                if ($json.versaoEsquema -ne 2 -or -not (Testar-RegistroJaRestaurado $item)) {
+                if ($json.versaoEsquema -ne 2 -or -not (Testar-ItemJaRestaurado $item)) {
                     throw ("Acao {0} com resultado incerto. Revise manualmente antes de continuar." -f $i)
                 }
                 $item.estadoReversao='concluido'

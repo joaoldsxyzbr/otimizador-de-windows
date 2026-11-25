@@ -1093,7 +1093,7 @@ function Clique-DetalhesSessao {
             $estado = 'pendente'
             if ($item.estadoReversao -eq 'concluido') { $estado = 'revertido' }
             elseif ($item.estadoReversao -eq 'em_andamento') {
-                $estado=if ($json.versaoEsquema -eq 2 -and (Testar-RegistroJaRestaurado $item)) {'incerto - estado anterior confirmado; pode reconciliar'} else {'incerto - revisao manual'}
+                $estado=if ($json.versaoEsquema -eq 2 -and (Testar-RegistroJaRestaurado $item)) {'incerto - estado anterior confirmado; pode reconciliar'} else {'incerto - verificacao ao desfazer ou revisao manual'}
             }
             if ($item.reconciliadoEm) {$estado='reconciliado por leitura'}
             $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '

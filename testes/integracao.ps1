@@ -278,6 +278,25 @@ try {
     [IO.File]::WriteAllText($item2.destino,'alterado')
     if ((Reverter-Sessao $arq2) -or (Test-Path -LiteralPath $origem2)) {throw 'Backup alterado foi restaurado.'}
     Log 'CI ok: hash divergente impede restauracao'
+    # Folder manifest covers nested content and empty directories, and detects tampering.
+    $pasta=Join-Path $dirArquivo 'pasta [teste]'
+    New-Item -ItemType Directory -Path (Join-Path $pasta 'vazia') -Force -ErrorAction Stop | Out-Null
+    [IO.File]::WriteAllText((Join-Path $pasta 'dados.txt'),'original')
+    $manifesto=Obter-HashPastaQuarentena $pasta
+    Iniciar-Sessao 'ci-pasta'
+    Apagar-Rastro ([pscustomobject]@{tipo='pasta';caminho=$pasta}) $dirBackup 4
+    $arq3=Salvar-Sessao
+    $item3=(Ler-JSON $arq3).itens[0]
+    if ($item3.hashBackup -ne $manifesto -or $item3.estadoAplicacao -ne 'confirmado' -or (Test-Path -LiteralPath $pasta)) {throw 'Movimentacao de pasta nao confirmada.'}
+    if (-not (Reverter-Sessao $arq3) -or (Obter-HashPastaQuarentena $pasta) -ne $manifesto) {throw 'Pasta nao restaurada conforme manifesto.'}
+    Iniciar-Sessao 'ci-pasta-alterada'
+    Apagar-Rastro ([pscustomobject]@{tipo='pasta';caminho=$pasta}) $dirBackup 5
+    $arq4=Salvar-Sessao
+    $item4=(Ler-JSON $arq4).itens[0]
+    [IO.File]::WriteAllText((Join-Path $item4.destino 'dados.txt'),'alterado')
+    if ((Reverter-Sessao $arq4) -or (Test-Path -LiteralPath $pasta)) {throw 'Pasta alterada restaurada.'}
+    Log 'CI ok: manifesto de pasta verifica estrutura e recusa divergencia'
+
 } catch {
     Log ('FALHOU: quarentena de arquivo: ' + $_.Exception.Message) -Erro
     exit 1
@@ -299,6 +318,16 @@ try {
     if (-not (Reverter-Sessao $arq)) { throw 'Tarefa nao revertida.' }
     if ((Get-ScheduledTask -TaskName $nomeTarefa -TaskPath '\').State -ne 'Ready') { throw 'Tarefa nao reativada.' }
     Log 'CI ok: tarefa descartavel desativada e reativada com journal'
+    Iniciar-Sessao 'ci-tarefa-incerta'
+    Desativar-TarefaComJournal '\' $nomeTarefa
+    $arq=Salvar-Sessao
+    $j=Ler-JSON $arq
+    $j.itens[0] | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force
+    Gravar-JournalSeguro -Arquivo $arq -Objeto $j
+    if (Reverter-Sessao $arq) {throw 'Tarefa ainda desativada reconciliada.'}
+    Enable-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -ErrorAction Stop | Out-Null
+    if (-not (Reverter-Sessao $arq) -or -not (Ler-JSON ($arq+'.revertido')).itens[0].reconciliadoEm) {throw 'Tarefa original nao reconciliada.'}
+    Log 'CI ok: tarefa incerta reconciliada apenas depois de estado original confirmado'
 } catch { Log ('FALHOU: tarefa: ' + $_.Exception.Message) -Erro; exit 1 }
 finally { Unregister-ScheduledTask -TaskName $nomeTarefa -TaskPath '\' -Confirm:$false -ErrorAction SilentlyContinue }
 

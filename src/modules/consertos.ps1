@@ -214,7 +214,9 @@ function Limpar-Temporarios {
                 if (-not (Testar-RaizTemporarios $f.pasta) -or (Split-Path -Parent $f.caminho) -ne $f.pasta) { throw 'Pasta mudou.' }
                 $atual=Get-Item -LiteralPath $f.caminho -Force -ErrorAction Stop
                 if ($atual.PSIsContainer -or ($atual.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $atual.Length -ne $f.bytes -or $atual.LastWriteTimeUtc -ne $f.modificado -or $atual.CreationTimeUtc -ne $f.criado) { throw 'Arquivo mudou.' }
+                Confirmar-PermissaoAlteracao
                 Remove-Item -LiteralPath $f.caminho -Force -ErrorAction Stop
+                if (Test-Path -LiteralPath $f.caminho -ErrorAction Stop) {throw 'Exclusao nao confirmada.'}
                 $apagados++; $bytes+=$f.bytes
             } catch { $ignorados++; Log ('temporario preservado: '+$f.caminho) }
         }

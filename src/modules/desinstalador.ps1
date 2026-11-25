@@ -357,11 +357,12 @@ function Clique-DesinstalarProg {
     foreach ($pr in $selecionados) {
         $i++
         Status ('desinstalando {0}/{1}: {2}' -f $i, $selecionados.Count, $pr.nome)
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'desinstalado-app'; nome = $pr.nome })
+        $entrada=[pscustomobject]@{tipo='desinstalado-app';nome=$pr.nome;versao=$pr.versao;editor=$pr.editor;chaveOriginal=$pr.chavePs}
+        Registrar-Jornal $entrada
         try {
             Desinstalar-Programa $pr
-            try { [void](Confirmar-ProgramaAusenteParaLimpeza $pr); $concluidos += $pr }
-            catch { Log ('Remocao ainda nao confirmada; rastros preservados: '+$pr.nome) }
+            try { [void](Confirmar-ProgramaAusenteParaLimpeza $pr); Confirmar-EfeitoJournal $entrada; $concluidos += $pr }
+            catch { Log ('Remocao ainda nao confirmada; rastros preservados: '+$pr.nome) -Erro }
         } catch {
             Log ('falha ao desinstalar {0}: {1}' -f $pr.nome, $_.Exception.Message) -Erro
         }
@@ -424,10 +425,11 @@ function Executavel-RastroAusente {
 }
 
 function Caminho-RastroSeguro {
-    param([string]$Caminho)
+    param([string]$Caminho,[switch]$PermitirAusente)
     try {
         if ($Caminho -notmatch '^[A-Za-z]:\\') { return $false }
         $full = [IO.Path]::GetFullPath($Caminho).TrimEnd('\')
+        if ($full.Substring(2).Contains(':')) {return $false}
         foreach ($bloqueado in @($env:SystemRoot,(Join-Path $env:ProgramData 'otimizadorpc'),$global:RaizEstado,$global:PastaApp)) {
             if (-not $bloqueado) { continue }
             $p = [IO.Path]::GetFullPath($bloqueado).TrimEnd('\')
@@ -447,6 +449,7 @@ function Caminho-RastroSeguro {
         }
         if (-not $permitido) { return $false }
         $atual = $full
+        if ($PermitirAusente -and -not (Test-Path -LiteralPath $full -ErrorAction Stop)) {$atual=Split-Path -Parent $full}
         while ($atual) {
             $item = Get-Item -LiteralPath $atual -Force -ErrorAction Stop
             if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }
@@ -749,42 +752,55 @@ function Apagar-Rastro {
         $leitura = Ler-ValorRegistro -CaminhoPS $Rastro.chave -Nome $Rastro.valor
         if (-not $leitura.existia) { Log ('ja sumiu: ' + $Rastro.caminho); return }
         if (-not (Executavel-RastroAusente ([string]$leitura.valor))) { throw 'Entrada de inicializacao ainda aponta para executavel existente ou incerto.' }
-        Registrar-Jornal ([pscustomobject]@{
+        $entrada=[pscustomobject]@{
             tipo = 'registro'; caminho = $Rastro.chave; nome = $Rastro.valor
             existia = $true; tipoAnterior = $leitura.tipo
             valorAnterior = (ConvertTo-Json -InputObject $leitura.valor -Compress)
             valorAnteriorEstruturado = [pscustomobject]@{ valor = $leitura.valor }
             existiaDepois = $false; tipoDepois = $leitura.tipo
             valorDepoisEstruturado = [pscustomobject]@{ valor = $null }
-        })
+        }
+        Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='registro';caminho=$Rastro.chave;nome=$Rastro.valor})
+        Registrar-Jornal $entrada
+        if (-not (Registro-Corresponde (Ler-ValorRegistro $Rastro.chave $Rastro.valor) $true $leitura.tipo $leitura.valor)) {throw 'Entrada Run mudou; preservada.'}
         Remove-ItemProperty -LiteralPath $Rastro.chave -Name $Rastro.valor -ErrorAction Stop
+        if ((Ler-ValorRegistro $Rastro.chave $Rastro.valor).existia) {throw 'Remocao Run nao confirmada.'}
+        Confirmar-EfeitoJournal $entrada
         Log ('entrada de inicializacao removida com journal: ' + $Rastro.caminho)
         return
     }
 
     # entrada do PATH: tira so a entrada morta, mantendo o resto e o tipo do valor
     if ($Rastro.tipo -eq 'path') {
+        if ($Rastro.escopo -notin @('Machine','User')) {throw 'Escopo PATH invalido.'}
         if (-not (Caminho-LocalAusente $Rastro.entrada)) { throw 'Entrada PATH existente ou incerta; preservada.' }
         $bruto = Obter-PathBruto $Rastro.escopo
         if ($null -eq $bruto -or $null -eq $bruto.valor) { Log ('nao consegui ler o PATH ' + $Rastro.escopo); return }
         $lista = @($bruto.valor -split ';')
         if ($lista -notcontains $Rastro.entrada) { Log ('ja saiu do PATH: ' + $Rastro.entrada); return }
         $nova = @(($bruto.valor -split ';') | Where-Object { $_ -ne $Rastro.entrada }) -join ';'
-        Registrar-Jornal ([pscustomobject]@{ tipo = 'path-entrada'; escopo = $Rastro.escopo; entrada = $Rastro.entrada; valorAnterior = $bruto.valor; valorDepois = $nova; tipoAnterior = [string]$bruto.tipo })
+        if ([string]$bruto.tipo -notin @('String','ExpandString')) {throw 'Tipo PATH nao suportado.'}
+        $entrada=[pscustomobject]@{ tipo = 'path-entrada'; escopo = $Rastro.escopo; entrada = $Rastro.entrada; valorAnterior = $bruto.valor; valorDepois = $nova; tipoAnterior = [string]$bruto.tipo }
+        Registrar-Jornal $entrada
+        $releitura=Obter-PathBruto $Rastro.escopo
+        if (-not $releitura -or $releitura.valor -cne $bruto.valor -or $releitura.tipo -ne $bruto.tipo) {throw 'PATH mudou durante preparacao; preservado.'}
         $ck = $null
         if ($Rastro.escopo -eq 'Machine') {
             $ck = [Microsoft.Win32.Registry]::LocalMachine.OpenSubKey('SYSTEM\CurrentControlSet\Control\Session Manager\Environment', $true)
         } else {
             $ck = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey('Environment', $true)
         }
-        if ($null -eq $ck) { Log ('nao consegui abrir a chave do PATH ' + $Rastro.escopo); return }
-        if ($null -ne $bruto.tipo) { $ck.SetValue('Path', $nova, $bruto.tipo) } else { $ck.SetValue('Path', $nova) }
-        $ck.Close()
+        if ($null -eq $ck) {throw 'Chave PATH indisponivel.'}
+        try {$ck.SetValue('Path', $nova, $bruto.tipo)} finally {$ck.Dispose()}
+        $final=Obter-PathBruto $Rastro.escopo
+        if (-not $final -or $final.valor -cne $nova -or $final.tipo -ne $bruto.tipo) {throw 'Alteracao PATH nao confirmada.'}
+        Confirmar-EfeitoJournal $entrada
         Log ('entrada morta removida do PATH ' + $Rastro.escopo + ' (vale apos relogon; desfazer restaura): ' + $Rastro.entrada)
         return
     }
 
     if ($Rastro.tipo -eq 'chave') {
+        $PastaSessao=Confirmar-PastaSessaoQuarentena $PastaSessao
         if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
         $chaveReg = Get-Item -LiteralPath $Rastro.caminho -ErrorAction Stop
         try { $nativa = [string]$chaveReg.Name } finally { $chaveReg.Close() }
@@ -804,15 +820,19 @@ function Apagar-Rastro {
         Confirmar-EfeitoJournal $entrada
         Log ('chave apagada (backup .reg na quarantena): ' + $nativa)
     } elseif ($Rastro.tipo -in @('arquivo','pasta')) {
+        $PastaSessao=Confirmar-PastaSessaoQuarentena $PastaSessao
         if (-not (Test-Path -LiteralPath $Rastro.caminho)) { Log ('ja sumiu: ' + $Rastro.caminho); return }
         if (-not (Caminho-RastroSeguro $Rastro.caminho)) { throw 'Caminho protegido, redirecionado ou fora dos locais permitidos.' }
         $folha = Split-Path -Leaf $Rastro.caminho
         $destino = Join-Path $PastaSessao ('{0:00}_{1}' -f $Num, $folha)
         if (Test-Path -LiteralPath $destino) { throw 'Destino da quarentena ja existe.' }
         $origem=Get-Item -LiteralPath $Rastro.caminho -Force -ErrorAction Stop
-        $hash=if (-not $origem.PSIsContainer) {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash} else {$null}
+        $hash=if ($origem.PSIsContainer) {Obter-HashPastaQuarentena $Rastro.caminho} else {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash}
         $entrada=[pscustomobject]@{ tipo = 'quarantena-arquivo'; origem = $Rastro.caminho; destino = $destino;hashBackup=$hash;pasta=[bool]$origem.PSIsContainer }
         Registrar-Jornal $entrada
+        if (-not (Caminho-RastroSeguro $Rastro.caminho)) {throw 'Origem mudou durante preparacao.'}
+        $releitura=if ($origem.PSIsContainer) {Obter-HashPastaQuarentena $Rastro.caminho} else {(Get-FileHash -LiteralPath $Rastro.caminho -Algorithm SHA256 -ErrorAction Stop).Hash}
+        if ($releitura -ine $hash) {throw 'Conteudo mudou durante preparacao; preservado.'}
         Move-Item -LiteralPath $Rastro.caminho -Destination $destino -ErrorAction Stop
         [void](Confirmar-BackupQuarentena $destino $hash -PastaPermitida:([bool]$origem.PSIsContainer))
         if (Test-Path -LiteralPath $Rastro.caminho) {throw 'Movimentacao nao confirmada.'}
