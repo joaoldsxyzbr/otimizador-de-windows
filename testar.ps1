@@ -1253,11 +1253,21 @@ try {
             if ((Contar-ConsultasAtivas) -ne 4) {throw 'Cenario de saturacao invalido.'}
             $global:ContagemEsperaTeste=New-Object System.Collections.ArrayList
             [void]$global:Janela.Dispatcher.BeginInvoke([System.Windows.Threading.DispatcherPriority]::Background,[action]{
-                [void]$global:ContagemEsperaTeste.Add((Contar-ConsultasAtivas))
-                Cancelar-ConsultaPainel 'Ajustes'
+                try {
+                    [void]$global:ContagemEsperaTeste.Add((Contar-ConsultasAtivas))
+                    Cancelar-ConsultaPainel 'Ajustes'
+                } catch {
+                    [void]$global:ContagemEsperaTeste.Add(('ERRO OP: '+$_.Exception.Message+' | '+$_.InvocationInfo.PositionMessage))
+                }
             })
-            $dadoDialogo=@(Executar-ConsultaLocal -Titulo 'Dialogo sintetico' -Codigo {Start-Sleep -Milliseconds 300; [pscustomobject]@{valor=7}} -Mensagem 'Teste sintetico de admissao.')
-            if ($global:ContagemEsperaTeste.Count -lt 1 -or $global:ContagemEsperaTeste[0] -ne 4) {throw 'Dialogo ocupou vaga durante a propria espera.'}
+            try {
+                $dadoDialogo=@(Executar-ConsultaLocal -Titulo 'Dialogo sintetico' -Codigo {Start-Sleep -Milliseconds 300; [pscustomobject]@{valor=7}} -Mensagem 'Teste sintetico de admissao.')
+            } catch {
+                throw ('falha no dialogo: '+$_.Exception.Message+' | pos: '+$_.InvocationInfo.PositionMessage+' | pilha: '+$_.ScriptStackTrace)
+            }
+            if ($global:ContagemEsperaTeste.Count -lt 1) {throw 'Op enfileirada nao executou dentro do dialogo.'}
+            if ($global:ContagemEsperaTeste[0] -is [string]) {throw ('Erro no op dispatcher: '+$global:ContagemEsperaTeste[0])}
+            if ($global:ContagemEsperaTeste[0] -ne 4) {throw 'Dialogo ocupou vaga durante a propria espera.'}
             if ($dadoDialogo.Count -ne 1 -or $dadoDialogo[0].valor -ne 7) {throw 'Dialogo nao executou a consulta sintetica apos a vaga.'}
             if ($global:ConsultasDialogoAtivas.Count -ne 0) {throw 'Dialogo nao liberou a vaga ao concluir.'}
             Cancelar-ConsultaUwp; Cancelar-ConsultaInicio; Cancelar-ConsultaProgramas
