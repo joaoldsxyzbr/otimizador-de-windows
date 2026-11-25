@@ -1216,10 +1216,11 @@ function Executar-ConsultaLocal {
     $dlg.ResizeMode = 'NoResize'
     $painel = New-Object System.Windows.Controls.StackPanel
     $painel.Margin = '16'
-    $mensagem = New-Object System.Windows.Controls.TextBlock
-    $mensagem.Text = $Mensagem
-    $mensagem.TextWrapping = 'Wrap'
-    [void]$painel.Children.Add($mensagem)
+    $rotulo = New-Object System.Windows.Controls.TextBlock
+    if ($null -eq $rotulo) { throw 'Controle de texto do dialogo nao foi criado.' }
+    $rotulo.Text = [string]$Mensagem
+    $rotulo.TextWrapping = 'Wrap'
+    [void]$painel.Children.Add($rotulo)
     $barra = New-Object System.Windows.Controls.ProgressBar
     $barra.IsIndeterminate = $true
     $barra.Height = 12
@@ -1240,7 +1241,7 @@ function Executar-ConsultaLocal {
             if ($estado.fase -eq 'executando' -and -not $estado.cancelado -and $estado.async -and -not $estado.async.IsCompleted) {
                 $estado.cancelado = $true
                 $cancelar.IsEnabled = $false
-                $mensagem.Text = 'Cancelando consulta...'
+                $rotulo.Text = 'Cancelando consulta...'
                 try { $estado.parada = $ps.BeginStop($null,$null) }
                 catch { $estado.erro = $_.Exception }
             }
@@ -1290,7 +1291,7 @@ function Executar-ConsultaLocal {
                 catch { $estado.erro = $_.Exception; $estado.terminou = $true; $dlg.Close(); return }
                 $estado.fase = 'executando'
                 $global:ConsultasDialogoAtivas[$estado.chave] = @{ estado = $estado }
-                $mensagem.Text = 'Executando a consulta...'
+                $rotulo.Text = 'Executando a consulta...'
                 return
             }
             if (-not $estado.async.IsCompleted) { return }
@@ -1304,7 +1305,7 @@ function Executar-ConsultaLocal {
             $dlg.Close()
         }.GetNewClosure())
         $timer.Start()
-        if (-not (Testar-VagaConsulta)) { $mensagem.Text = 'Outras consultas em andamento. Aguardando vaga para comecar...' }
+        if (-not (Testar-VagaConsulta)) { $rotulo.Text = 'Outras consultas em andamento. Aguardando vaga para comecar...' }
         [void]$dlg.ShowDialog()
         if ($estado.cancelado -or $estado.abandonado) { return $null }
         if ($estado.erro) { throw $estado.erro }
