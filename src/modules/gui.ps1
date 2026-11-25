@@ -122,10 +122,27 @@ function Obter-GuiaUwp {
     param($Entrada,$Pacotes)
     $achados=@($Pacotes | Where-Object { $_.Name -eq $Entrada.pacote })
     $dependentes=@($achados | ForEach-Object { Obter-DependentesAppx $_ $Pacotes } | Sort-Object -Unique)
-    $bloqueado=(@($achados | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0 -or $dependentes.Count -gt 0)
+    $problemas=@()
+    foreach ($p in @($achados)) {
+        $st=[string]$p.Status
+        if ($st -and $st -ne 'Ok') { $problemas += ('estado do pacote: ' + $st) }
+        foreach ($dep in @($p.Dependencies)) {
+            if ($null -eq $dep) {continue}
+            $depRef=if ($dep -is [string]) {[string]$dep} else {[string]$dep.PackageFullName}
+            if ([string]::IsNullOrWhiteSpace($depRef)) { $problemas += 'dependencia declarada sem identidade'; continue }
+            if (@($Pacotes | Where-Object { $_.PackageFullName -eq $depRef -or $_.Name -eq $depRef }).Count -eq 0) { $problemas += ('dependencia declarada ausente no inventario: ' + $depRef) }
+        }
+    }
+    $bloqueado=(@($achados | Where-Object { Testar-AppxProtegido $_ }).Count -gt 0 -or $dependentes.Count -gt 0 -or $problemas.Count -gt 0)
     $categoria=if ($bloqueado -or $Entrada.protegido) {'Sistema/dependencia - bloqueado'} elseif ($Entrada.desconhecido) {'Nao catalogado - bloqueado'} elseif ($Entrada.remover) {'Opcional - se nao usa'} else {'Aplicativo util - cautela'}
+    if ($problemas.Count -gt 0 -and -not $dependentes.Count -and -not (@($achados | Where-Object { Testar-AppxProtegido $_ }).Count)) { $categoria='Estado/dependencia - bloqueado' }
     $motivo=if ($bloqueado -or $Entrada.protegido) {'Metadados ou nome indicam componente protegido. Remocao indisponivel.'} elseif ($Entrada.desconhecido) {'Sem classificacao no catalogo local; remocao indisponivel.'} else {'Remover somente se nao usa. Outros recursos podem depender do aplicativo. Dados locais e reinstalacao nao garantidos.'}
     if ($dependentes.Count) { $motivo+=' Dependentes declarados: '+($dependentes -join ', ') }
+    if ($problemas.Count) { $motivo+=' Verificacao de dependencias declaradas: '+($problemas -join '; ')+'. Grafo limitado aos pacotes do usuario atual.' }
+    if ($null -ne $global:ProgramasInstalados) {
+        $irmasWin32=@(Localizar-IrmasIdentidade ([string]$Entrada.pacote) @($global:ProgramasInstalados) @() '')
+        if ($irmasWin32.Count) { $motivo+=' Mesma identidade (heuristica de nome, nao prova) no inventario Win32 carregado: '+(($irmasWin32 | ForEach-Object { $_ -replace '^Win32/MSI: ','' }) -join '; ')+'. A remocao AppX nao remove a outra instancia.' }
+    }
     $identidade=if ($achados.Count) {(@($achados | ForEach-Object {('{0} | {1} | {2}' -f $_.Name,$_.Version,$_.Publisher)} | Sort-Object -Unique) -join '; ')} else {'sem pacote instalado confirmado'}
     $motivo+=' Identidade: '+$identidade+'.'
     return [pscustomobject]@{ categoria=$categoria; permitido=(-not ($bloqueado -or $Entrada.protegido -or $Entrada.desconhecido) -and $achados.Count -gt 0); instalado=($achados.Count -gt 0); texto=($Entrada.desc + "`n" + $motivo + "`nEscopo: usuario atual. Nenhum desprovisionamento.") }
@@ -1104,7 +1121,7 @@ function Obter-DetalheRecuperacao {
         'recurso' { $linhas+=('Anterior: '+$Item.estadoAnterior+'; alvo: '+$Item.estadoDepois); $linhas+=('Dependencias alteradas: '+@($Item.alteracoes).Count); $linhas+='Pode exigir reinicio ou revisao manual.' }
         'appx' { $linhas+='Reinstalacao condicionada a disponibilidade do pacote; dados nao garantidos.' }
         'desinstalado-app' { $linhas+='Reinstalacao manual; o journal nao e backup do aplicativo.' }
-        'instalacao-app' { $linhas+='Instalador delegado; codigo do processo nao prova todos os efeitos. Sem rollback automatico.' }
+        'instalacao-app' { $linhas+='Instalador delegado; o desfazer automatizado existe somente para planos de instalacao por id catalogado (WinGet uninstall em janela visivel, com ausencia verificada contra catalogo e registro); planos com upgrade ou sem id seguem manuais.' }
         'temp' {$linhas+='Exclusao definitiva; registro agregado, nao backup de arquivo.'}
         'manutencao' {$linhas+='Comando nativo; sem restauracao automatica e sem garantia de resultado funcional.'}
         'path-entrada' {$linhas+=('Escopo: '+$Item.escopo);$linhas+='Snapshot do PATH preservado no journal local. Nao compartilhe o valor bruto.'}

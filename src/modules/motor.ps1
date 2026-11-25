@@ -229,6 +229,11 @@ function Obter-TipoRecuperacao {
     switch ($Item.tipo) {
         {$_ -in @('registro','energia','servico','tarefa','path-entrada')} {return 'por-snapshot'}
         {$_ -in @('quarantena-arquivo','quarantena-registro','recurso','appx')} {return 'condicional'}
+        'instalacao-app' {
+            $plano=@($Item.plano)
+            if ($Item.PSObject.Properties['plano'] -and @($plano).Count -gt 0 -and @($plano | Where-Object { [string]$_.operacao -ne 'install' }).Count -eq 0) {return 'condicional'}
+            return 'manual-sem-garantia'
+        }
         default {return 'manual-sem-garantia'}
     }
 }
@@ -1120,6 +1125,34 @@ function Confirmar-AlvoRegistroReversao {
     throw 'Alvo historico fora da lista de recuperacao automatica; preserve o journal e revise manualmente.'
 }
 
+# Ausencia verificada contra catalogo local e inventarios reais.
+# Falha de consulta nunca vira ausencia; sem nome catalogado nao ha verificacao.
+function Testar-AppAusenteCatalogado {
+    param([string]$Id,[string]$Fonte)
+    if ([string]::IsNullOrWhiteSpace($Id)) { return $false }
+    $fonte=if ([string]::IsNullOrWhiteSpace($Fonte) -or $Fonte -eq 'winget') {'winget'} elseif ($Fonte -eq 'msstore') {'msstore'} else { return $false }
+    if ($null -eq $global:CatalogoApps -or $null -eq $global:CatalogoApps.aplicativos) { return $false }
+    $nomes=@($global:CatalogoApps.aplicativos | Where-Object {
+        $f=if ($_.fonte) {[string]$_.fonte} else {'winget'}
+        [string]$_.id -ceq $Id -and $f -ceq $fonte
+    } | ForEach-Object {[string]$_.nome} | Sort-Object -Unique)
+    if (@($nomes).Count -eq 0) { return $false }
+    foreach ($raiz in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall','HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall')) {
+        try {
+            if (-not (Test-Path -LiteralPath $raiz -ErrorAction Stop)) {continue}
+            foreach ($k in @(Get-ChildItem -LiteralPath $raiz -ErrorAction Stop)) {
+                $p=Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction Stop
+                if ($nomes -contains [string]$p.DisplayName) { return $false }
+            }
+        } catch { return $false }
+    }
+    if ($fonte -eq 'msstore') {
+        try { foreach ($q in @(Get-AppxPackage -ErrorAction Stop)) { if ($nomes -contains [string]$q.Name) { return $false } } }
+        catch { return $false }
+    }
+    return $true
+}
+
 function Desfazer-Item {
     param($Item)
     Confirmar-PermissaoAlteracao 'estado-local'
@@ -1252,9 +1285,36 @@ function Desfazer-Item {
             }
 
             'instalacao-app' {
-                $alvo=[string]$Item.nome
-                if ($alvo) {throw ('Instalacao via WinGet sem desfazer automatico: ' + $alvo)}
-                throw 'Instalacao via WinGet sem desfazer automatico.'
+                $plano=@($Item.plano)
+                if (-not $Item.PSObject.Properties['plano'] -or @($plano).Count -eq 0) { throw ('Instalacao via WinGet sem plano por aplicativo; execute a desinstalacao manualmente: ' + [string]$Item.nome) }
+                $alvos=@()
+                foreach ($p in @($plano)) {
+                    if ([string]$p.operacao -ne 'install') { throw 'Plano com operacao de upgrade: sem desfazer automatico; revise manualmente.' }
+                    if ([string]$p.id -notmatch '^[A-Za-z0-9._+\-]+$') { throw ('ID de aplicativo invalido no plano: ' + [string]$p.id) }
+                    $fonte=if ([string]::IsNullOrWhiteSpace([string]$p.fonte) -or [string]$p.fonte -eq 'winget') {'winget'} elseif ([string]$p.fonte -eq 'msstore') {'msstore'} else { throw 'Fonte nao permitida no plano.' }
+                    $alvos += [pscustomobject]@{id=[string]$p.id;fonte=$fonte}
+                }
+                Confirmar-PermissaoAlteracao 'winget'
+                Confirmar-PoliticaWingetLocal
+                $exe=Obter-WingetExe
+                foreach ($alvo in @($alvos)) {
+                    $exeSeguro=$exe.Replace("'","''")
+                    $bloco=("Executar-Nativo '"+$exeSeguro+"' @('uninstall','--id','"+$alvo.id+"','--exact','--source','"+$alvo.fonte+"')")
+                    $cmd=Montar-ComandoConsole -Bloco $bloco
+                    $enc=[Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
+                    $psExe=Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+                    Confirmar-PermissaoAlteracao 'winget'
+                    if ((Obter-WingetExe) -cne $exe) {throw 'WinGet mudou durante a reversao; opere manualmente.'}
+                    $proc=Start-Process -FilePath $psExe -ArgumentList @('-NoProfile','-EncodedCommand',$enc) -WindowStyle Normal -PassThru -ErrorAction Stop
+                    try {
+                        while (-not $proc.WaitForExit(100)) { Atualizar-UI }
+                        if ($proc.ExitCode -ne 0) { throw ('WinGet nao concluiu a desinstalacao de ' + $alvo.id + ' (codigo ' + $proc.ExitCode + '); revise manualmente.') }
+                    } finally { $proc.Dispose() }
+                }
+                foreach ($alvo in @($alvos)) {
+                    if (-not (Testar-AppAusenteCatalogado $alvo.id $alvo.fonte)) { throw ('Desinstalacao nao confirmada contra catalogo e registro: ' + $alvo.id + '; revise manualmente.') }
+                }
+                Log ('lote de instalacao revertido via WinGet em janela visivel; ausencia verificada contra catalogo e registro: ' + [string]$Item.nome)
             }
 
             'temp' {
@@ -1412,6 +1472,11 @@ function Testar-ItemJaRestaurado {
             'appx' {
                 if (-not $Item.completo -or -not $Item.familia -or -not $Item.usuarioSid -or $Item.usuarioSid -ne [Security.Principal.WindowsIdentity]::GetCurrent().User.Value) {return $false}
                 return (@(Get-AppxPackage -ErrorAction Stop | Where-Object {$_.PackageFullName -eq $Item.completo -and $_.PackageFamilyName -eq $Item.familia}).Count -eq 1)
+            }
+            'instalacao-app' {
+                $plano=@($Item.plano)
+                if (-not $Item.PSObject.Properties['plano'] -or @($plano).Count -ne 1 -or [string]$plano[0].operacao -ne 'install') {return $false}
+                return (Testar-AppAusenteCatalogado ([string]$plano[0].id) ([string]$plano[0].fonte))
             }
             'quarantena-arquivo' {
                 if ($Item.pasta -isnot [bool] -or $Item.hashBackup -notmatch '^[0-9a-fA-F]{64}$' -or -not (Caminho-RastroSeguro $Item.origem)) {return $false}

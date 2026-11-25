@@ -99,6 +99,53 @@ function Obter-SnapshotProgramas {
     [pscustomobject]@{itens=@($lista.ToArray() | Sort-Object nome,versao);data=(Get-Date)}
 }
 
+# ---- identidade do mesmo software entre tecnologias (aviso, nunca acao) ----
+
+# Heuristica conservadora de nome: so agrupa pra AVISAR que existe outra
+# instancia. Correspondencia nao prova que e o mesmo produto nem autoriza remocao.
+function Normalizar-IdentidadeNome {
+    param([string]$Nome)
+    if ([string]::IsNullOrWhiteSpace($Nome)) { return '' }
+    $n=[regex]::Replace($Nome,'[\(\[\{][^\)\]\}]*[\)\]\}]',' ')
+    $n=$n -replace '\.(?=[A-Za-z0-9])',' '
+    $n=[regex]::Replace($n,'(?<=[a-z0-9])(?=[A-Z])',' ')
+    $n=[regex]::Replace($n,'(?<=[A-Z])(?=[A-Z][a-z])',' ')
+    $n=$n.ToLowerInvariant()
+    $n=[regex]::Replace($n,'[^a-z0-9]+',' ').Trim()
+    $paradas=@('microsoft','windows','ms','corp','corporation','inc','ltd','llc','the','app','apps','store','uwp','desktop','universal','x64','x86','x32','64','32','bit','bits','setup','version','ver','edition','installer','instalador','machine','wide','system','for','of')
+    $tokens=@($n -split ' ' | Where-Object { $_ -and $paradas -notcontains $_ })
+    if (@($tokens).Count -eq 0) { return '' }
+    if (@($tokens).Count -gt 3) { $tokens=@($tokens | Select-Object -First 3) }
+    return ($tokens -join ' ')
+}
+
+function Localizar-IrmasIdentidade {
+    param([string]$NomeAlvo,[object[]]$Programas,[string[]]$NomesAppx,[string]$ChaveExcluir)
+    $chave=Normalizar-IdentidadeNome $NomeAlvo
+    if (-not $chave) { return @() }
+    $irmas=@()
+    foreach ($p in @($Programas)) {
+        if ($null -eq $p -or [string]::IsNullOrWhiteSpace([string]$p.nome)) {continue}
+        if ($ChaveExcluir -and [string]$p.chavePs -ceq $ChaveExcluir) {continue}
+        if ((Normalizar-IdentidadeNome ([string]$p.nome)) -eq $chave) { $irmas += ('Win32/MSI: ' + [string]$p.nome) }
+    }
+    foreach ($q in @($NomesAppx)) {
+        if ([string]::IsNullOrWhiteSpace([string]$q)) {continue}
+        if ((Normalizar-IdentidadeNome ([string]$q)) -eq $chave) { $irmas += ('AppX: ' + [string]$q) }
+    }
+    return @($irmas | Sort-Object -Unique)
+}
+
+function Obter-NomesAppxIdentidade {
+    try {
+        Carregar-CacheAppx
+        return @($global:CacheAppx)
+    } catch {
+        try { return @(@(Get-AppxPackage -ErrorAction Stop) | ForEach-Object {[string]$_.Name}) }
+        catch { return $null }
+    }
+}
+
 function Carregar-Programas {
     param([switch]$Forcar)
     Solicitar-SnapshotProgramas -Forcar:$Forcar
@@ -224,6 +271,8 @@ function Clique-DetalhesPrograma {
     $local=if ($pr.instaladoEm) {$pr.instaladoEm} else {'Nao informado'}
     $nl=[Environment]::NewLine
     $msg=@("Nome: $($pr.nome)","Fabricante declarado: $($pr.editor)","Versao: $($pr.versao)","Categoria: $($info.categoria)","Risco: $($info.risco)","Finalidade: $($info.finalidade)","Motivo: $($info.motivo)","Tamanho: $(Formatar-TamanhoPrograma $pr.tamanhoKB)","Data: $data","Local: $local","Desinstalacao disponivel: $($info.podeDesinstalar)","","Dependencias reais nao foram inventariadas. Metadados podem estar incompletos ou incorretos.") -join $nl
+    $irmasDetalhe=@(Localizar-IrmasIdentidade ([string]$pr.nome) @($global:ProgramasInstalados) (Obter-NomesAppxIdentidade) ([string]$pr.chavePs))
+    if ($irmasDetalhe.Count -gt 0) { $msg += $nl + ('MESMA IDENTIDADE em outra tecnologia (heuristica de nome, nao prova): ' + ($irmasDetalhe -join '; ') + '. Desinstalar uma entrada nao remove as outras.') }
     if ($pr.msi -and $pr.codigoMsi) {
         try {
             $msi=@(Executar-ConsultaLocal -Titulo 'Consultando componentes MSI' -Codigo ${function:Obter-ResumoMsi} -Parametros @{Codigo=$pr.codigoMsi})
@@ -320,7 +369,9 @@ function Desinstalar-Programa {
         $hashExe=Confirmar-ExecutavelDesinstalacao $exe
         $argumentos = $an.args
     }
+    $irmas=@(Localizar-IrmasIdentidade $nome @($global:ProgramasInstalados) (Obter-NomesAppxIdentidade) ([string]$Prog.chavePs))
     $msg = ('Executar o desinstalador de {0}?{1}{1}{2}{1}{3}{1}{1}Confirme que reconhece este arquivo.' -f $nome,[Environment]::NewLine,$exe,$argumentos)
+    if ($irmas.Count -gt 0) { $msg += [Environment]::NewLine + [Environment]::NewLine + ('MESMA IDENTIDADE em outra tecnologia (heuristica de nome, nao prova): ' + ($irmas -join '; ') + '. Esta desinstalacao NAO remove essas outras instancias.') }
     if (-not (Perguntar 'Confirmar desinstalador' $msg)) { throw 'Desinstalacao cancelada pelo usuario.' }
     # Revalidate after the confirmation dialog; no stale identity or changed binary.
     Confirmar-PermissaoAlteracao 'desinstalar'

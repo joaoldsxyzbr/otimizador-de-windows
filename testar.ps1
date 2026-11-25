@@ -1061,6 +1061,39 @@ try {
     Passou 'reversao de energia preserva mudanca posterior'
 } catch { Falhou 'conflito energia' $_.Exception.Message }
 
+# ---- F6: identidade entre tecnologias, dependencias provadas e desfazer de instalacao ----
+Secao 'identidade, dependencias e desfazer de instalacao'
+try {
+    if ((Normalizar-IdentidadeNome 'Microsoft Windows Calculator (x64)') -ne 'calculator') {throw 'Normalizacao de identidade incorreta.'}
+    if ((Normalizar-IdentidadeNome 'MSTeams') -ne 'teams') {throw 'Identidade CamelCase nao normalizada.'}
+    if ((Normalizar-IdentidadeNome 'Teams Machine-Wide Installer') -ne 'teams') {throw 'Sufixo de instalador nao ignorado.'}
+    $p1=[pscustomobject]@{nome='Microsoft Teams';chavePs='a'}
+    $p2=[pscustomobject]@{nome='Teams Machine-Wide Installer';chavePs='b'}
+    $irmas=@(Localizar-IrmasIdentidade 'MSTeams' @($p1,$p2) @('MSTeams') 'b')
+    if ($irmas.Count -ne 2 -or $irmas -notcontains 'Win32/MSI: Microsoft Teams' -or $irmas -notcontains 'AppX: MSTeams') {throw 'Irmas de identidade incorretas.'}
+    if (@(Localizar-IrmasIdentidade 'MSTeams' @($p1,$p2) @() 'b').Count -ne 1) {throw 'Chave de exclusao de identidade ignorada.'}
+    if ((Obter-TipoRecuperacao ([pscustomobject]@{tipo='instalacao-app';plano=@([pscustomobject]@{id='Exemplo.App';fonte='winget';operacao='install'})})) -ne 'condicional') {throw 'Plano de instalacao nao classificado como condicional.'}
+    if ((Obter-TipoRecuperacao ([pscustomobject]@{tipo='instalacao-app';plano=@([pscustomobject]@{operacao='upgrade';id='Exemplo.App'})})) -ne 'manual-sem-garantia') {throw 'Upgrade aceito como reversivel.'}
+    if ((Obter-TipoRecuperacao ([pscustomobject]@{tipo='instalacao-app'})) -ne 'manual-sem-garantia') {throw 'Plano ausente aceito como reversivel.'}
+    & {
+        function Log {param($Mensagem,[switch]$Erro)}
+        function Confirmar-PermissaoAlteracao {param($Operacao) if ($Operacao -eq 'winget') {throw 'winget bloqueado no teste'}}
+        if (Desfazer-Item ([pscustomobject]@{tipo='instalacao-app';plano=@([pscustomobject]@{operacao='upgrade';id='Exemplo.App'})})) {throw 'Desfazer de upgrade executado.'}
+        if (Desfazer-Item ([pscustomobject]@{tipo='instalacao-app';plano=@([pscustomobject]@{operacao='install';id='id com espaco'})})) {throw 'ID invalido aceito no plano.'}
+        if (Desfazer-Item ([pscustomobject]@{tipo='instalacao-app';plano=@([pscustomobject]@{operacao='install';id='Exemplo.App';fonte='desconhecida'})})) {throw 'Fonte invalida aceita no plano.'}
+        if (Desfazer-Item ([pscustomobject]@{tipo='instalacao-app';plano=@([pscustomobject]@{operacao='install';id='Exemplo.App';fonte='winget'})})) {throw 'WinGet alcancado sem barreira de permissao.'}
+    }
+    & {
+        $appxQuebra=[pscustomobject]@{Name='Quebra';PackageFullName='Quebra_1';Dependencies=@('Falta_1');Status='Ok'}
+        $guia=Obter-GuiaUwp ([pscustomobject]@{pacote='Quebra';remover=$true;desc='teste'}) @($appxQuebra)
+        if ($guia.permitido -or $guia.texto -notmatch 'dependencia declarada ausente') {throw 'Dependencia declarada ausente nao bloqueou a classificacao.'}
+        $appxEstado=[pscustomobject]@{Name='Modificado';PackageFullName='Mod_1';Status='Modified'}
+        $guiaEstado=Obter-GuiaUwp ([pscustomobject]@{pacote='Modificado';remover=$true;desc='teste'}) @($appxEstado)
+        if ($guiaEstado.permitido -or $guiaEstado.texto -notmatch 'estado do pacote') {throw 'Pacote com estado diferente de Ok nao bloqueou.'}
+    }
+    Passou 'identidade heuristica para aviso, dependencias comprovadas e desfazer de instalacao por plano'
+} catch { Falhou 'identidade, dependencias e desfazer de instalacao' $_.Exception.Message }
+
 # ---- protecao de rastros quando registro permanece ----
 Secao 'rastros de programa ainda registrado'
 try {

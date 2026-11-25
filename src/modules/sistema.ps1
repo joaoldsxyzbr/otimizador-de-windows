@@ -392,6 +392,23 @@ function Obter-InventarioLocal {
                 escopo='Usuario atual';framework=[bool]$_.IsFramework;recurso=[bool]$_.IsResourcePackage;naoRemovivel=[bool]$_.NonRemovable}
         })
     } catch {$relatorio.avisos+='Inventario AppX indisponivel; ausencia nao confirmada.'}
+    try {
+        $identidades=@{}
+        foreach ($w in @($relatorio.aplicativosWin32)) {
+            $kGerado=Normalizar-IdentidadeNome ([string]$w.nome)
+            if (-not $kGerado) {continue}
+            if (-not $identidades.ContainsKey($kGerado)) {$identidades[$kGerado]=[System.Collections.Generic.List[string]]::new()}
+            $identidades[$kGerado].Add([string]$w.nome)
+        }
+        $repetidas=@()
+        foreach ($x in @($relatorio.appxUsuario)) {
+            $kAppx=Normalizar-IdentidadeNome ([string]$x.nome)
+            if (-not $kAppx -or -not $identidades.ContainsKey($kAppx)) {continue}
+            $repetidas += ('{0}: Win32/MSI [{1}] + AppX {2}' -f $kAppx,(($identidades[$kAppx] | Sort-Object -Unique) -join ', '),$x.nome)
+        }
+        $relatorio.identidadesRepetidas=@($repetidas | Sort-Object -Unique)
+        if (@($repetidas).Count -gt 0) {$relatorio.avisos+=('Mesma identidade de nome normalizado em mais de uma tecnologia (agrupamento heuristico para aviso, nao prova de mesmo produto): '+(($repetidas | Sort-Object -Unique) -join '; '))}
+    } catch {$relatorio.avisos+='Agrupamento de identidade entre tecnologias indisponivel nesta amostra.'}
     $relatorio.avisos+='Registros Win32/MSI e pacotes AppX podem representar o mesmo produto. Indicadores de protecao nao certificam que um aplicativo possa ser removido.'
     try {
         $relatorio.inicializacao = @(Get-CimInstance Win32_StartupCommand -ErrorAction Stop |

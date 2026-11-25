@@ -23,3 +23,7 @@ O manifesto e o hash certificam os bytes observados, nao o sistema de arquivos a
 - Hardlinks nao sao certificados: dois nomes podem compartilhar os mesmos dados e o journal nao registra essa relacao. Links simbolicos e junctions sao recusados ou nao seguidos pelas operacoes automaticas.
 - Entrada/Saida grande (pastas profundas, volume lento, antivirus em tempo real) pode exceder o prazo da operacao; resultado parcial e identificado como pendencia, nunca tratado como sucesso. O prazo protege a responsividade e nao e garantia de duracao.
 - Backups legados (esquema antigo, .reg integrais de importacao antiga, backups sem hash) permanecem manuais: o app lista e verifica o que pode, mas nao promete restauracao automatica deles.
+
+## Recuperacao de instalacao por plano (F6)
+
+A partir do lote F6, o journal de instalacao (tipo instalacao-app) com plano por aplicativo (somente operacoes install e id/fonte do catalogo local) permite desfazer automatico: o WinGet uninstall por id roda em janela visivel, o codigo de saida e conferido e a ausencia e verificada contra o catalogo local e os inventarios de registro/AppX. Falha de verificacao vira revisao manual, nunca sucesso presumido. Planos com upgrade ou sem id catalogado continuam sem desfazer automatico. A verificacao de ausencia prova que o nome catalogado nao aparece mais nos inventarios consultados; nao certifica limpeza de rastros nem estado de outros produtos.
