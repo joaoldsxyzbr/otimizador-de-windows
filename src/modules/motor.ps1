@@ -146,6 +146,7 @@ function Obter-ArquivoSessao {
 # grava o journal inteiro no arquivo (chamado a CADA acao: se o pc ou o app
 # morrer no meio, o que ja foi feito continua desfazivel)
 function Gravar-SessaoArquivo {
+    Confirmar-ContextoJournal ([pscustomobject]@{versaoEsquema=2;contexto=$global:ContextoSessaoJournal})
     $arquivo = Obter-ArquivoSessao
     $obj = [pscustomobject]@{
         versaoEsquema = 2
@@ -1180,6 +1181,52 @@ function Selecionar-TweaksPreset {
     }
 }
 
+# A typed decision for a complete tweak. This supplements the global guard.
+# No state below grants permission to bypass administrative controls.
+function Avaliar-AutorizacaoAjuste {
+    param($Ajuste,$Contexto,[bool]$Autorizado,[switch]$ConsultarPoliticas)
+    $estado='permitido';$motivo='Precondicoes verificadas nesta etapa; revalidacao no executor obrigatoria.'
+    $escopos=@()
+    foreach ($acao in @($Ajuste.acoes)) {
+        if ($acao.tipo -eq 'registro') {
+            $escopos+=if ($acao.caminho -match '^(HKCU:|HKEY_CURRENT_USER)\\') {'usuario-atual'} else {'computador'}
+        } elseif ($acao.tipo -eq 'appx') {$escopos+='usuario-atual'}
+        else {$escopos+='computador'}
+    }
+    if (-not $Ajuste.id -or @($Ajuste.acoes).Count -eq 0) {$estado='desconhecido';$motivo='Ajuste sem identidade ou acoes.'}
+    else {
+        $bloqueio=Obter-BloqueioAjuste $Ajuste
+        if ($bloqueio) {$estado='bloqueado';$motivo=$bloqueio}
+        elseif (-not $Autorizado) {$estado='exige-autorizacao';$motivo='Alteracao indisponivel no contexto atual; consulte o administrador.'}
+        elseif (-not $Contexto) {$estado='desconhecido';$motivo='Compatibilidade do Windows nao confirmada.'}
+        elseif (-not (Testar-CompatibilidadeAjuste $Ajuste $Contexto)) {$estado='incompativel';$motivo='Build, edicao ou tipo de Windows nao atende aos requisitos.'}
+        elseif ($ConsultarPoliticas) {
+            try {
+                foreach ($acao in @($Ajuste.acoes)) {
+                    switch ($acao.tipo) {
+                        'registro' {Confirmar-PoliticaPreferenciaLocal $acao.caminho $acao.nome}
+                        'energia' {Confirmar-PoliticaEnergiaLocal}
+                        'recurso' {Confirmar-PoliticaRecursosLocal}
+                        'servico' {Confirmar-DependenciasServico $acao.nome $acao.inicio}
+                        'appx' {if (-not (Testar-AppxCatalogado $acao.pacote)) {throw 'Pacote fora do catalogo de remocao.'}}
+                    }
+                }
+            } catch {
+                $motivo=$_.Exception.Message
+                $estado=if ($motivo -match 'inconclusiv|indisponivel|nao confirmad') {'desconhecido'} else {'conflitante'}
+            }
+        } else {$estado='avaliacao-adicional';$motivo='Compatibilidade inicial confirmada; consulte politicas antes de aplicar.'}
+    }
+    return [pscustomobject]@{id=[string]$Ajuste.id;estado=$estado;motivo=$motivo;escopos=@($escopos | Sort-Object -Unique);exigeElevacao=$true}
+}
+
+function Confirmar-AutorizacaoAjuste {
+    param($Ajuste,$Contexto)
+    Confirmar-PermissaoAlteracao
+    $decisao=Avaliar-AutorizacaoAjuste $Ajuste $Contexto $true -ConsultarPoliticas
+    if ($decisao.estado -ne 'permitido') {throw ($Ajuste.nome+': '+$decisao.motivo)}
+}
+
 function Aplicar-Preset {
     param([string]$Nivel, [switch]$Simular)
 
@@ -1210,8 +1257,7 @@ function Aplicar-Preset {
 
     Confirmar-PermissaoAlteracao
     foreach ($t in $selecionados) {
-        $bloqueio=Obter-BloqueioAjuste $t
-        if ($bloqueio) { Log ('Preset real interrompido: '+$t.nome+' - '+$bloqueio) -Erro; return $false }
+        try {Confirmar-AutorizacaoAjuste $t $ctx} catch {Log ('Preset real interrompido: '+$_.Exception.Message) -Erro;return $false}
     }
     if (-not (Criar-PontoRestauracao)) { Log 'Preset real interrompido: ponto de restauracao novo nao confirmado.' -Erro; return $false }
     Iniciar-Sessao 'ajustes'
@@ -1219,6 +1265,7 @@ function Aplicar-Preset {
     foreach ($t in $selecionados) {
         $i++
         Log ('aplicando {0}/{1}: {2}' -f $i, $selecionados.Count, $t.nome)
+        try {Confirmar-AutorizacaoAjuste $t (Obter-ContextoAjustes)} catch {Log ('Ajuste preservado: '+$_.Exception.Message) -Erro;continue}
         foreach ($acao in $t.acoes) { Executar-Acao $acao $t.nome }
     }
     $arq = Salvar-Sessao

@@ -281,6 +281,40 @@ function Verificar-EstadoAjustes {
 }
 
 # Each window owns its snapshot. Only the Dispatcher touches WPF controls.
+# Shared admission and completion for all navigation inventory workers.
+# Count even a cancelled provider that has not stopped; never allocate unlimited runspaces.
+function Contar-ConsultasAtivas {
+    $total=0
+    foreach ($nome in @('ConsultasUwpAtivas','ConsultasInicioAtivas','ConsultasProgramasAtivas','TimersPaineis')) {
+        $v=Get-Variable -Name $nome -Scope Global -ErrorAction SilentlyContinue
+        if ($v -and $v.Value) {$total+=$v.Value.Count}
+    }
+    return $total
+}
+
+function Testar-VagaConsulta {
+    param([int]$Limite=4)
+    return ((Contar-ConsultasAtivas) -lt $Limite)
+}
+
+function Testar-PrazoConsulta {
+    param($Trabalho)
+    return ($Trabalho.relogio.Elapsed.TotalSeconds -lt $Trabalho.limite)
+}
+
+# Only called after the async and stop handles have completed.
+function Receber-ResultadoConsulta {
+    param($Trabalho)
+    $dados=@();$falha=$false
+    try {
+        if ($Trabalho.parada) {try {$Trabalho.ps.EndStop($Trabalho.parada)} catch {}}
+        $dados=@($Trabalho.ps.EndInvoke($Trabalho.async))
+        if ($Trabalho.ps.Streams.Error.Count -gt 0) {$falha=$true}
+    } catch {$falha=$true}
+    finally {$Trabalho.ps.Dispose()}
+    return [pscustomobject]@{dados=$dados;falha=$falha}
+}
+
 function Inicializar-ConsultaUwp {
     if ($null -eq $global:ConsultasUwpAtivas) { $global:ConsultasUwpAtivas=@{} }
     $global:ConsultaUwp=@{ ui=$global:UI; janela=$global:Janela; fase='inicial'; pacotes=@(); data=$null; trabalho=$null; fechada=$false; motivo='' }
@@ -333,13 +367,11 @@ function Concluir-ConsultaUwp {
     if ($j.parada -and -not $j.parada.IsCompleted) { return }
     $Timer.Stop()
     $global:ConsultasUwpAtivas.Remove($Timer)
-    $dados=@(); $falha=$false
-    try {
-        if ($j.parada) { try { $j.ps.EndStop($j.parada) } catch { } }
-        $dados=@($j.ps.EndInvoke($j.async))
-        if ($j.ps.Streams.Error.Count -gt 0) { $falha=$true }
-    } catch { $falha=$true }
-    finally { $j.ps.Dispose(); $s.trabalho=$null }
+    # Completion observed after deadline is discarded, even if provider returned success.
+    if (-not $j.cancelado -and -not (Testar-PrazoConsulta $j)) {$j.cancelado=$true;$s.motivo='Tempo limite atingido; resultado tardio descartado.'}
+    try {$resultado=Receber-ResultadoConsulta $j} finally {$s.trabalho=$null}
+    $dados=@($resultado.dados)
+    $falha=($resultado.falha)
     if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultaUwp)) { return }
     if ($j.cancelado) { Mostrar-ConsultaUwp $s 'indisponivel' ($s.motivo+' Use Atualizar para tentar novamente.'); return }
     if ($falha) { Mostrar-ConsultaUwp $s 'indisponivel' 'Consulta AppX falhou. Nenhuma ausencia confirmada. Tente novamente.'; return }
@@ -359,6 +391,7 @@ function Verificar-EstadoUwp {
     $s=$global:ConsultaUwp
     if (-not $s -or $s.fechada -or $global:OperacaoUIAtiva -or $s.trabalho) { return }
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 120) { return }
+    if (-not (Testar-VagaConsulta)) {Mostrar-ConsultaUwp $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
     $s.data=$null; $s.pacotes=@()
     $ps=$null; $timer=$null
     try {
@@ -461,8 +494,7 @@ function Clique-AplicarAjustes {
         return
     }
     foreach ($cb in $selecionados) {
-        $bloqueio=Obter-BloqueioAjuste $cb.Tag
-        if ($bloqueio) { Avisar 'Ajuste indisponivel' ($cb.Tag.nome+': '+$bloqueio); return }
+        try {Confirmar-AutorizacaoAjuste $cb.Tag $ctx} catch {Avisar 'Ajuste indisponivel' $_.Exception.Message;return}
     }
     $manuais = @($selecionados | Where-Object { $_.Tag.apenasManual -or (Classificar-RiscoAjuste $_.Tag) -eq 'cautela alta' })
     if ($manuais.Count -gt 0 -and -not (Perguntar 'Ajustes de cautela' ('Ajustes manuais podem reduzir funcionalidades ou ter reversao aproximada: ' + (($manuais | ForEach-Object { $_.Tag.nome }) -join ', ') + '. Continuar?'))) { return }
@@ -480,6 +512,7 @@ function Clique-AplicarAjustes {
         :ajustes foreach ($cb in $selecionados) {
             $t = $cb.Tag
             Log ('== ajuste: ' + $t.nome)
+            try {Confirmar-AutorizacaoAjuste $t (Obter-ContextoAjustes)} catch {Log ('Ajuste preservado: '+$_.Exception.Message) -Erro;continue}
             foreach ($acao in $t.acoes) {
                 if (-not (Continuar-ProgressoLote $progresso $t.nome)) { break ajustes }
                 Executar-Acao $acao $t.nome
@@ -1349,13 +1382,11 @@ function Concluir-ConsultaInicio {
     if ($j.parada -and -not $j.parada.IsCompleted) {return}
     $Timer.Stop()
     $global:ConsultasInicioAtivas.Remove($Timer)
-    $dados=@();$falha=$false
-    try {
-        if ($j.parada) {try {$j.ps.EndStop($j.parada)} catch {}}
-        $dados=@($j.ps.EndInvoke($j.async))
-        if ($j.ps.Streams.Error.Count -gt 0 -or $dados.Count -ne 1 -or -not $dados[0].data) {$falha=$true}
-    } catch {$falha=$true}
-    finally {$j.ps.Dispose();$s.trabalho=$null}
+    # Completion observed after deadline is discarded, even if provider returned success.
+    if (-not $j.cancelado -and -not (Testar-PrazoConsulta $j)) {$j.cancelado=$true;$s.motivo='Tempo limite atingido; resultado tardio descartado.'}
+    try {$resultado=Receber-ResultadoConsulta $j} finally {$s.trabalho=$null}
+    $dados=@($resultado.dados)
+    $falha=($resultado.falha -or $dados.Count -ne 1 -or -not $dados[0].data)
     if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultaInicio)) {return}
     if ($j.cancelado) {Mostrar-EstadoInicio $s 'indisponivel' ($s.motivo+' Use Atualizar analise.');return}
     if ($falha -or $global:OperacaoUIAtiva) {Mostrar-EstadoInicio $s 'indisponivel' 'Analise indisponivel ou desatualizada. Use Atualizar analise.';return}
@@ -1371,6 +1402,7 @@ function Solicitar-SnapshotInicio {
     $s=$global:ConsultaInicio
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
+    if (-not (Testar-VagaConsulta)) {Mostrar-EstadoInicio $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
     $s.data=$null
     $ps=$null;$timer=$null
     try {
@@ -1442,13 +1474,11 @@ function Concluir-ConsultaProgramas {
     if ($j.parada -and -not $j.parada.IsCompleted) {return}
     $Timer.Stop()
     $global:ConsultasProgramasAtivas.Remove($Timer)
-    $dados=@();$falha=$false
-    try {
-        if ($j.parada) {try {$j.ps.EndStop($j.parada)} catch {}}
-        $dados=@($j.ps.EndInvoke($j.async))
-        if ($j.ps.Streams.Error.Count -gt 0 -or $dados.Count -ne 1 -or -not $dados[0].data -or -not $dados[0].PSObject.Properties['itens']) {$falha=$true}
-    } catch {$falha=$true}
-    finally {$j.ps.Dispose();$s.trabalho=$null}
+    # Completion observed after deadline is discarded, even if provider returned success.
+    if (-not $j.cancelado -and -not (Testar-PrazoConsulta $j)) {$j.cancelado=$true;$s.motivo='Tempo limite atingido; resultado tardio descartado.'}
+    try {$resultado=Receber-ResultadoConsulta $j} finally {$s.trabalho=$null}
+    $dados=@($resultado.dados)
+    $falha=($resultado.falha -or $dados.Count -ne 1 -or -not $dados[0].data -or -not $dados[0].PSObject.Properties['itens'])
     if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultaProgramas)) {return}
     if ($j.cancelado) {Mostrar-EstadoProgramas $s 'indisponivel' ($s.motivo+' Use Atualizar lista.');return}
     if ($falha -or $global:OperacaoUIAtiva) {Mostrar-EstadoProgramas $s 'indisponivel' 'Inventario indisponivel ou desatualizado. Use Atualizar lista.';return}
@@ -1465,6 +1495,7 @@ function Solicitar-SnapshotProgramas {
     $s=$global:ConsultaProgramas
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
+    if (-not (Testar-VagaConsulta)) {Mostrar-EstadoProgramas $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
     $s.data=$null
     $ps=$null;$timer=$null
     try {
@@ -1563,13 +1594,11 @@ function Concluir-ConsultaPainel {
     }
     if ($j.parada -and -not $j.parada.IsCompleted) {return}
     $Timer.Stop();$global:TimersPaineis.Remove($Timer)
-    $dados=@();$falha=$false
-    try {
-        if ($j.parada) {try {$j.ps.EndStop($j.parada)} catch {}}
-        $dados=@($j.ps.EndInvoke($j.async))
-        if ($j.ps.Streams.Error.Count -gt 0 -or $dados.Count -ne 1 -or -not $dados[0].PSObject.Properties['itens']) {$falha=$true}
-    } catch {$falha=$true}
-    finally {$j.ps.Dispose();$s.trabalho=$null}
+    # Completion observed after deadline is discarded, even if provider returned success.
+    if (-not $j.cancelado -and -not (Testar-PrazoConsulta $j)) {$j.cancelado=$true;$s.motivo='Tempo limite atingido; resultado tardio descartado.'}
+    try {$resultado=Receber-ResultadoConsulta $j} finally {$s.trabalho=$null}
+    $dados=@($resultado.dados)
+    $falha=($resultado.falha -or $dados.Count -ne 1 -or -not $dados[0].PSObject.Properties['itens'])
     if ($s.fechada -or -not [object]::ReferenceEquals($s,$global:ConsultasPaineis[$s.tipo])) {return}
     if ($j.cancelado) {Mostrar-EstadoPainel $s 'indisponivel' ($s.motivo+' Atualize para tentar novamente.');return}
     if ($falha -or $global:OperacaoUIAtiva) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel ou desatualizada. Tente novamente.';return}
@@ -1605,6 +1634,7 @@ function Solicitar-ConsultaPainel {
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
     if ($Tipo -in @('Recursos','Historico') -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel no modo protegido.';return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
+    if (-not (Testar-VagaConsulta)) {Mostrar-EstadoPainel $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
     $s.data=$null;$ps=$null;$timer=$null
     try {
         $ps=[PowerShell]::Create()

@@ -1499,6 +1499,41 @@ try {
     Passou 'conta registrada isoladamente, politica de preferencias e previa sem mutacao'
 } catch {Falhou 'permissoes e preferencias' $_.Exception.Message}
 
+# ---- cross-panel worker limit and per-tweak authorization ----
+Secao 'contratos de consulta e autorizacao'
+try {
+    & {
+        function Contar-ConsultasAtivas {return 4}
+        if (Testar-VagaConsulta) {throw 'Limite global ignorado.'}
+        function Contar-ConsultasAtivas {return 3}
+        if (-not (Testar-VagaConsulta)) {throw 'Vaga disponivel recusada.'}
+    }
+    $job=@{relogio=[pscustomobject]@{Elapsed=[TimeSpan]::FromSeconds(31)};limite=30}
+    if (Testar-PrazoConsulta $job) {throw 'Resultado tardio aceito.'}
+    $job.relogio.Elapsed=[TimeSpan]::FromSeconds(5)
+    if (-not (Testar-PrazoConsulta $job)) {throw 'Resultado no prazo recusado.'}
+    $cat=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $a=$cat.tweaks | Where-Object {$_.id -eq 'extensoes-de-arquivo'}
+    $ctx=[pscustomobject]@{build=26100;edicao='Professional';cliente=$true}
+    $r=Avaliar-AutorizacaoAjuste $a $ctx $false
+    if ($r.estado -ne 'exige-autorizacao' -or $r.escopos -notcontains 'usuario-atual') {throw 'Autorizacao ou escopo incorreto.'}
+    if ((Avaliar-AutorizacaoAjuste $a $null $true).estado -ne 'desconhecido') {throw 'Contexto ausente aceito.'}
+    $incomp=[pscustomobject]@{build=26100;edicao='Professional';cliente=$false}
+    if ((Avaliar-AutorizacaoAjuste $a $incomp $true).estado -ne 'incompativel') {throw 'Windows nao cliente aceito.'}
+    if ((Avaliar-AutorizacaoAjuste $a $ctx $true).estado -ne 'avaliacao-adicional') {throw 'Previa concedeu autorizacao final.'}
+    & {
+        function Confirmar-PoliticaPreferenciaLocal {throw 'Consulta de politica inconclusiva.'}
+        if ((Avaliar-AutorizacaoAjuste $a $ctx $true -ConsultarPoliticas).estado -ne 'desconhecido') {throw 'Falha de politica permitida.'}
+        function Confirmar-PoliticaPreferenciaLocal {throw 'Indicador de politica presente.'}
+        if ((Avaliar-AutorizacaoAjuste $a $ctx $true -ConsultarPoliticas).estado -ne 'conflitante') {throw 'Politica ignorada.'}
+        function Confirmar-PoliticaPreferenciaLocal {}
+        if ((Avaliar-AutorizacaoAjuste $a $ctx $true -ConsultarPoliticas).estado -ne 'permitido') {throw 'Precondicoes validas recusadas.'}
+    }
+    $protegido=$cat.tweaks | Where-Object {$_.id -eq 'delivery-optimization'}
+    if ((Avaliar-AutorizacaoAjuste $protegido $ctx $true -ConsultarPoliticas).estado -ne 'bloqueado') {throw 'Alvo de politica liberado.'}
+    Passou 'limite de workers, prazo, escopo, autorizacao e politicas por ajuste'
+} catch {Falhou 'contratos de consulta e autorizacao' $_.Exception.Message}
+
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'
 try {
