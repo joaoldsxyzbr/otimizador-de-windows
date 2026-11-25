@@ -99,6 +99,10 @@ nao quer janela? modo cli:
 - cria ponto de restauracao antes de aplicar (opcional, marcado por padrao)
 - preserva protecoes diante de dominio, MDM, agentes organizacionais e politicas; antivirus domestico isolado nao implica gerenciamento
 
+## ciclo de vida do windows 10
+
+O app continua compativel com Windows 10, mas compatibilidade nao e suporte de seguranca. O suporte padrao do Windows 10 (versao final 22H2) terminou em 14/10/2025. Apos essa data, correcoes de seguranca dependem dos programas de Extended Security Updates (ESU) da Microsoft, hoje com cobertura ate 12/10/2027 para consumidores inscritos. Sem ESU ativo, um PC Windows 10 acumula vulnerabilidades conhecidas sem correcao. Nenhum ajuste deste app substitui atualizacao de seguranca. Fontes oficiais: [Extended Security Updates](https://www.microsoft.com/en-us/windows/extended-security-updates) e [Windows release health](https://learn.microsoft.com/en-us/windows/release-health/release-information).
+
 documentacao completa: [leia-me.md](leia-me.md)
 
 ## licenca
