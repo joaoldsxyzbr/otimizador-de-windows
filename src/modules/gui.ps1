@@ -1203,7 +1203,7 @@ function Clique-DetalhesSessao {
 # Usa a mesma admissao global das consultas de navegacao: espera vaga antes de
 # comecar, ocupa um slot enquanto executa e nunca trava o encerramento do host.
 function Executar-ConsultaLocal {
-    param([string]$Titulo, [scriptblock]$Codigo, [hashtable]$Parametros = @{}, [string]$Mensagem='Consultando o sistema. Nenhuma alteracao sera aplicada.', [switch]$SemCancelar)
+    param([string]$Titulo, [scriptblock]$Codigo, [hashtable]$Parametros = @{}, [string]$Mensagem='Consultando o sistema. Nenhuma alteracao sera aplicada.', [switch]$SemCancelar, [switch]$SemModal)
     if (-not $global:ConsultasDialogoAtivas) { $global:ConsultasDialogoAtivas=@{} }
     $ps = [PowerShell]::Create()
     $estado = @{ chave=[Guid]::NewGuid().ToString(); fase='aguardando'; cancelado=$false; resultado=$null; erro=$null; terminou=$false; abandonado=$false; pediuFechar=$null; esperando=[Diagnostics.Stopwatch]::StartNew(); parada=$null; async=$null; ps=$ps }
@@ -1306,7 +1306,18 @@ function Executar-ConsultaLocal {
         }.GetNewClosure())
         $timer.Start()
         if (-not (Testar-VagaConsulta)) { $rotulo.Text = 'Outras consultas em andamento. Aguardando vaga para comecar...' }
-        [void]$dlg.ShowDialog()
+        if ($SemModal) {
+            # Bombear a fila sem loop modal: CI e automacao nao podem depender de janela visivel.
+            $limiteSemModal=[Diagnostics.Stopwatch]::StartNew()
+            while (-not $estado.terminou -and -not $estado.cancelado -and -not $estado.abandonado) {
+                if ($limiteSemModal.Elapsed.TotalSeconds -ge 100) { $estado.cancelado = $true; break }
+                Start-Sleep -Milliseconds 25
+                [void][System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
+            }
+            if ($estado.terminou -or $estado.abandonado) { try { $dlg.Close() } catch { } }
+        } else {
+            [void]$dlg.ShowDialog()
+        }
         if ($estado.cancelado -or $estado.abandonado) { return $null }
         if ($estado.erro) { throw $estado.erro }
         return $estado.resultado
