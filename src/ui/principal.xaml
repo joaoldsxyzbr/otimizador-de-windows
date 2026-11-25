@@ -348,9 +348,9 @@
                         <TextBlock Style="{StaticResource SubTitulo}" Text="Passe o mouse para ver finalidade, impacto, compatibilidade e recuperacao. Recomendado explica o perfil e ignora ajustes ja aplicados. Nenhum ganho de desempenho e garantido." TextWrapping="Wrap"/>
                         <WrapPanel Margin="0,10,0,4">
                             <TextBlock Text="Marcar preset:" VerticalAlignment="Center" Foreground="#9ca3af" Margin="0,0,8,0"/>
-                            <Button x:Name="BotaoPresetSeguro" Content="Basico" Margin="0,0,6,0" MinWidth="95"/>
-                            <Button x:Name="BotaoPresetBalanceado" Content="Balanceado" Margin="0,0,6,0" MinWidth="95"/>
-                            <Button x:Name="BotaoPresetAgressivo" Content="Amplo (revise)" Margin="0,0,14,0" MinWidth="95"/>
+                            <Button x:Name="BotaoPresetSeguro" Content="Basico (essencial)" Margin="0,0,6,0" MinWidth="95"/>
+                            <Button x:Name="BotaoPresetBalanceado" Content="Balanceado (essencial)" Margin="0,0,6,0" MinWidth="95"/>
+                            <Button x:Name="BotaoPresetAgressivo" Content="Legado (essencial)" Margin="0,0,14,0" MinWidth="95"/>
                             <CheckBox x:Name="ChkPontoRestore" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" Content="Criar ponto de restauracao antes" ToolTip="Recomendado: cria um ponto do sistema antes de aplicar os ajustes, caso algo de errado."/>
                             <CheckBox x:Name="ChkSimularAjustes" IsChecked="True" Margin="0,0,14,0" Foreground="#e5e7eb" Content="Simular" ToolTip="Marca e clica em aplicar: escreve no log tudo o que faria, sem alterar nada no pc. Ideal antes de rodar no pc do trabalho."/>
                             <Button x:Name="BotaoAplicarAjustes" Style="{StaticResource BotaoVerde}" Content="Aplicar ajustes selecionados" MinWidth="210" Margin="0,0,8,4"/>
@@ -360,9 +360,9 @@
                             <Button x:Name="BotaoPreviaEssencial" Content="Previa essencial (sem alterar)" Margin="0,2,6,2"/>
                             <Button x:Name="BotaoPerfilRecomendado" Content="Recomendado" Margin="0,2,6,2" ToolTip="Seleciona preferencias essenciais sem inferir ganho de desempenho ou tipo de computador."/>
                             <Button x:Name="BotaoPerfilEssencial" Content="Essencial" Margin="0,2,6,2"/>
-                            <Button x:Name="BotaoPerfilGamer" Content="Gamer" Margin="0,2,6,2" ToolTip="Selecao conservadora; nao promete FPS."/>
-                            <Button x:Name="BotaoPerfilNotebook" Content="Notebook" Margin="0,2,6,2" ToolTip="Ajustes leves, sem forcar alto desempenho."/>
-                            <Button x:Name="BotaoPerfilPrivacidade" Content="Privacidade" Margin="0,2,6,2"/>
+                            <Button x:Name="BotaoPerfilGamer" Content="Jogos (essencial)" Margin="0,2,6,2" ToolTip="Nao existe ganho de FPS demonstrado; seleciona apenas extensoes de arquivos."/>
+                            <Button x:Name="BotaoPerfilNotebook" Content="Autonomia (essencial)" Margin="0,2,6,2" ToolTip="Nao altera o plano de energia nem promete autonomia."/>
+                            <Button x:Name="BotaoPerfilPrivacidade" Content="Privacidade (essencial)" Margin="0,2,6,2" ToolTip="Nao modifica politicas ou permissoes automaticamente."/>
                             <Button x:Name="BotaoPerfilCorporativo" Content="Conservador" Margin="0,2,6,2" ToolTip="Apenas exibe extensoes de arquivos. Consulte o administrador."/>
                         </WrapPanel>
                         <WrapPanel Margin="0,4,0,0">

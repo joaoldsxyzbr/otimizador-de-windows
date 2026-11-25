@@ -74,7 +74,18 @@
       "reinicio": "Pode exigir relogon ou reinicio dos aplicativos.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "privacidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Mistura preferencias locais, fala e variavel de maquina; nao representa desativacao integral de telemetria.",
+        "orientacao": "Configurar Privacidade e seguranca e preferencias do PowerShell separadamente.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "historico-atividades",
@@ -115,7 +126,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "privacidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Politicas administrativas e recursos dependentes de build.",
+        "orientacao": "Revisar historico de atividades nas configuracoes autorizadas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "apps-sugeridos",
@@ -156,7 +178,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "privacidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Politicas de conteudo dependentes de edicao; nao sobrescrever regras.",
+        "orientacao": "Revisar recomendacoes nas configuracoes do Windows.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "delivery-optimization",
@@ -183,7 +216,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "rede",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Desligar P2P pode elevar trafego externo e afetar distribuicao interna.",
+        "orientacao": "Consultar configuracoes de Otimizacao de Entrega com o TI.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "wpbt",
@@ -210,7 +254,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "compatibilidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Pode impedir utilitarios OEM legitimos; beneficio nao demonstrado.",
+        "orientacao": "Consultar fabricante e administrador.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "device-metadata",
@@ -237,7 +292,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "compatibilidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Pode impedir software de hardware e metadados legitimos.",
+        "orientacao": "Revisar configuracao nativa de dispositivos.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "bing-no-menu-iniciar",
@@ -271,7 +337,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Mistura politica e valor dependente da build.",
+        "orientacao": "Revisar opcoes de pesquisa disponiveis.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "localizacao",
@@ -316,7 +393,18 @@
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "privacidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Desativar servico e sensores afeta apps e recursos dependentes.",
+        "orientacao": "Revisar permissoes de localizacao por aplicativo.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "servicos-para-manual",
@@ -370,7 +458,18 @@
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "desempenho",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Agrupamento de servicos pode afetar ICS, armazenamento e arquivos offline; nao ha medicao.",
+        "orientacao": "Medir gargalo e revisar cada servico com o administrador.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "sysmain",
@@ -393,7 +492,18 @@
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "desempenho",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Atividade de disco nao prova que SysMain causa lentidao.",
+        "orientacao": "Medir atividade e latencia de disco antes de diagnosticar.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "pesquisa-indexacao",
@@ -416,7 +526,18 @@
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "desempenho",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Desativacao pode prejudicar Explorer, Outlook e pesquisa.",
+        "orientacao": "Revisar escopo de indexacao nas opcoes nativas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "aplicativos-em-segundo-plano",
@@ -442,7 +563,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "desempenho",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Restricao global pode interromper sincronizacao e notificacoes.",
+        "orientacao": "Revisar consumo e permissoes por aplicativo.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "efeitos-visuais",
@@ -516,7 +648,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Conjunto de valores dependentes de build e preferencias de acessibilidade.",
+        "orientacao": "Usar opcoes nativas de efeitos visuais; medir a carga se necessario.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "energia-alto-desempenho",
@@ -539,7 +682,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "desempenho",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Plano pode estar ausente, aumentar consumo, calor e ruido; ganho nao comprovado.",
+        "orientacao": "Confirmar plano disponivel, politica e consumo; comparar sob a mesma carga.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "widgets",
@@ -564,7 +718,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Preferencia visual dependente da build; nao remove pacote.",
+        "orientacao": "Revisar configuracoes da barra de tarefas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "limpar-barra-tarefas",
@@ -596,7 +762,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Chat depende da build; agrupa visao de tarefas ja disponivel separadamente.",
+        "orientacao": "Usar opcoes nativas e o item individual de visao de tarefas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "menu-contexto-classico",
@@ -622,7 +800,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Override CLSID de shell nao certificado; pode quebrar comportamento.",
+        "orientacao": "Usar menu nativo; nao instalar overrides automaticamente.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "finalizar-tarefa-barra",
@@ -649,12 +838,23 @@
       "apenasManual": true,
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22631,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Depende de build/rollout e permite encerramento sem salvar.",
+        "orientacao": "Usar opcoes nativas de desenvolvedor quando disponiveis.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "extensoes-de-arquivo",
       "nome": "Mostrar extensoes de arquivos",
-      "desc": "Exibe as extensoes (.exe, .pdf, .jpg) no Explorador de Arquivos. Ajuda a identificar virus e arquivos suspeitos.",
+      "desc": "Mostra extensoes no Explorador de Arquivos para facilitar a inspecao de nomes. Nao detecta malware nem melhora desempenho.",
       "categoria": "Explorador de arquivos",
       "niveis": [
         "seguro",
@@ -675,7 +875,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": false,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "essencial",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Facilita inspecionar nomes e extensoes; nao detecta malware.",
+        "orientacao": "Revisar visibilidade de extensoes no Explorer.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "explorer-este-pc",
@@ -701,7 +913,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Preferencia de abertura do Explorer; nao acelera o sistema.",
+        "orientacao": "Revisar opcoes de pasta.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "pastas-automaticas",
@@ -727,7 +951,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Override de Bags nao certificado e amplo; beneficio nao medido.",
+        "orientacao": "Ajustar modelo de pasta pelas propriedades do Explorer.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "caminhos-longos",
@@ -753,7 +988,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito. Windows 10 1607 ou posterior; aplicativos precisam suportar caminhos longos.",
       "buildMinima": 14393,
       "compatNivel": "requisito-base",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "compatibilidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Exige aplicacao compativel e pode afetar maquina/politica.",
+        "orientacao": "Validar necessidade do aplicativo com administrador.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "modo-escuro",
@@ -784,7 +1030,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Tema visual; nao implica economia ou ganho universal.",
+        "orientacao": "Revisar Personalizacao > Cores.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "numlock-inicializacao",
@@ -816,7 +1074,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Mistura usuario atual e perfil .DEFAULT, com estados dependentes de hardware.",
+        "orientacao": "Ajustar preferencia do teclado pela ferramenta nativa.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "bsod-detalhado",
@@ -848,7 +1117,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "diagnostico",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Parametros de tela de falha dependem de build; nao corrigem falhas.",
+        "orientacao": "Consultar eventos e dumps autorizados.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "notificacoes",
@@ -880,7 +1160,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Pode ocultar alertas importantes e sobrescrever politica.",
+        "orientacao": "Ajustar notificacoes por aplicativo.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "hora-utc-dualboot",
@@ -905,7 +1196,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "compatibilidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Requer RTC e dual boot confirmados; pode alterar hora de outros sistemas.",
+        "orientacao": "Configurar relogio conforme documentacao dos sistemas envolvidos.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "edge-debloat",
@@ -1015,7 +1317,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "privacidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Conjunto de politicas administrativas de navegador.",
+        "orientacao": "Revisar configuracoes do Edge e politicas autorizadas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "bateria-porcentagem",
@@ -1041,7 +1354,18 @@
       "apenasManual": true,
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 26100,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Recurso depende de hardware e rollout; valor nao certificado.",
+        "orientacao": "Usar configuracoes de bateria/barra se disponivel.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "barra-esquerda",
@@ -1059,14 +1383,26 @@
           "caminho": "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
           "nome": "TaskbarAl",
           "tipoValor": "DWord",
-          "dados": "1"
+          "dados": "0"
         }
       ],
       "impacto": "Altera comportamento ou aparencia; nao promete ganho de desempenho.",
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Alinhamento depende da build; valor anterior nao deve ser reaplicado sem validacao.",
+        "orientacao": "Usar Personalizacao > Barra de tarefas > Comportamentos.",
+        "verificacao": "Corrige o valor pretendido de alinhamento a esquerda (0), mas a escrita permanece consultiva ate validacao em cliente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "remover-home-galeria",
@@ -1098,7 +1434,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 22000,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Overrides CLSID de shell nao certificados.",
+        "orientacao": "Revisar opcoes de navegacao do Explorer.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "arquivos-ocultos",
@@ -1122,7 +1469,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Exibe arquivos ocultos comuns; nao libera arquivos protegidos.",
+        "orientacao": "Revisar opcoes de exibicao do Explorer.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "verboso-logon",
@@ -1147,7 +1506,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "diagnostico",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Escrita em politica de logon; nao aumenta desempenho.",
+        "orientacao": "Consultar logs de inicializacao/logon com o administrador.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "tela-bloqueio-off",
@@ -1173,7 +1543,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Politica dependente de edicao; nao alterar fluxo de bloqueio.",
+        "orientacao": "Usar opcoes permitidas de tela de bloqueio.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "teclas-aderencia",
@@ -1199,7 +1580,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "acessibilidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Mascara fixa de flags pode sobrescrever necessidades de acessibilidade.",
+        "orientacao": "Usar Acessibilidade > Teclado.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "mouse-precisao",
@@ -1238,7 +1630,18 @@
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
       "compatNivel": "nao-certificada",
-      "apenasManual": true
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Preferencia individual; nao comprova melhoria de precisao ou FPS.",
+        "orientacao": "Usar configuracoes de ponteiro e avaliar preferencia pessoal.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "bloquear-coinstaladores",
@@ -1270,7 +1673,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "compatibilidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Pode prejudicar instalacao de drivers e hardware.",
+        "orientacao": "Usar Windows Update e ferramentas autorizadas de drivers.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "preferir-ipv4",
@@ -1295,7 +1709,18 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "rede",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Mudanca na conectividade pode afetar VPN, dominio e IPv6.",
+        "orientacao": "Diagnosticar rede sem modificar protocolos.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "ia-copilot",
@@ -1339,7 +1764,18 @@
       "reinicio": "Pode exigir reinicio ou reativacao de servico.",
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "privacidade",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Mistura politicas, visibilidade global de paginas e servico.",
+        "orientacao": "Revisar opcoes de IA disponiveis e politicas autorizadas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "recomendacoes-iniciar",
@@ -1364,7 +1800,18 @@
       "apenasManual": true,
       "compatibilidade": "Politica ou preferencia dependente de edicao/build. Efeito nao certificado; selecao manual apenas.",
       "buildMinima": 22000,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "consulta",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Politica dependente de edicao; nao sobrescrever regra.",
+        "orientacao": "Revisar opcoes do menu Iniciar.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Nenhuma nova alteracao pelo fluxo de ajustes. Journals anteriores seguem verificacoes de recuperacao."
+      }
     },
     {
       "id": "ocultar-busca-barra",
@@ -1388,7 +1835,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Preferencia visual dependente de build; nao desativa pesquisa.",
+        "orientacao": "Revisar configuracoes da barra de tarefas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     },
     {
       "id": "ocultar-visao-tarefas",
@@ -1413,7 +1872,19 @@
       "reinicio": "Pode exigir relogon, reinicio do Explorer ou do aplicativo afetado.",
       "compatibilidade": "Valores e recursos sujeitos a disponibilidade da build; configuracao gravada nao comprova efeito.",
       "buildMinima": 10240,
-      "compatNivel": "nao-certificada"
+      "compatNivel": "nao-certificada",
+      "apenasManual": true,
+      "auditoria": {
+        "versao": 2,
+        "objetivo": "personalizacao",
+        "decisao": "manual",
+        "evidencia": "nao-medido",
+        "fonte": "Revisao estatica do repositorio; valores especificos nao certificados por fonte oficial.",
+        "risco": "Preferencia visual; nao desativa desktops virtuais.",
+        "orientacao": "Revisar configuracoes da barra de tarefas.",
+        "verificacao": "Leitura do alvo confirma configuracao, nao efeito funcional. Validacao em Windows cliente pendente.",
+        "recuperacao": "Snapshot de valor/plano e deteccao de conflito quando suportado; efeitos externos nao garantidos."
+      }
     }
   ]
 }

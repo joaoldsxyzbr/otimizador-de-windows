@@ -486,12 +486,23 @@ function Obter-PlanoEnergiaAtivo {
     return $Matches[1]
 }
 
+function Confirmar-PlanoEnergiaDisponivel {
+    param([string]$Guid)
+    $id=[guid]::Empty
+    if (-not [guid]::TryParse($Guid,[ref]$id) -or $id -eq [guid]::Empty) {throw 'GUID de energia invalido.'}
+    $exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
+    $saida=(& $exe /list 2>&1 | Out-String)
+    if ($LASTEXITCODE -ne 0) {throw 'Consulta de planos de energia indisponivel.'}
+    if ($saida -notmatch [regex]::Escape($id.ToString())) {throw 'Plano de energia nao disponivel; nao criar automaticamente.'}
+}
+
 function Definir-PlanoEnergia {
     param([string]$Guid)
     Confirmar-PermissaoAlteracao
     $id=[guid]::Empty
     if (-not [guid]::TryParse($Guid,[ref]$id) -or $id -eq [guid]::Empty) { throw 'GUID de energia invalido.' }
     Confirmar-PoliticaEnergiaLocal
+    Confirmar-PlanoEnergiaDisponivel $Guid
     $exe=Join-Path $env:SystemRoot 'System32\powercfg.exe'
     & $exe /setactive $id.ToString() | Out-Null
     if ($LASTEXITCODE -ne 0 -or (Obter-PlanoEnergiaAtivo) -ne $id.ToString()) { throw 'Plano de energia nao confirmado.' }
@@ -556,11 +567,60 @@ function Confirmar-ProtecaoAlvo {
     if ($r.estado -ne 'avaliacao-adicional') { throw $r.motivo }
 }
 
+# Restrict NEW writes independently of mutable catalog metadata. Existing recovery
+# keeps its own target and snapshot checks so an old preference can be restored.
+function Obter-BloqueioNovaAcao {
+    param($Acao)
+    if ($Acao.tipo -eq 'registro') {
+        $c=Converter-Hive ([string]$Acao.caminho)
+        $n=[string]$Acao.nome
+        if ($Acao.remover -isnot [bool] -and $null -ne $Acao.remover) {return 'Indicador de remocao invalido.'}
+        if (-not $Acao.remover -and $Acao.tipoValor -notin @('DWord','QWord','String','ExpandString','Binary','MultiString')) {return 'Tipo de registro invalido.'}
+        # Reviewed user preference tuples, including exact desired value.
+        $permitidos=@{
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|HideFileExt'='0'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|TaskbarDa'='0'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|LaunchTo'='1'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|Hidden'='1'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced|ShowTaskViewButton'='0'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Search|SearchboxTaskbarMode'='0'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|AppsUseLightTheme'='0'
+            'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize|SystemUsesLightTheme'='0'
+        }
+        $chave=$c+'|'+$n
+        if ($permitidos.ContainsKey($chave)) {
+            if ($Acao.remover -or $Acao.tipoValor -ne 'DWord' -or [string]$Acao.dados -cne $permitidos[$chave]) {return 'Valor fora da preferencia revisada.'}
+            return $null
+        }
+        # Dedicated startup cleanup is removal-only and requires an exact Run key.
+        if ($Acao.remover -and $n -and $c -in @('HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run','HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Run','HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run')) {
+            return $null
+        }
+        # Restricted local custom plans: non-reserved HKCU Software only.
+        if ($c -match '(?i)^HKEY_CURRENT_USER\\Software\\[^\\]+(?:\\[^\\]+)*$' -and $c -notmatch '(?i)^HKEY_CURRENT_USER\\Software\\(?:Microsoft|Classes|Policies|Clients|RegisteredApplications|WOW6432Node)(?:\\|$)' -and $Acao.tipoValor -in @('String','DWord')) {return $null}
+        return 'Alvo de escrita nova nao revisado; use configuracao nativa autorizada.'
+    }
+    if ($Acao.tipo -eq 'servico') {return 'Alteracoes de servicos pelo catalogo de tweaks indisponiveis; diagnostique individualmente.'}
+    if ($Acao.tipo -eq 'energia' -and [string]$Acao.guid -ine '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c') {return 'Plano fora do catalogo de ajustes.'}
+    if ($Acao.tipo -eq 'appx' -and -not (Testar-AppxCatalogado $Acao.pacote)) {return 'Pacote fora do catalogo de remocao revisado.'}
+    return $null
+}
+
+function Confirmar-NovaAcao {
+    param($Acao)
+    Confirmar-ProtecaoAlvo $Acao
+    $motivo=Obter-BloqueioNovaAcao $Acao
+    if ($motivo) {throw $motivo}
+}
+
 function Obter-BloqueioAjuste {
     param($Ajuste)
+    if ($Ajuste.auditoria.decisao -eq 'consulta') {return ('Somente consulta nesta revisao: '+$Ajuste.auditoria.risco+' '+$Ajuste.auditoria.orientacao)}
     foreach ($acao in @($Ajuste.acoes)) {
         $r=Avaliar-ProtecaoAlvo $acao
         if ($r.estado -eq 'bloqueado') { return $r.motivo }
+        $motivo=Obter-BloqueioNovaAcao $acao
+        if ($motivo) {return $motivo}
     }
     return $null
 }
@@ -579,15 +639,25 @@ function Confirmar-DependenciasServico {
 function Confirmar-PoliticaPreferenciaLocal {
     param([string]$Caminho,[string]$Nome)
     $nativa=Converter-Hive $Caminho
-    if ($nativa -notmatch '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced(?:\\|$)') {return}
+    $grupos=@();$valores=@($Nome)
+    if ($nativa -match '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced(?:\\|$)') {
+        $grupos=@('SOFTWARE\Policies\Microsoft\Windows\Explorer','SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer')
+        $valores+=@('NoFolderOptions','NoSetTaskbar','LockedStartLayout')
+    } elseif ($nativa -match '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Search(?:\\|$)') {
+        $grupos=@('SOFTWARE\Policies\Microsoft\Windows\Windows Search','SOFTWARE\Policies\Microsoft\Windows\Explorer')
+        $valores+=@('DisableSearchBoxSuggestions','SearchboxTaskbarMode')
+    } elseif ($nativa -match '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize(?:\\|$)') {
+        $grupos=@('SOFTWARE\Policies\Microsoft\Windows\Personalization','SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System')
+        $valores+=@('NoChangingTheme','NoChangingColor')
+    } else {return}
     foreach ($hive in @('HKCU','HKLM')) {
-        foreach ($grupo in @('SOFTWARE\Policies\Microsoft\Windows\Explorer','SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer')) {
+        foreach ($grupo in $grupos) {
             $p=$hive+':\'+$grupo
             try {
                 if (-not (Test-Path -LiteralPath $p -ErrorAction Stop)) {continue}
                 $v=Get-ItemProperty -LiteralPath $p -ErrorAction Stop
             } catch {throw 'Consulta de politica de preferencia inconclusiva; alteracao recusada.'}
-            foreach ($nomePolitica in @($Nome,'NoFolderOptions','NoSetTaskbar','LockedStartLayout')) {
+            foreach ($nomePolitica in $valores) {
                 if ($nomePolitica -and $v.PSObject.Properties[$nomePolitica]) {throw ('Indicador de politica de preferencia presente: '+$nomePolitica+'. Utilize o procedimento autorizado.')}
             }
         }
@@ -618,7 +688,7 @@ function Executar-Acao {
     Confirmar-PermissaoAlteracao
     $ErrorActionPreference = 'Stop'
     try {
-        Confirmar-ProtecaoAlvo $Acao
+        Confirmar-NovaAcao $Acao
         switch ($Acao.tipo) {
 
             'registro' {
@@ -1307,7 +1377,7 @@ function Selecionar-TweaksPreset {
         if ($t.id -like 'custom-*' -or $t.apenasManual -or (Obter-BloqueioAjuste $t)) { continue }
         if ($PSBoundParameters.ContainsKey('Contexto') -and -not (Testar-CompatibilidadeAjuste $t $Contexto)) {continue}
         if (($t.so -eq 'win11' -and -not $Win11) -or ($t.so -eq 'win10' -and $Win11)) { continue }
-        if (($legado -and ($t.niveis -contains $Nivel)) -or (-not $legado -and ($perfis[$Nivel] -contains $t.id))) {
+        if ($t.id -eq 'extensoes-de-arquivo' -and $t.auditoria.decisao -eq 'essencial' -and (($legado -and ($t.niveis -contains $Nivel)) -or (-not $legado -and ($perfis[$Nivel] -contains $t.id)))) {
             $t
         }
     }
@@ -1373,7 +1443,7 @@ function Avaliar-AutorizacaoAjuste {
                 foreach ($acao in @($Ajuste.acoes)) {
                     switch ($acao.tipo) {
                         'registro' {Confirmar-PoliticaPreferenciaLocal $acao.caminho $acao.nome}
-                        'energia' {Confirmar-PoliticaEnergiaLocal}
+                        'energia' {Confirmar-PoliticaEnergiaLocal; Confirmar-PlanoEnergiaDisponivel $acao.guid}
                         'recurso' {Confirmar-PoliticaRecursosLocal}
                         'servico' {Confirmar-DependenciasServico $acao.nome $acao.inicio}
                         'appx' {if (-not (Testar-AppxCatalogado $acao.pacote)) {throw 'Pacote fora do catalogo de remocao.'}}

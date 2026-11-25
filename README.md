@@ -52,7 +52,7 @@ nao quer janela? modo cli:
 
 ## o que tem dentro
 
-- **42 tweaks** em catalogo (3 presets: seguro / balanceado / agressivo): telemetria, privacidade (copilot/ia inclusos), desempenho, barra de tarefas, explorer, energia e rede
+- **42 itens auditados**: 1 preferencia essencial, 7 ajustes manuais e 34 orientacoes somente consulta/simulacao. Todos os presets, inclusive aliases legados, selecionam apenas extensoes de arquivos. Nenhum ganho de desempenho medido.
 - **66 apps** pra instalar via winget e **34 pacotes** da store pra debloat
 - **desinstalador com limpeza de rastros**: pastas, registro, servicos orfaos, tarefas agendadas, regras locais de permissao do firewall (desativadas, nao removidas), entradas run e path morto; journal antes das alteracoes e backups de arquivos/chaves
 - **journal de desfazer**: cada acao grava o valor anterior; a aba desfazer reverte sessao inteira; o journal e gravado atomicamente antes das acoes registradas, com copia anterior e progresso de reversao; falhas podem exigir revisao manual
@@ -142,3 +142,5 @@ RC.8: inventario PnP dos dispositivos presentes correlaciona InstanceId com driv
 A branch de integracao da issue #2 possui inventarios de abas em segundo plano, protecao de alvos, journals com identidade e estados de aplicacao, e verificacao SHA256 de backups de arquivos e registro em quarentena. Backups legados sem hash exigem revisao manual; pastas nao possuem hash integral. Firewall e reparos genericos de rede ficam para ferramentas autorizadas. O modo protegido global continua ate a paridade de protecao por operacao ser demonstrada. Veja [validacao e limites](docs/validacao-v2.md). O CI Windows Server nao substitui aceite em Windows 10/11 cliente.
 
 A previa essencial e a analise de arquivos grandes tambem ficam disponiveis no modo somente leitura. Preferencias revisadas do Explorer consultam indicadores locais de politica antes da aplicacao e reversao; a ausencia desses indicadores nao comprova ausencia de politica efetiva. O aplicativo nao encerra processos Explorer ao aplicar ajustes.
+
+A segunda revisao dos 42 IDs registra decisao, risco, evidencia, orientacao e recuperacao em `data/tweaks.json` e `docs/auditoria-tweaks-v2.md`. Valores sem validacao suficiente de rede, drivers, servicos, acessibilidade e politicas ficaram consultivos no fluxo de tweaks. A barreira de novas escritas do executor valida alvos e valores especificos das preferencias liberadas, sem depender apenas do metadado de decisao. Planos locais restritos continuam manuais. Recursos nativos e reversao possuem verificacoes proprias. O modo global ainda e exigido; nao e autorizacao por acao completa.

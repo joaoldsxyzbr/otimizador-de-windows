@@ -961,12 +961,15 @@ try {
         function Obter-ContextoAjustes {[pscustomobject]@{build=26100;edicao='Professional';cliente=$true}}
         if (Criar-PontoRestauracao) { throw 'Ponto inexistente foi aceito.' }
         $script:sessaoIniciada=$false
+        $script:pontoConsultado=$false
+        function Criar-PontoRestauracao {$script:pontoConsultado=$true;return $false}
+        function Confirmar-PoliticaPreferenciaLocal {}
         function Iniciar-Sessao { $script:sessaoIniciada=$true }
         function Executar-Acao { throw 'Nao deve executar acao.' }
         $catalogoAntes=$global:CatalogoTweaks
         try {
-            $global:CatalogoTweaks=[pscustomobject]@{tweaks=@([pscustomobject]@{id='extensoes-de-arquivo';nome='teste';so='ambos';acoes=@([pscustomobject]@{tipo='registro'})})}
-            if ((Aplicar-Preset 'essencial') -or $script:sessaoIniciada) { throw 'Preset real continuou sem ponto.' }
+            $global:CatalogoTweaks=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ((Aplicar-Preset 'essencial') -or $script:sessaoIniciada -or -not $script:pontoConsultado) { throw 'Preset real nao testou ou continuou sem ponto.' }
         } finally { $global:CatalogoTweaks=$catalogoAntes }
     }
     Passou 'ponto nao confirmado interrompe preset antes do journal'
@@ -1657,6 +1660,50 @@ try {
     Passou 'manifesto de pasta e reconciliacao de snapshots completos'
 } catch {Falhou 'manifesto e recuperacao' $_.Exception.Message}
 finally {if (Test-Path -LiteralPath $dir) {Remove-Item -LiteralPath $dir -Recurse -Force}}
+
+# ---- second catalog audit: every item has an explicit decision ----
+Secao 'auditoria dos 42 ajustes e escrita restrita'
+try {
+    $cat=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if (@($cat.tweaks).Count -ne 42 -or @($cat.tweaks | Group-Object id | Where-Object {$_.Count -ne 1}).Count) {throw 'IDs da auditoria divergentes.'}
+    foreach ($a in $cat.tweaks) {
+        if ($a.auditoria.versao -ne 2 -or $a.auditoria.decisao -notin @('consulta','manual','essencial') -or $a.auditoria.evidencia -ne 'nao-medido' -or -not $a.auditoria.risco -or -not $a.auditoria.orientacao -or -not $a.auditoria.verificacao -or -not $a.auditoria.recuperacao -or -not $a.auditoria.fonte) {throw ('Auditoria incompleta: '+$a.id)}
+        $bloqueio=Obter-BloqueioAjuste $a
+        if ($a.auditoria.decisao -eq 'consulta' -and (-not $bloqueio -or -not $a.apenasManual)) {throw ('Item consultivo habilitado: '+$a.id)}
+        if ($a.auditoria.decisao -ne 'consulta' -and $bloqueio) {throw ('Preferencia revisada bloqueada: '+$a.id+' '+$bloqueio)}
+    }
+    foreach ($nivel in @('seguro','balanceado','agressivo','essencial','gamer','notebook','privacidade','corporativo','recomendado')) {
+        foreach ($win11 in @($false,$true)) {
+            $itens=@(Selecionar-TweaksPreset $nivel $cat $win11)
+            if ($itens.Count -ne 1 -or $itens[0].id -ne 'extensoes-de-arquivo') {throw ('Preset nao essencial: '+$nivel)}
+        }
+    }
+    foreach ($id in @('sysmain','pesquisa-indexacao','servicos-para-manual','preferir-ipv4','menu-contexto-classico','teclas-aderencia','telemetria','delivery-optimization')) {
+        $a=$cat.tweaks | Where-Object {$_.id -eq $id}
+        $a.auditoria.decisao='manual'
+        if (-not (Obter-BloqueioAjuste $a)) {throw ('Metadado editado ampliou escrita: '+$id)}
+    }
+    $a=[pscustomobject]@{tipo='registro';caminho='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced';nome='HideFileExt';tipoValor='DWord';dados=0}
+    Confirmar-NovaAcao $a
+    $a.dados=1
+    if (-not (Obter-BloqueioNovaAcao $a)) {throw 'Valor fora da preferencia aceita.'}
+    $a.dados=0;$a.tipoValor='tipo-invalido'
+    if (-not (Obter-BloqueioNovaAcao $a)) {throw 'Tipo desconhecido aceito.'}
+    $a.caminho='HKCU:\Software\ExampleApp';$a.nome='Preferencia';$a.tipoValor='String';$a.dados='local'
+    Confirmar-NovaAcao $a
+    $a.caminho='HKCU:\Software\Classes\CLSID\Example'
+    if (-not (Obter-BloqueioNovaAcao $a)) {throw 'Override de shell aceito.'}
+    & {
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return ($LiteralPath -like '*\Personalization' -or $LiteralPath -like '*\Windows Search')}
+        function Get-ItemProperty {[CmdletBinding()]param([string]$LiteralPath) [pscustomobject]@{NoChangingTheme=1;DisableSearchBoxSuggestions=1}}
+        foreach ($k in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize','HKCU:\Software\Microsoft\Windows\CurrentVersion\Search')) {
+            $recusou=$false
+            try {Confirmar-PoliticaPreferenciaLocal $k 'teste'} catch {$recusou=$_.Exception.Message -match 'politica de preferencia presente'}
+            if (-not $recusou) {throw 'Indicador de politica adicional ignorado.'}
+        }
+    }
+    Passou '42 decisoes, presets conservadores, valores exatos e politicas adicionais'
+} catch {Falhou 'auditoria dos 42 ajustes' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

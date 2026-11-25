@@ -74,7 +74,12 @@ function Obter-GuiaAjuste {
     $reinicio=if ($Tweak.reinicio) {$Tweak.reinicio} else {'Pode exigir relogon ou reinicio.'}
     $bloqueio=Obter-BloqueioAjuste $Tweak
     $protecao=if ($bloqueio) { 'Somente consulta: '+$bloqueio } else { 'Protecao por alvo: verificacoes adicionais no executor.' }
-    return [pscustomobject]@{ risco=$risco; texto=(@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat. $notaCompat","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio,$protecao) -join "`n") }
+    $auditoria=if ($Tweak.auditoria) {
+        @(('Objetivo: '+$Tweak.auditoria.objetivo),('Decisao: '+$Tweak.auditoria.decisao),('Evidencia: '+$Tweak.auditoria.evidencia),('Risco: '+$Tweak.auditoria.risco),('Orientacao: '+$Tweak.auditoria.orientacao),('Verificacao: '+$Tweak.auditoria.verificacao),('Fonte: '+$Tweak.auditoria.fonte))
+    } else {@('Plano local sem auditoria de beneficio.')}
+    $proposta=@('Valores propostos (nao comprova efeito):')
+    foreach ($acao in @($Tweak.acoes)) {$proposta+=('  '+(Descrever-Acao $acao))}
+    return [pscustomobject]@{ risco=$risco; texto=((@($Tweak.desc,"Impacto: $impacto","Compatibilidade: $compat. $notaCompat","Escopo: $escopo","Recuperacao: $recuperacao",$reinicio,$protecao)+$auditoria+$proposta) -join [Environment]::NewLine) }
 }
 
 function Atualizar-RotuloAjuste {
@@ -83,7 +88,7 @@ function Atualizar-RotuloAjuste {
     $rotulo=switch ($Estado) {'aplicado' {'ja aplicado'} 'parcial' {'parcial'} 'nao' {'nao aplicado'} default {'estado nao confirmado'}}
     $Cb.Content=$t.nome + ' [' + (Classificar-RiscoAjuste $t) + '] (' + $rotulo + ')'
     if ($t.apenasManual) { $Cb.Content += ' [manual]' }
-    if (Obter-BloqueioAjuste $t) { $Cb.Content += ' [apenas simulacao]' }
+    if (Obter-BloqueioAjuste $t) { $Cb.Content += ' [somente consulta/simulacao]' }
     $Cb.ToolTip=(Obter-GuiaAjuste $t).texto
     if ($global:ModoProtegido) { $Cb.Content+=' [somente consulta]'; $Cb.IsChecked=$false; $Cb.IsEnabled=$false }
     elseif (-not $Cb.IsEnabled) { $Cb.Content+=' [indisponivel nesta instalacao]'; $Cb.IsChecked=$false }
@@ -678,10 +683,16 @@ function Clique-Preset {
     foreach ($cb in $cbs) {
         $cb.IsChecked = ($cb.IsEnabled -and $ids -contains $cb.Tag.id -and $global:ConsultasPaineis.Ajustes.resultados[[string]$cb.Tag.id] -in @('nao','parcial'))
     }
-    if ($Nivel -eq 'recomendado') {
-        $motivo='Sem evidencia para ajustes agressivos; selecao essencial, independente do tipo de computador.'
-        Avisar 'Recomendacao explicada' ($motivo + ' A selecao nao aplica nada e ignora ajustes ja aplicados.')
+    $orientacao=switch ($Nivel) {
+        'gamer' {'Meca o tempo de quadro no proprio jogo, CPU/GPU e temperatura sob a mesma carga; nao desative SysMain ou servicos sem diagnostico.'}
+        'notebook' {'Revise consumo, bateria e plano de energia; compare autonomia na mesma carga, sem forcar alto desempenho.'}
+        'privacidade' {'Revise permissoes por aplicativo e configuracoes de publicidade, localizacao e diagnostico; politicas administrativas ficam em consulta.'}
+        'corporativo' {'Use somente operacoes autorizadas pelo TI; preserve VPN, atualizacoes e protecoes.'}
+        'recomendado' {'Comece pelos indicadores da central de saude; escolha a manutencao correspondente apenas se houver evidencia.'}
+        default {'Sem ganho medido para ajustes adicionais; a selecao essencial e uma preferencia de visualizacao.'}
     }
+    Avisar 'Orientacao do perfil' ($orientacao + [Environment]::NewLine + 'Todos os perfis selecionam somente extensoes de arquivos. Nada foi aplicado; itens ja aplicados nao sao selecionados.')
+    Log 'Todos os aliases de preset usam apenas a preferencia essencial; ajustes manuais nao sao preselecionados.'
     Log ('preset marcado: ' + $Nivel + ' (' + @(($cbs | Where-Object { $_.IsChecked })).Count + ' ajustes). confira a lista e clique em aplicar.')
 }
 
