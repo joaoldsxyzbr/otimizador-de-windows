@@ -2032,6 +2032,27 @@ try {
     Passou 'dispositivos presentes correlacionados sem expor identificadores'
 } catch {Falhou 'inventario PnP' $_.Exception.Message}
 
+# ---- regra de escopo do harness: secao roda no escopo global do script ----
+# variavel de secao precisa de nome unico, ou escopo filho (& { }); contadores
+# tem nome unico reservado e nao podem receber atribuicao fora da inicializacao
+Secao 'escopo do harness'
+try {
+    & {
+        $fonte = Get-Content -LiteralPath (Join-Path $raiz 'testar.ps1') -Raw -Encoding UTF8
+        $atribuicoes = @([regex]::Matches($fonte, '(?m)^\s*\$(?:script:|global:)?Testes(?:Ok|Falhas)\s*=(?!=)'))
+        $inicializacoes = @([regex]::Matches($fonte, '(?m)^\s*\$global:Testes(?:Ok|Falhas)\s*=\s*0\s*$'))
+        if ($atribuicoes.Count -ne 2 -or $inicializacoes.Count -ne 2) {throw ('contadores globais so podem ser inicializados a zero no topo do arquivo: ' + $atribuicoes.Count + '/' + $inicializacoes.Count)}
+        $incrementosOk = @([regex]::Matches($fonte, '\$global:TestesOk\+\+'))
+        $incrementosFalhas = @([regex]::Matches($fonte, '\$global:TestesFalhas\+\+'))
+        if ($incrementosOk.Count -ne 1 -or $incrementosFalhas.Count -ne 1) {throw 'Passou/Falhou deixaram de ser os unicos pontos de incremento'}
+        $antesOk = $global:TestesOk
+        $antesFalhas = $global:TestesFalhas
+        & { $TestesOk = 'texto'; $TestesFalhas = 'texto' }
+        if ($global:TestesOk -isnot [int] -or $global:TestesFalhas -isnot [int] -or $global:TestesOk -ne $antesOk -or $global:TestesFalhas -ne $antesFalhas) {throw 'variavel de secao em escopo filho vaza para o escopo global'}
+    }
+    Passou 'harness: contadores protegidos e escopo filho nao vaza variavel de secao'
+} catch {Falhou 'escopo do harness' $_.Exception.Message}
+
 # ---- resumo ----
 Write-Host ''
 Write-Host '============================================================'
