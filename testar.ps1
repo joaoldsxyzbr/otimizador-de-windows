@@ -1261,7 +1261,7 @@ try {
                 }
             })
             try {
-                $dadoDialogo=@(Executar-ConsultaLocal -Titulo 'Dialogo sintetico' -Codigo {Start-Sleep -Milliseconds 300; [pscustomobject]@{valor=7}} -Mensagem 'Teste sintetico de admissao.')
+                $dadoDialogo=@(Executar-ConsultaLocal -Titulo 'Dialogo sintetico' -Codigo {Start-Sleep -Milliseconds 300; [pscustomobject]@{valor=7}} -Mensagem 'Teste sintetico de admissao.' -SemModal)
             } catch {
                 throw ('falha no dialogo: '+$_.Exception.Message+' | pos: '+$_.InvocationInfo.PositionMessage+' | pilha: '+$_.ScriptStackTrace)
             }
