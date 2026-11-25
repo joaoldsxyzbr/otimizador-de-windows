@@ -295,6 +295,7 @@ function Contar-ConsultasAtivas {
         $v=Get-Variable -Name $nome -Scope Global -ErrorAction SilentlyContinue
         if ($v -and $v.Value) {$total+=$v.Value.Count}
     }
+    if ($global:ConsultasDialogoAtivas) {$total+=$global:ConsultasDialogoAtivas.Count}
     return $total
 }
 
@@ -325,6 +326,7 @@ function Receber-ResultadoConsulta {
 function Inicializar-FilaConsultas {
     if ($global:TimerFilaConsultas) {$global:TimerFilaConsultas.Stop()}
     $global:FilaConsultas=[ordered]@{}
+    $global:ConsultasDialogoAtivas=@{}
     $global:TimerFilaConsultas=New-Object System.Windows.Threading.DispatcherTimer
     $global:TimerFilaConsultas.Interval=[TimeSpan]::FromMilliseconds(100)
     $global:TimerFilaConsultas.Add_Tick({Processar-FilaConsultas})
@@ -1198,10 +1200,13 @@ function Clique-DetalhesSessao {
 }
 
 # Executa consultas somente leitura em um runspace separado, com janela modal.
+# Usa a mesma admissao global das consultas de navegacao: espera vaga antes de
+# comecar, ocupa um slot enquanto executa e nunca trava o encerramento do host.
 function Executar-ConsultaLocal {
     param([string]$Titulo, [scriptblock]$Codigo, [hashtable]$Parametros = @{}, [string]$Mensagem='Consultando o sistema. Nenhuma alteracao sera aplicada.', [switch]$SemCancelar)
+    if (-not $global:ConsultasDialogoAtivas) { $global:ConsultasDialogoAtivas=@{} }
     $ps = [PowerShell]::Create()
-    $estado = @{ cancelado=$false; resultado=$null; erro=$null; terminou=$false; parada=$null }
+    $estado = @{ chave=[Guid]::NewGuid().ToString(); fase='aguardando'; cancelado=$false; resultado=$null; erro=$null; terminou=$false; abandonado=$false; pediuFechar=$null; esperando=[Diagnostics.Stopwatch]::StartNew(); parada=$null; async=$null; ps=$ps }
     $dlg = New-Object System.Windows.Window
     $dlg.Title = $Titulo
     $dlg.Owner = $global:Janela
@@ -1230,9 +1235,9 @@ function Executar-ConsultaLocal {
     try {
         [void]$ps.AddScript($Codigo.ToString())
         foreach ($chave in $Parametros.Keys) { [void]$ps.AddParameter($chave,$Parametros[$chave]) }
-        $async = $ps.BeginInvoke()
         $pedirCancelamento = {
-            if (-not $SemCancelar -and -not $estado.cancelado -and -not $async.IsCompleted) {
+            if ($estado.fase -eq 'aguardando' -and -not $estado.cancelado) { $estado.cancelado = $true; try { $dlg.Close() } catch { }; return }
+            if ($estado.fase -eq 'executando' -and -not $estado.cancelado -and $estado.async -and -not $estado.async.IsCompleted) {
                 $estado.cancelado = $true
                 $cancelar.IsEnabled = $false
                 $mensagem.Text = 'Cancelando consulta...'
@@ -1243,29 +1248,76 @@ function Executar-ConsultaLocal {
         $cancelar.Add_Click($pedirCancelamento)
         $dlg.Add_Closing({
             param($sender,$eventArgs)
-            if (-not $estado.terminou) { $eventArgs.Cancel = $true; & $pedirCancelamento }
+            if ($estado.terminou -or $estado.abandonado) { return }
+            if ($estado.fase -eq 'aguardando') { $estado.cancelado = $true; return }
+            if (-not $estado.pediuFechar) { $estado.pediuFechar = [Diagnostics.Stopwatch]::StartNew() }
+            & $pedirCancelamento
+            if ($estado.pediuFechar.Elapsed.TotalSeconds -ge 10) { $estado.abandonado = $true; return }
+            $eventArgs.Cancel = $true
+        }.GetNewClosure())
+        $dlg.Add_Closed({
+            if ($estado.terminou -or $estado.fase -eq 'aguardando') { return }
+            if ($estado.abandonado) {
+                $global:ConsultasDialogoAtivas[$estado.chave] = @{ estado = $estado }
+                if (-not $estado.parada -and $estado.async -and -not $estado.async.IsCompleted) {
+                    try { $estado.parada = $ps.BeginStop($null,$null) } catch { }
+                }
+            }
         }.GetNewClosure())
         $timer.Add_Tick({
-            if (-not $async.IsCompleted) { return }
+            if ($estado.terminou) { $timer.Stop(); return }
+            if ($estado.abandonado) {
+                if (-not $estado.async) { $timer.Stop(); return }
+                if (-not $estado.async.IsCompleted) { return }
+                if ($estado.parada -and -not $estado.parada.IsCompleted) { return }
+                $timer.Stop()
+                Concluir-ConsultaDialogo $estado.chave
+                return
+            }
+            if ($global:JanelaFechada) {
+                $estado.cancelado = $true
+                $estado.abandonado = $true
+                if ($estado.fase -eq 'executando' -and -not $estado.parada -and $estado.async -and -not $estado.async.IsCompleted) {
+                    try { $estado.parada = $ps.BeginStop($null,$null) } catch { }
+                }
+                $dlg.Close()
+                return
+            }
+            if ($estado.fase -eq 'aguardando') {
+                if ($estado.esperando.Elapsed.TotalSeconds -ge 90) { $estado.cancelado = $true; $estado.terminou = $true; $dlg.Close(); return }
+                if (-not (Testar-VagaConsulta)) { return }
+                try { $estado.async = $ps.BeginInvoke() }
+                catch { $estado.erro = $_.Exception; $estado.terminou = $true; $dlg.Close(); return }
+                $estado.fase = 'executando'
+                $global:ConsultasDialogoAtivas[$estado.chave] = @{ estado = $estado }
+                $mensagem.Text = 'Executando a consulta...'
+                return
+            }
+            if (-not $estado.async.IsCompleted) { return }
             $timer.Stop()
+            try { $global:ConsultasDialogoAtivas.Remove($estado.chave) } catch { }
             try {
-                $estado.resultado = @($ps.EndInvoke($async))
+                $estado.resultado = @($ps.EndInvoke($estado.async))
                 if ($ps.Streams.Error.Count -gt 0 -and -not $estado.cancelado) { throw $ps.Streams.Error[0].Exception }
             } catch { if (-not $estado.cancelado) { $estado.erro = $_.Exception } }
             $estado.terminou = $true
             $dlg.Close()
         }.GetNewClosure())
         $timer.Start()
+        if (-not (Testar-VagaConsulta)) { $mensagem.Text = 'Outras consultas em andamento. Aguardando vaga para comecar...' }
         [void]$dlg.ShowDialog()
-        if ($estado.cancelado) { return $null }
+        if ($estado.cancelado -or $estado.abandonado) { return $null }
         if ($estado.erro) { throw $estado.erro }
         return $estado.resultado
     } finally {
-        $timer.Stop()
-        if ($estado.parada -and $estado.parada.IsCompleted) {
-            try { $ps.EndStop($estado.parada) } catch { }
+        if (-not $estado.abandonado) {
+            $timer.Stop()
+            try { $global:ConsultasDialogoAtivas.Remove($estado.chave) } catch { }
+            if ($estado.parada -and $estado.parada.IsCompleted) {
+                try { $ps.EndStop($estado.parada) } catch { }
+            }
+            $ps.Dispose()
         }
-        $ps.Dispose()
     }
 }
 
@@ -1801,6 +1853,18 @@ function Solicitar-ConsultaPainel {
     }
 }
 
+# Encerra um worker de dialogo abandonado cujos handles ja completaram.
+function Concluir-ConsultaDialogo {
+    param([string]$Chave)
+    $ref=$global:ConsultasDialogoAtivas[$Chave]
+    if (-not $ref -or -not $ref.estado) { return }
+    try { $global:ConsultasDialogoAtivas.Remove($Chave) } catch { }
+    $tr=$ref.estado
+    try { if ($tr.parada) { $tr.ps.EndStop($tr.parada) } } catch { }
+    try { if ($tr.async) { [void]$tr.ps.EndInvoke($tr.async) } } catch { }
+    try { $tr.ps.Dispose() } catch { }
+}
+
 # The window is already closed: drain completed workers without an unbounded wait.
 # A provider that ignores cancellation cannot be forcibly disposed on the UI thread.
 function Finalizar-ConsultasPendentes {
@@ -1824,6 +1888,15 @@ function Finalizar-ConsultasPendentes {
                 $j=$estado.trabalho
                 if ($j -and $j.async.IsCompleted -and (-not $j.parada -or $j.parada.IsCompleted)) {
                     & $grupo.funcao $timer
+                } else {$pendentes++}
+            }
+        }
+        $mapaDialogos=Get-Variable -Name 'ConsultasDialogoAtivas' -Scope Global -ErrorAction SilentlyContinue
+        if ($mapaDialogos -and $mapaDialogos.Value) {
+            foreach ($chave in @($mapaDialogos.Value.Keys)) {
+                $tr=$mapaDialogos.Value[$chave].estado
+                if ($tr -and $tr.async -and $tr.async.IsCompleted -and (-not $tr.parada -or $tr.parada.IsCompleted)) {
+                    Concluir-ConsultaDialogo $chave
                 } else {$pendentes++}
             }
         }
@@ -1857,12 +1930,13 @@ function Atualizar-CapacidadesOperacoes {
 
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
+    $global:JanelaFechada=$false
     Inicializar-FilaConsultas
     Inicializar-ConsultaUwp
     Inicializar-ConsultaInicio
     Inicializar-ConsultaProgramas
     Inicializar-ConsultasPaineis
-    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar; Cancelar-ConsultaPainel 'Atualizacoes' -Fechar; Cancelar-ConsultaPainel 'Historico' -Fechar; $global:TimerFilaConsultas.Stop(); $global:FilaConsultas.Clear() })
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar; Cancelar-ConsultaPainel 'Atualizacoes' -Fechar; Cancelar-ConsultaPainel 'Historico' -Fechar; $global:TimerFilaConsultas.Stop(); $global:FilaConsultas.Clear(); $global:JanelaFechada=$true })
     $global:UI.BotaoAtualizarAjustes.Add_Click({ Verificar-EstadoAjustes -Forcar })
     $global:UI.BotaoCancelarAjustes.Add_Click({ Cancelar-ConsultaPainel 'Ajustes' })
     $global:UI.BotaoAtualizarRecursos.Add_Click({ Solicitar-ConsultaPainel 'Recursos' -Forcar })
