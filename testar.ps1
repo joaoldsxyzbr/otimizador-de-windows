@@ -353,6 +353,17 @@ try {
         $estado=Ler-JSON ($manual+'.revertido')
         if ($estado.itens[0].estadoReversao -ne 'manual-sem-restauracao' -or -not $estado.itens[0].encerradoManualEm -or $estado.itens[0].confirmadoManualEm) {throw 'Encerramento sem restauracao confundido com rollback.'}
         Passou 'operacao irreversivel encerrada sem afirmar restauracao'
+        $mista=Join-Path $testeJournal 'mista.json'
+        Gravar-JSONAtomico -Arquivo $mista -Objeto @{itens=@(@{tipo='registro';estadoAplicacao='confirmado';estadoReversao='pendente'},@{tipo='temp';estadoAplicacao='confirmado';estadoReversao='pendente'})}
+        $script:acoesTeste=@()
+        $script:logMista=''
+        function Log {param([string]$Mensagem,[switch]$Erro) $script:logMista=$Mensagem}
+        if ((Reverter-Sessao $mista) -or $script:acoesTeste.Count) {throw 'Sessao mista reverteu itens alem do bloqueio externo.'}
+        if ($script:logMista -notmatch 'Acao 1 \(temp\)' -or $script:logMista -notmatch 'encerramento manual') {throw 'Bloqueio externo nao identificou a acao nem o caminho manual.'}
+        Confirmar-ReversaoManual -Arquivo $mista -Indice 1 -SemRestauracao
+        $script:acoesTeste=@()
+        if ((Reverter-Sessao $mista) -ne $true -or ($script:acoesTeste -join ',') -ne 'registro' -or -not (Test-Path ($mista+'.revertido'))) {throw 'Atestado manual nao liberou a reversao do item reversivel.'}
+        Passou 'sessao mista bloqueia efeito externo identificando-o e libera o resto apos atestado'
     }
 
     $falha = $false
@@ -553,6 +564,12 @@ try {
         if ($global:TesteComandoLivre) { throw 'Comando livre de aplicacao executado.' }
         if ((Desfazer-Item ([pscustomobject]@{ tipo='comando'; reverter='$global:TesteComandoLivre = $true' })) -or $global:TesteComandoLivre) { throw 'Comando livre de reversao executado.' }
         Remove-Variable -Name TesteComandoLivre -Scope Global
+        $script:logExterno=''
+        function Log {param([string]$Mensagem,[switch]$Erro) $script:logExterno=$Mensagem}
+        foreach ($externo in @(@{tipo='temp';esperado='definitiva'},@{tipo='manutencao';esperado='sem desfazer automatico; revise manualmente'},@{tipo='instalacao-app';esperado='WinGet'})) {
+            if ((Desfazer-Item ([pscustomobject]@{tipo=$externo.tipo;nome='app-exemplo'}))) {throw ('Efeito externo aceito como reversivel: '+$externo.tipo)}
+            if (-not $script:logExterno -or $script:logExterno -notmatch [regex]::Escape($externo.esperado) -or $script:logExterno -match 'desconhecido') {throw ('Mensagem de reversao externa enganosa: '+$externo.tipo)}
+        }
     }
     Passou 'motor rejeita comandos livres na aplicacao e reversao'
 } catch { Falhou 'reversibilidade dos presets' $_.Exception.Message }
