@@ -1176,6 +1176,34 @@ try {
             Esperar-ConsultaPainel 'Atualizacoes'
             if ($global:ConsultasPaineis.Historico.fase -ne 'atualizado' -or $global:UI.ListaDesfazer.Tag.Count -ne 0 -or $global:ConsultasPaineis.Atualizacoes.fase -ne 'atualizado' -or -not $global:UI.ChkBloquearDrivers.IsChecked) {throw 'Historico ou politicas nao apresentados corretamente.'}
             Passou 'Historico e Atualizacoes assincronos; journal invalido sem alvo de reversao'
+            # Saturate the actual shared pool with read-only synthetic workers.
+            Verificar-EstadoUwp -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-SnapshotInicio -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-SnapshotProgramas -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-ConsultaPainel 'Ajustes' -Forcar -Codigo {Start-Sleep -Seconds 20}
+            Solicitar-ConsultaPainel 'Recursos' -Forcar -Codigo {[pscustomobject]@{itens=@([pscustomobject]@{FeatureName='NetFx3';State='Disabled'})}}
+            Solicitar-ConsultaPainel 'Recursos' -Forcar -Codigo {throw 'Pedido duplicado substituiu o original.'}
+            Solicitar-ConsultaPainel 'Atualizacoes' -Forcar -Codigo {throw 'Pedido cancelado nao deve executar.'}
+            if ((Contar-ConsultasAtivas) -ne 4 -or $global:FilaConsultas.Count -ne 2 -or $global:ConsultasPaineis.Recursos.fase -ne 'na_fila' -or -not $global:UI.BotaoCancelarRecursos.IsEnabled -or $global:UI.BotaoInstalarRecursos.IsEnabled) {throw 'Fila saturada ou deduplicacao incorreta.'}
+            Cancelar-ConsultaPainel 'Atualizacoes'
+            if ($global:FilaConsultas.Contains('Atualizacoes')) {throw 'Pedido cancelado ainda na fila.'}
+            Cancelar-ConsultaUwp
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            while ($global:ConsultasPaineis.Recursos.fase -in @('na_fila','carregando') -and $sw.Elapsed.TotalSeconds -lt 15) {
+                Start-Sleep -Milliseconds 50
+                [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+            }
+            if ($global:ConsultasPaineis.Recursos.fase -ne 'atualizado' -or $global:FilaConsultas.Count -ne 0 -or $global:ConsultasPaineis.Atualizacoes.fase -ne 'indisponivel') {throw 'Fila nao iniciou automaticamente ou executou pedido cancelado.'}
+            Cancelar-ConsultaInicio
+            Cancelar-ConsultaProgramas
+            Cancelar-ConsultaPainel 'Ajustes'
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            while ((Contar-ConsultasAtivas) -gt 0 -and $sw.Elapsed.TotalSeconds -lt 15) {
+                Start-Sleep -Milliseconds 50
+                [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+            }
+            if ((Contar-ConsultasAtivas) -gt 0) {throw 'Workers sinteticos nao encerraram.'}
+            Passou 'fila WPF automatica, limite, deduplicacao e cancelamento'
             # Close with a pending read-only worker; no indefinitely blocked exit.
             Solicitar-ConsultaPainel 'Recursos' -Forcar -Codigo {Start-Sleep -Seconds 10;[pscustomobject]@{itens=@()}}
             $global:Janela.Close()
@@ -1533,6 +1561,60 @@ try {
     if ((Avaliar-AutorizacaoAjuste $protegido $ctx $true -ConsultarPoliticas).estado -ne 'bloqueado') {throw 'Alvo de politica liberado.'}
     Passou 'limite de workers, prazo, escopo, autorizacao e politicas por ajuste'
 } catch {Falhou 'contratos de consulta e autorizacao' $_.Exception.Message}
+
+# ---- normalized targets and conservative reconciliation ----
+Secao 'lotes e reconciliacao'
+try {
+    $a=[pscustomobject]@{nome='A';acoes=@([pscustomobject]@{tipo='registro';caminho='HKCU:\Software\Teste';nome='Valor';tipoValor='DWord';dados=1})}
+    $b=[pscustomobject]@{nome='B';acoes=@([pscustomobject]@{tipo='registro';caminho='hkey_current_user\software\teste';nome='valor';tipoValor='DWord';dados=2})}
+    $recusou=$false
+    try {Confirmar-LoteAjustes @($a,$b)} catch {$recusou=$_.Exception.Message -match 'conflitantes'}
+    if (-not $recusou) {throw 'Conflito de alvo equivalente ignorado.'}
+    $b.acoes[0].dados=1
+    Confirmar-LoteAjustes @($a,$b)
+    $b.acoes[0] | Add-Member -NotePropertyName remover -NotePropertyValue $true
+    $recusou=$false
+    try {Confirmar-LoteAjustes @($a,$b)} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Escrita e remocao conflitantes aceitas.'}
+    & {
+        $item=[pscustomobject]@{tipo='registro';idOperacao='teste';caminho='HKCU:\Software\Teste';nome='a';existia=$true;existiaDepois=$true;tipoAnterior='String';valorAnteriorEstruturado=[pscustomobject]@{valor='original'}}
+        function Ler-ValorRegistro {return @{existia=$true;tipo='String';valor='original'}}
+        if (-not (Testar-RegistroJaRestaurado $item)) {throw 'Estado anterior nao reconhecido.'}
+        function Ler-ValorRegistro {return @{existia=$true;tipo='String';valor='externo'}}
+        if (Testar-RegistroJaRestaurado $item) {throw 'Conflito tratado como restaurado.'}
+        function Ler-ValorRegistro {throw 'Acesso indisponivel'}
+        if (Testar-RegistroJaRestaurado $item) {throw 'Falha de leitura tratada como restauracao.'}
+        function Ler-ValorRegistro {return @{existia=$true;tipo='String';valor='original'}}
+        $item.idOperacao=$null
+        if (Testar-RegistroJaRestaurado $item) {throw 'Journal sem identidade da operacao reconciliado.'}
+    }
+    Passou 'conflitos por alvo e reconciliacao somente por estado anterior confirmado'
+} catch {Falhou 'lotes e reconciliacao' $_.Exception.Message}
+
+# ---- inventory has separate Win32 and AppX sources, no automatic removal ----
+Secao 'inventario combinado e triagem'
+try {
+    & {
+        function Get-CimInstance {[CmdletBinding()]param([string]$ClassName,[string]$Filter)}
+        function Get-Service {[CmdletBinding()]param()}
+        function Get-ScheduledTask {[CmdletBinding()]param()}
+        function Get-NetAdapter {[CmdletBinding()]param()}
+        function Get-Process {[CmdletBinding()]param()}
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return ($LiteralPath -like 'HKCU:*')}
+        function Get-ChildItem {[CmdletBinding()]param([string]$LiteralPath) [pscustomobject]@{PSPath='teste'}}
+        function Get-ItemProperty {[CmdletBinding()]param([string]$LiteralPath) [pscustomobject]@{DisplayName='Programa';Publisher='Editor';DisplayVersion='1';WindowsInstaller=1;UninstallString='nao-exportar.exe';SystemComponent=1}}
+        function Get-AppxPackage {[CmdletBinding()]param() [pscustomobject]@{Name='Pacote';Version='2';Publisher='Editor';IsFramework=$true;NonRemovable=$true}}
+        $i=Obter-InventarioLocal -Protegido $true
+        if ($i.aplicativosWin32.Count -ne 1 -or $i.aplicativosWin32[0].tecnologia -ne 'MSI' -or -not $i.aplicativosWin32[0].indicadorProtecao -or $i.aplicativosWin32[0].PSObject.Properties['UninstallString']) {throw 'Inventario Win32 incorreto ou comando exposto.'}
+        if ($i.appxUsuario.Count -ne 1 -or -not $i.appxUsuario[0].framework -or $i.appxUsuario[0].escopo -ne 'Usuario atual') {throw 'Inventario AppX incorreto.'}
+        function Get-AppxPackage {[CmdletBinding()]param() throw 'Falha simulada'}
+        $i=Obter-InventarioLocal -Protegido $true
+        if ($i.appxUsuario.Count -ne 0 -or ($i.avisos -join ' ') -notmatch 'AppX indisponivel') {throw 'Falha AppX tratada como ausencia.'}
+    }
+    $texto=Obter-DiagnosticoLocal ([pscustomobject]@{TotalVisibleMemorySize=16777216;FreePhysicalMemory=8388608}) $null 3 $true $false
+    if ($texto.IndexOf('[ATENCAO]') -lt 0 -or $texto.IndexOf('[ATENCAO]') -gt $texto.IndexOf('[INDISPONIVEL]') -or $texto -notmatch 'Prioridades nesta amostra') {throw 'Priorizacao da triagem incorreta.'}
+    Passou 'inventarios separados por tecnologia e triagem priorizada'
+} catch {Falhou 'inventario combinado e triagem' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

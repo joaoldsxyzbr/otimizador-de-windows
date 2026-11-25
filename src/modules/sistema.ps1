@@ -310,7 +310,11 @@ function Obter-SnapshotInicio {
 function Obter-DiagnosticoLocal {
     param($OS,$Disco,$Inicializacao,$Reinicio,$Bateria,[datetime]$Data=(Get-Date))
     $linhas=@(('Ultima analise local: '+$Data.ToString('dd/MM/yyyy HH:mm:ss')+' | Somente leitura, sem nota de saude.'))
-    foreach ($item in @(Avaliar-SaudeLocal $OS $Disco $Inicializacao $Reinicio $Bateria)) {
+    $itens=@(Avaliar-SaudeLocal $OS $Disco $Inicializacao $Reinicio $Bateria)
+    $atencao=@($itens | Where-Object {$_.estado -eq 'atencao'}).Count
+    $ausentes=@($itens | Where-Object {$_.estado -eq 'indisponivel'}).Count
+    $linhas+=('Prioridades nesta amostra: '+$atencao+' indicador(es) de atencao; '+$ausentes+' indisponivel(is). Nao e uma nota de saude.')
+    foreach ($item in @($itens | Sort-Object @{Expression={switch ($_.estado) {'atencao' {0} 'indisponivel' {1} default {2}}}})) {
         $linhas+=('[{0}] {1} {2}' -f $item.estado.ToUpperInvariant(),$item.evidencia,$item.orientacao)
     }
     if ($global:ModoProtegido) {$linhas+='Alteracoes indisponiveis no modo atual; consulte as permissoes e o administrador.'}
@@ -344,6 +348,8 @@ function Obter-InventarioLocal {
     $relatorio = [ordered]@{
         criado = (Get-Date -Format 'o')
         windows = ('{0} (build {1})' -f $(if ([Environment]::OSVersion.Version.Build -ge 22000) { 'Windows 11' } else { 'Windows 10' }),[Environment]::OSVersion.Version.Build)
+        aplicativosWin32 = @()
+        appxUsuario = @()
         inicializacao = @()
         runUsuario = @()
         servicos = @()
@@ -354,6 +360,33 @@ function Obter-InventarioLocal {
         processos = @()
         avisos = @()
     }
+    # No Win32_Product (which can trigger MSI consistency checks). These are registration records.
+    foreach ($origem in @(
+        @{nome='Computador - visao nativa';chave='HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'},
+        @{nome='Computador - WOW6432Node';chave='HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'},
+        @{nome='Usuario atual';chave='HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'}
+    )) {
+        try {
+            if (-not (Test-Path -LiteralPath $origem.chave -ErrorAction Stop)) {continue}
+            foreach ($k in @(Get-ChildItem -LiteralPath $origem.chave -ErrorAction Stop)) {
+                $p=Get-ItemProperty -LiteralPath $k.PSPath -ErrorAction Stop
+                if ([string]::IsNullOrWhiteSpace([string]$p.DisplayName)) {continue}
+                $relatorio.aplicativosWin32+=[pscustomobject]@{
+                    nome=[string]$p.DisplayName;versao=[string]$p.DisplayVersion;fabricanteDeclarado=[string]$p.Publisher
+                    origem=$origem.nome;tecnologia=$(if ([string]$p.WindowsInstaller -eq '1') {'MSI'} else {'Win32 / nao identificada'})
+                    indicadorProtecao=([string]$p.SystemComponent -eq '1' -or [string]$p.NoRemove -eq '1' -or -not [string]::IsNullOrWhiteSpace([string]$p.ParentKeyName))
+                }
+            }
+        } catch {$relatorio.avisos+=('Inventario Win32 incompleto: '+$origem.nome+'. Ausencia nao confirmada.')}
+    }
+    $relatorio.aplicativosWin32=@($relatorio.aplicativosWin32 | Sort-Object nome,origem,versao)
+    try {
+        $relatorio.appxUsuario=@(Get-AppxPackage -ErrorAction Stop | Sort-Object Name | ForEach-Object {
+            [pscustomobject]@{nome=[string]$_.Name;versao=[string]$_.Version;fabricanteDeclarado=[string]$_.Publisher
+                escopo='Usuario atual';framework=[bool]$_.IsFramework;recurso=[bool]$_.IsResourcePackage;naoRemovivel=[bool]$_.NonRemovable}
+        })
+    } catch {$relatorio.avisos+='Inventario AppX indisponivel; ausencia nao confirmada.'}
+    $relatorio.avisos+='Registros Win32/MSI e pacotes AppX podem representar o mesmo produto. Indicadores de protecao nao certificam que um aplicativo possa ser removido.'
     try {
         $relatorio.inicializacao = @(Get-CimInstance Win32_StartupCommand -ErrorAction Stop |
             Select-Object Name, Location | Sort-Object Name)

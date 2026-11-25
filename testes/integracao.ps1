@@ -230,6 +230,12 @@ try {
     if ((Get-ItemProperty -LiteralPath $caminhoConflito -Name teste).teste -ne 'mudanca posterior') { throw 'Mudanca posterior sobrescrita.' }
     if ((Ler-JSON $journalConflito).itens[0].estadoReversao -ne 'em_andamento') { throw 'Journal de conflito nao preservado.' }
     Log 'CI ok: conflito no registro preserva mudanca posterior'
+    if (Reverter-Sessao $journalConflito) {throw 'Reversao incerta repetiu ou ignorou conflito.'}
+    Set-ItemProperty -LiteralPath $caminhoConflito -Name teste -Value 'original' -ErrorAction Stop
+    if (-not (Reverter-Sessao $journalConflito)) {throw 'Nao reconciliou estado anterior confirmado.'}
+    $reconciliado=Ler-JSON ($journalConflito+'.revertido')
+    if (-not $reconciliado.itens[0].reconciliadoEm -or $reconciliado.itens[0].estadoReversao -ne 'concluido' -or (Ler-ValorRegistro $caminhoConflito 'teste').valor -ne 'original') {throw 'Reconciliacao nao registrada ou alterou alvo.'}
+    Log 'CI ok: reversao incerta reconciliada sem repetir escrita'
 } catch {
     Log ('FALHOU: conflito no registro: ' + $_.Exception.Message) -Erro
     exit 1

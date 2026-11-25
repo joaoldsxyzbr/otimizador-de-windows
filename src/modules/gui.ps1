@@ -315,6 +315,49 @@ function Receber-ResultadoConsulta {
     return [pscustomobject]@{dados=$dados;falha=$falha}
 }
 
+# One waiting request per panel, FIFO, no worker allocated while waiting.
+function Inicializar-FilaConsultas {
+    if ($global:TimerFilaConsultas) {$global:TimerFilaConsultas.Stop()}
+    $global:FilaConsultas=[ordered]@{}
+    $global:TimerFilaConsultas=New-Object System.Windows.Threading.DispatcherTimer
+    $global:TimerFilaConsultas.Interval=[TimeSpan]::FromMilliseconds(100)
+    $global:TimerFilaConsultas.Add_Tick({Processar-FilaConsultas})
+}
+
+function Remover-ConsultaFila {
+    param([string]$Chave)
+    if ($null -ne $global:FilaConsultas -and $global:FilaConsultas.Contains($Chave)) {$global:FilaConsultas.Remove($Chave)}
+    if ($global:TimerFilaConsultas -and $global:FilaConsultas.Count -eq 0) {$global:TimerFilaConsultas.Stop()}
+}
+
+function Adicionar-ConsultaFila {
+    param([string]$Chave,$Estado,[string]$Funcao,[hashtable]$Parametros,[string]$Mostrar)
+    if ($Estado.fechada -or $global:FilaConsultas.Contains($Chave)) {return}
+    $global:FilaConsultas[$Chave]=@{estado=$Estado;funcao=$Funcao;parametros=$Parametros;mostrar=$Mostrar;espera=[Diagnostics.Stopwatch]::StartNew()}
+    & $Mostrar $Estado 'na_fila' 'Consulta na fila. Inicia automaticamente quando houver vaga; voce pode cancelar.'
+    $global:TimerFilaConsultas.Start()
+}
+
+function Processar-FilaConsultas {
+    if ($global:OperacaoUIAtiva -or $null -eq $global:FilaConsultas) {return}
+    foreach ($chave in @($global:FilaConsultas.Keys)) {
+        $pedido=$global:FilaConsultas[$chave]
+        if (-not $pedido) {continue}
+        $s=$pedido.estado
+        if ($s.fechada) {Remover-ConsultaFila $chave;continue}
+        if ($pedido.espera.Elapsed.TotalSeconds -ge 90) {
+            Remover-ConsultaFila $chave
+            & $pedido.mostrar $s 'indisponivel' 'Tempo de espera na fila atingido. Atualize para tentar novamente.'
+            continue
+        }
+        if ($s.trabalho -or -not (Testar-VagaConsulta)) {continue}
+        Remover-ConsultaFila $chave
+        $params=$pedido.parametros
+        & $pedido.funcao @params
+    }
+    if ($global:FilaConsultas.Count -eq 0) {$global:TimerFilaConsultas.Stop()}
+}
+
 function Inicializar-ConsultaUwp {
     if ($null -eq $global:ConsultasUwpAtivas) { $global:ConsultasUwpAtivas=@{} }
     $global:ConsultaUwp=@{ ui=$global:UI; janela=$global:Janela; fase='inicial'; pacotes=@(); data=$null; trabalho=$null; fechada=$false; motivo='' }
@@ -328,8 +371,8 @@ function Mostrar-ConsultaUwp {
     if ($Estado.fechada) { return }
     $ui=$Estado.ui
     $ui.InfoConsultaUwp.Text=$Mensagem
-    $ui.BotaoAtualizarUwp.IsEnabled=($null -eq $Estado.trabalho)
-    $ui.BotaoCancelarUwp.IsEnabled=($Fase -eq 'carregando')
+    $ui.BotaoAtualizarUwp.IsEnabled=($null -eq $Estado.trabalho -and $Fase -ne 'na_fila')
+    $ui.BotaoCancelarUwp.IsEnabled=($Fase -in @('carregando','na_fila'))
     $ui.BotaoRemoverUwp.IsEnabled=(-not $global:ModoProtegido -and $Fase -eq 'atualizado' -and -not $global:OperacaoUIAtiva)
     if ($Fase -ne 'atualizado') { $ui.ListaUwp.Children.Clear() }
 }
@@ -338,6 +381,7 @@ function Cancelar-ConsultaUwp {
     param([string]$Motivo='Consulta cancelada.',[switch]$Fechar)
     $s=$global:ConsultaUwp
     if (-not $s) { return }
+    Remover-ConsultaFila 'Uwp'
     if ($Fechar) { $s.fechada=$true }
     $s.data=$null; $s.pacotes=@()
     $j=$s.trabalho
@@ -391,7 +435,8 @@ function Verificar-EstadoUwp {
     $s=$global:ConsultaUwp
     if (-not $s -or $s.fechada -or $global:OperacaoUIAtiva -or $s.trabalho) { return }
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 120) { return }
-    if (-not (Testar-VagaConsulta)) {Mostrar-ConsultaUwp $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
+    if ($global:FilaConsultas.Contains('Uwp')) {return}
+    if (-not (Testar-VagaConsulta)) {Adicionar-ConsultaFila 'Uwp' $s 'Verificar-EstadoUwp' @{Forcar=$true;Codigo=$Codigo;LimiteSegundos=$LimiteSegundos} 'Mostrar-ConsultaUwp';return}
     $s.data=$null; $s.pacotes=@()
     $ps=$null; $timer=$null
     try {
@@ -493,6 +538,7 @@ function Clique-AplicarAjustes {
         Status 'simulacao concluida (nada foi alterado).'
         return
     }
+    try {Confirmar-LoteAjustes @($selecionados | ForEach-Object {$_.Tag})} catch {Avisar 'Selecao conflitante' $_.Exception.Message;return}
     foreach ($cb in $selecionados) {
         try {Confirmar-AutorizacaoAjuste $cb.Tag $ctx} catch {Avisar 'Ajuste indisponivel' $_.Exception.Message;return}
     }
@@ -857,15 +903,15 @@ function Clique-InventarioLocal {
         }
         $nota = New-Object System.Windows.Controls.TextBlock
         $nota.TextWrapping = 'Wrap'
-        $nota.Text = 'Inventario com acoes limitadas e journal. Alteracoes nas ferramentas nativas nao entram no journal. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
+        $nota.Text = 'Inventario com acoes limitadas e journal. Alteracoes nas ferramentas nativas nao entram no journal. Win32/MSI e AppX sao inventarios distintos; use as abas Desinstalar e Debloat para avaliar remocao. Ordene pelos cabecalhos e filtre por texto. Revise antes de compartilhar. ' + ($dados.avisos -join ' | ')
         if ($global:ModoProtegido) { $nota.Text='Diagnostico local somente leitura. Exportacao e alteracoes indisponiveis. '+($dados.avisos -join ' | ') }
         $nota.Margin = '0,0,0,8'
         [System.Windows.Controls.DockPanel]::SetDock($nota,'Top')
         [void]$painel.Children.Add($nota)
         $abas = New-Object System.Windows.Controls.TabControl
-        foreach ($grupo in @('inicializacao','runUsuario','servicos','tarefas','discos','rede','drivers','processos')) {
+        foreach ($grupo in @('aplicativosWin32','appxUsuario','inicializacao','runUsuario','servicos','tarefas','discos','rede','drivers','processos')) {
             $tab = New-Object System.Windows.Controls.TabItem
-            $tab.Header = $grupo
+            $tab.Header = switch ($grupo) {'aplicativosWin32' {'Aplicativos Win32/MSI'} 'appxUsuario' {'AppX do usuario'} default {$grupo}}
             $corpo = New-Object System.Windows.Controls.DockPanel
             $filtro = New-Object System.Windows.Controls.TextBox
             $filtro.Margin = '6'; $filtro.ToolTip='Digite nome, estado ou outro campo para filtrar'
@@ -1041,11 +1087,15 @@ function Clique-DetalhesSessao {
         if (-not $arquivo -or -not (Test-Path -LiteralPath $arquivo -PathType Leaf)) { Avisar 'Sessao ausente' 'Atualize a lista de sessoes.'; return }
         $arquivo=Confirmar-ArquivoJournal $arquivo
         $json = Ler-JSON $arquivo
+        Confirmar-ContextoJournal $json
         $linhas = @('Journal: ' + $arquivo, ('Sessao: ' + $json.rotulo), ('Criada: ' + $json.criado), '', 'Inspecao somente leitura; nao apague backups manualmente.', '')
         foreach ($item in @($json.itens)) {
             $estado = 'pendente'
             if ($item.estadoReversao -eq 'concluido') { $estado = 'revertido' }
-            elseif ($item.estadoReversao -eq 'em_andamento') { $estado = 'incerto - revisao manual' }
+            elseif ($item.estadoReversao -eq 'em_andamento') {
+                $estado=if ($json.versaoEsquema -eq 2 -and (Testar-RegistroJaRestaurado $item)) {'incerto - estado anterior confirmado; pode reconciliar'} else {'incerto - revisao manual'}
+            }
+            if ($item.reconciliadoEm) {$estado='reconciliado por leitura'}
             $alvo = @($item.caminho, $item.origem, $item.chave, $item.nome, $item.tarefaNome, $item.pacote, $item.displayName, $item.contexto | Where-Object { $_ }) -join ' '
             if ($item.confirmadoManualEm) { $estado = 'confirmado manualmente' }
             $aplicacao=if ($item.estadoAplicacao) {$item.estadoAplicacao} else {'legado / nao confirmado'}
@@ -1344,8 +1394,8 @@ function Mostrar-EstadoInicio {
     param($s,[string]$Fase,[string]$Mensagem)
     $s.fase=$Fase
     if ($s.fechada) {return}
-    $s.ui.BotaoAtualizarInicio.IsEnabled=($null -eq $s.trabalho)
-    $s.ui.BotaoCancelarInicio.IsEnabled=($Fase -eq 'carregando')
+    $s.ui.BotaoAtualizarInicio.IsEnabled=($null -eq $s.trabalho -and $Fase -ne 'na_fila')
+    $s.ui.BotaoCancelarInicio.IsEnabled=($Fase -in @('carregando','na_fila'))
     if ($Fase -ne 'atualizado') {
         foreach ($campo in @('InfoCpu','InfoGpu','InfoRam','InfoDisco','InfoUptime','InfoRestore')) {
             $s.ui[$campo].Text=if ($Fase -eq 'carregando') {'Consultando...'} else {'Indisponivel'}
@@ -1358,6 +1408,7 @@ function Cancelar-ConsultaInicio {
     param([string]$Motivo='Consulta cancelada.',[switch]$Fechar)
     $s=$global:ConsultaInicio
     if (-not $s) {return}
+    Remover-ConsultaFila 'Inicio'
     if ($Fechar) {$s.fechada=$true}
     $s.data=$null; $s.motivo=$Motivo
     $j=$s.trabalho
@@ -1402,7 +1453,8 @@ function Solicitar-SnapshotInicio {
     $s=$global:ConsultaInicio
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
-    if (-not (Testar-VagaConsulta)) {Mostrar-EstadoInicio $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
+    if ($global:FilaConsultas.Contains('Inicio')) {return}
+    if (-not (Testar-VagaConsulta)) {Adicionar-ConsultaFila 'Inicio' $s 'Solicitar-SnapshotInicio' @{Forcar=$true;Codigo=$Codigo;LimiteSegundos=$LimiteSegundos} 'Mostrar-EstadoInicio';return}
     $s.data=$null
     $ps=$null;$timer=$null
     try {
@@ -1435,8 +1487,8 @@ function Mostrar-EstadoProgramas {
     param($s,[string]$Fase,[string]$Mensagem)
     $s.fase=$Fase
     if ($s.fechada) {return}
-    $s.ui.BotaoAtualizarProgramas.IsEnabled=($null -eq $s.trabalho)
-    $s.ui.BotaoCancelarProgramas.IsEnabled=($Fase -eq 'carregando')
+    $s.ui.BotaoAtualizarProgramas.IsEnabled=($null -eq $s.trabalho -and $Fase -ne 'na_fila')
+    $s.ui.BotaoCancelarProgramas.IsEnabled=($Fase -in @('carregando','na_fila'))
     if ($Fase -ne 'atualizado') {
         $global:ProgramasInstalados=$null
         $global:ProgramasExibidos=@()
@@ -1450,6 +1502,7 @@ function Cancelar-ConsultaProgramas {
     param([string]$Motivo='Consulta cancelada.',[switch]$Fechar)
     $s=$global:ConsultaProgramas
     if (-not $s) {return}
+    Remover-ConsultaFila 'Programas'
     if ($Fechar) {$s.fechada=$true}
     $s.data=$null; $s.motivo=$Motivo
     $j=$s.trabalho
@@ -1495,7 +1548,8 @@ function Solicitar-SnapshotProgramas {
     $s=$global:ConsultaProgramas
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
-    if (-not (Testar-VagaConsulta)) {Mostrar-EstadoProgramas $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
+    if ($global:FilaConsultas.Contains('Programas')) {return}
+    if (-not (Testar-VagaConsulta)) {Adicionar-ConsultaFila 'Programas' $s 'Solicitar-SnapshotProgramas' @{Forcar=$true;Codigo=$Codigo;LimiteSegundos=$LimiteSegundos} 'Mostrar-EstadoProgramas';return}
     $s.data=$null
     $ps=$null;$timer=$null
     try {
@@ -1539,8 +1593,8 @@ function Mostrar-EstadoPainel {
     if ($s.fechada) {return}
     $ui=$s.ui
     $ui[('InfoConsulta'+$s.tipo)].Text=$Mensagem
-    $ui[('BotaoAtualizar'+$s.tipo)].IsEnabled=($null -eq $s.trabalho)
-    $ui[('BotaoCancelar'+$s.tipo)].IsEnabled=($Fase -eq 'carregando')
+    $ui[('BotaoAtualizar'+$s.tipo)].IsEnabled=($null -eq $s.trabalho -and $Fase -ne 'na_fila')
+    $ui[('BotaoCancelar'+$s.tipo)].IsEnabled=($Fase -in @('carregando','na_fila'))
     $habilitar=($Fase -eq 'atualizado' -and -not $global:ModoProtegido -and -not $global:OperacaoUIAtiva)
     if ($s.tipo -eq 'Atualizacoes') {
         if ($Fase -ne 'atualizado') {
@@ -1571,6 +1625,7 @@ function Cancelar-ConsultaPainel {
     param([string]$Tipo,[string]$Motivo='Consulta cancelada.',[switch]$Fechar)
     $s=$global:ConsultasPaineis[$Tipo]
     if (-not $s) {return}
+    Remover-ConsultaFila $Tipo
     if ($Fechar) {$s.fechada=$true}
     $s.data=$null;$s.motivo=$Motivo
     $j=$s.trabalho
@@ -1634,7 +1689,8 @@ function Solicitar-ConsultaPainel {
     if (-not $s -or $s.fechada -or $s.trabalho -or $global:OperacaoUIAtiva) {return}
     if ($Tipo -in @('Recursos','Historico') -and $global:ModoProtegido) {Mostrar-EstadoPainel $s 'indisponivel' 'Consulta indisponivel no modo protegido.';return}
     if (-not $Forcar -and $s.fase -eq 'atualizado' -and $s.data -and ((Get-Date)-$s.data).TotalSeconds -lt 60) {return}
-    if (-not (Testar-VagaConsulta)) {Mostrar-EstadoPainel $s 'indisponivel' 'Limite de consultas simultaneas atingido. Atualize quando outra consulta terminar.';return}
+    if ($global:FilaConsultas.Contains($Tipo)) {return}
+    if (-not (Testar-VagaConsulta)) {Adicionar-ConsultaFila $Tipo $s 'Solicitar-ConsultaPainel' @{Tipo=$Tipo;Forcar=$true;Codigo=$Codigo;LimiteSegundos=$LimiteSegundos} 'Mostrar-EstadoPainel';return}
     $s.data=$null;$ps=$null;$timer=$null
     try {
         $ps=[PowerShell]::Create()
@@ -1707,11 +1763,12 @@ function Finalizar-ConsultasPendentes {
 
 function Ligar-Tudo {
     Ajustar-TamanhoJanela
+    Inicializar-FilaConsultas
     Inicializar-ConsultaUwp
     Inicializar-ConsultaInicio
     Inicializar-ConsultaProgramas
     Inicializar-ConsultasPaineis
-    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar; Cancelar-ConsultaPainel 'Atualizacoes' -Fechar; Cancelar-ConsultaPainel 'Historico' -Fechar })
+    $global:Janela.Add_Closed({ Cancelar-ConsultaUwp -Fechar; Cancelar-ConsultaInicio -Fechar; Cancelar-ConsultaProgramas -Fechar; Cancelar-ConsultaPainel 'Ajustes' -Fechar; Cancelar-ConsultaPainel 'Recursos' -Fechar; Cancelar-ConsultaPainel 'Atualizacoes' -Fechar; Cancelar-ConsultaPainel 'Historico' -Fechar; $global:TimerFilaConsultas.Stop(); $global:FilaConsultas.Clear() })
     $global:UI.BotaoAtualizarAjustes.Add_Click({ Verificar-EstadoAjustes -Forcar })
     $global:UI.BotaoCancelarAjustes.Add_Click({ Cancelar-ConsultaPainel 'Ajustes' })
     $global:UI.BotaoAtualizarRecursos.Add_Click({ Solicitar-ConsultaPainel 'Recursos' -Forcar })

@@ -13,7 +13,7 @@ function Converter-Hive {
         , @('HKCR:', 'HKEY_CLASSES_ROOT')
     )
     foreach ($par in $mapa) {
-        if ($CaminhoPS.StartsWith($par[0])) {
+        if ($CaminhoPS.StartsWith($par[0],[StringComparison]::OrdinalIgnoreCase)) {
             return ($par[1] + $CaminhoPS.Substring($par[0].Length))
         }
     }
@@ -288,8 +288,12 @@ function Obter-SnapshotHistorico {
             Confirmar-ContextoJournal $json
             $concluidos=@($json.itens | Where-Object {$_.estadoReversao -eq 'concluido'}).Count
             $incertos=@($json.itens | Where-Object {$_.estadoReversao -eq 'em_andamento'}).Count
+            $intencoes=@($json.itens | Where-Object {$_.estadoAplicacao -eq 'intencao'}).Count
+            $pendentes=@($json.itens | Where-Object {$_.estadoAplicacao -eq 'pendente'}).Count
             $rotulo+=(' - {0}/{1} revertidas: {2}' -f $concluidos,@($json.itens).Count,$json.rotulo)
-            if ($incertos -gt 0) {$rotulo+=' [revisao manual necessaria]'}
+            if ($incertos -gt 0) {$rotulo+=' [reversao incerta: verificar estado anterior]'}
+            if ($intencoes -gt 0) {$rotulo+=(' [intencoes nao confirmadas: '+$intencoes+']')}
+            if ($pendentes -gt 0) {$rotulo+=(' [efeitos pendentes: '+$pendentes+']')}
             if (-not $json.PSObject.Properties['versaoEsquema']) {$rotulo+=' [legado: identidade nao confirmada]'}
             $valido=$true
         } catch {$rotulo+=' [invalido ou contexto diferente]'}
@@ -963,6 +967,20 @@ function Desfazer-Item {
     }
 }
 
+# Reconciliation is read-only for the target. Never repeat an uncertain write.
+function Testar-RegistroJaRestaurado {
+    param($Item)
+    if ($Item.tipo -ne 'registro' -or -not $Item.idOperacao -or
+        $Item.existia -isnot [bool] -or -not $Item.valorAnteriorEstruturado -or
+        -not $Item.valorAnteriorEstruturado.PSObject.Properties['valor'] -or
+        -not $Item.PSObject.Properties['existiaDepois'] -or $Item.existiaDepois -isnot [bool]) {return $false}
+    if ($Item.existia -and $Item.tipoAnterior -notin @('DWord','QWord','String','ExpandString','Binary','MultiString')) {return $false}
+    try {
+        $atual=Ler-ValorRegistro $Item.caminho $Item.nome
+        return (Registro-Corresponde $atual $Item.existia $Item.tipoAnterior $Item.valorAnteriorEstruturado.valor)
+    } catch {return $false}
+}
+
 function Reverter-Sessao {
     param([string]$Arquivo, [switch]$UmaAcao)
     Confirmar-PermissaoAlteracao
@@ -978,7 +996,16 @@ function Reverter-Sessao {
             $item = $itens[$i]
             if ($item.estadoReversao -eq 'concluido') { continue }
             if ($item.estadoReversao -eq 'em_andamento') {
-                throw ("Acao {0} com resultado incerto. Revise manualmente antes de continuar." -f $i)
+                if ($json.versaoEsquema -ne 2 -or -not (Testar-RegistroJaRestaurado $item)) {
+                    throw ("Acao {0} com resultado incerto. Revise manualmente antes de continuar." -f $i)
+                }
+                $item.estadoReversao='concluido'
+                $item | Add-Member -NotePropertyName reconciliadoEm -NotePropertyValue (Get-Date -Format 'o') -Force
+                Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
+                $feitas++
+                Log ('Acao '+$i+' reconciliada: estado anterior verificado sem repetir a alteracao.')
+                if ($UmaAcao -and $feitas -ge 1) {break}
+                continue
             }
             $item | Add-Member -NotePropertyName estadoReversao -NotePropertyValue 'em_andamento' -Force
             Gravar-JournalSeguro -Arquivo $Arquivo -Objeto $json
@@ -1183,6 +1210,42 @@ function Selecionar-TweaksPreset {
 
 # A typed decision for a complete tweak. This supplements the global guard.
 # No state below grants permission to bypass administrative controls.
+# Reject conflicting writes before any restore point, journal or mutation.
+function Confirmar-LoteAjustes {
+    param([object[]]$Ajustes)
+    $alvos=@{}
+    foreach ($t in $Ajustes) {
+        foreach ($a in @($t.acoes)) {
+            $alvo=$null;$valor=$null
+            switch ($a.tipo) {
+                'registro' {
+                    $alvo='registro:'+(Converter-Hive ([string]$a.caminho)).ToLowerInvariant()+'|'+([string]$a.nome).ToLowerInvariant()
+                    if ($a.remover) {$valor='remover'}
+                    else {
+                        $kind=(Converter-Kind $a.tipoValor).ToString()
+                        $dados=switch ($kind) {
+                            'DWord' {[int]$a.dados}
+                            'QWord' {[long]$a.dados}
+                            'Binary' {,([byte[]]@($a.dados))}
+                            'MultiString' {,([string[]]@($a.dados))}
+                            default {[string]$a.dados}
+                        }
+                        $valor=$kind+':'+(ConvertTo-Json -InputObject $dados -Depth 8 -Compress)
+                    }
+                }
+                'servico' {$alvo='servico:'+([string]$a.nome).ToLowerInvariant();$valor=([string]$a.inicio).ToLowerInvariant()}
+                'energia' {$alvo='energia:plano-ativo';$valor=([guid]$a.guid).ToString()}
+                'recurso' {$alvo='recurso:'+([string]$a.nome).ToLowerInvariant();$valor=[string]$a.ativar}
+            }
+            if (-not $alvo) {continue}
+            if ($alvos.ContainsKey($alvo) -and $alvos[$alvo].valor -cne $valor) {
+                throw ('Ajustes conflitantes: '+$alvos[$alvo].nome+' / '+$t.nome+' ('+$alvo+'). Desmarque um deles.')
+            }
+            $alvos[$alvo]=@{valor=$valor;nome=[string]$t.nome}
+        }
+    }
+}
+
 function Avaliar-AutorizacaoAjuste {
     param($Ajuste,$Contexto,[bool]$Autorizado,[switch]$ConsultarPoliticas)
     $estado='permitido';$motivo='Precondicoes verificadas nesta etapa; revalidacao no executor obrigatoria.'
@@ -1256,6 +1319,7 @@ function Aplicar-Preset {
     }
 
     Confirmar-PermissaoAlteracao
+    try {Confirmar-LoteAjustes $selecionados} catch {Log $_.Exception.Message -Erro;return $false}
     foreach ($t in $selecionados) {
         try {Confirmar-AutorizacaoAjuste $t $ctx} catch {Log ('Preset real interrompido: '+$_.Exception.Message) -Erro;return $false}
     }
