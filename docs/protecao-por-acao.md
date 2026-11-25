@@ -24,7 +24,7 @@ Novas acoes de recurso exigem nome na lista de oito recursos expostos e ativacao
 
 ## Lote F2 - contrato central e retirada da classificacao global
 
-Base d8bb093 com CI 45519353001 aprovado. Este lote e exclusivo da F2. O identificador legado ModoProtegido significa sessao de diagnostico, falta de autorizacao/elevacao/compatibilidade de base, ou falha ao preparar estado privado/trava. Nao depende mais de classificar o PC como empresarial ou pessoal. O parametro -AutorizarAlteracoes (alias de -Pessoal por compatibilidade) expressa consentimento explicito para a sessao, nao prova autorizacao do TI. A avaliacao central e uma regra de aplicacao, nao uma fronteira de seguranca do Windows.
+Base d8bb093 com CI 45519353001 aprovado. Este lote e exclusivo da F2. O identificador legado ModoProtegido significa sessao de diagnostico, falta de autorizacao/elevacao/compatibilidade de base, ou falha ao preparar estado privado/trava. Nao depende mais de classificar o PC como empresarial ou pessoal. O consentimento explicito da sessao e expresso pelo parametro do entrypoint; na assinatura atual a base e -Pessoal com o alias -AutorizarAlteracoes (os dois nomes funcionam igual e nenhum prova autorizacao do TI). A avaliacao central e uma regra de aplicacao, nao uma fronteira de seguranca do Windows.
 
 ### Contrato de operacoes
 
@@ -57,3 +57,18 @@ Testes no CI incluem matriz dos descritores, IDs desconhecidos, Home/Pro/Enterpr
 ### Correcao do primeiro CI da F2
 
 O commit 5b0f0fd passou na integracao real, mas a suite offline teve 112 aprovados e duas falhas (run 45521440043). O teste AppX de pacote protegido dependia da politica real do runner: agora exercita o guard real com consultas de registro controladas, cobrindo ausencia, presenca e falha de consulta, sem reduzir a protecao em producao. A recusa de editar politicas de atualizacao passou a ter descritor proprio, permanentemente bloqueado, motivo explicito e teste de todas as combinacoes; IDs desconhecidos continuam recusados. Novo CI integrado necessario. Aceite cliente continua pendente.
+
+## Conferencia do documento e alvos historicos (25/11/2026)
+
+Auditoria do documento contra o codigo no HEAD b3d0c50 (comum.ps1, motor.ps1, sistema.ps1, otimizadorpc.ps1) com a bateria verde (119 testes). Achados:
+
+- Corrigida aqui: a frase anterior dizia que -Pessoal era alias de -AutorizarAlteracoes; na assinatura do entrypoint a base e -Pessoal com o alias -AutorizarAlteracoes. Os dois nomes funcionam igual; nenhum comportamento muda com a correcao.
+- Verificados no codigo e cobertos pela secao "contrato central de seguranca F2" do CI: descritores e estados de Resolver-AutorizacaoOperacao; recusa de operacao nao catalogada; descritor proprio de politica-atualizacao permanentemente bloqueado; tarefa nova bloqueada e tarefa-reversao condicionada; revalidacao com releitura de identidade/arquitetura/build/edicao/sinais e dono do Explorer da mesma sessao para escopo usuario/misto; sinais de proxy/atualizacao nao decidem preferencia do Explorer nem ponto de restauracao; reversao pela mesma camada (idReversao em Desfazer-Item); appx com catalogo/framework/recurso/NonRemovable e releitura; energia com politica e plano existentes; recursos restritos a lista de oito nomes exata (Testar-RecursoCatalogado).
+
+### Alvos historicos de registro: comportamento atual
+
+- Escrita nova (Obter-BloqueioNovaAcao): aceita apenas as oito tuplas revisadas de preferencia com valor DWord exato e sem remocao (Explorer\Advanced: Hidden, HideFileExt, TaskbarDa, LaunchTo, ShowTaskViewButton; Search: SearchboxTaskbarMode; Themes\Personalize: AppsUseLightTheme, SystemUsesLightTheme), remocao apenas nas chaves Run dedicadas e planos custom restritos a HKCU\Software nao reservado com String/DWord. Todo o resto e recusado com "Alvo de escrita nova nao revisado".
+- Reversao (Confirmar-AlvoRegistroReversao): restaura o valor anterior (nao necessariamente o valor atual do catalogo) apenas das preferencias revisadas, das chaves Run e do escopo custom restrito. Qualquer outro alvo historico e recusado com "Alvo historico fora da lista de recuperacao automatica; preserve o journal e revise manualmente", preservando journal e estado ja restaurado.
+- Journals legados (sem versaoEsquema 2) permanecem legiveis; nenhuma assercao de identidade e inferida e reescrita neles exige revisao manual.
+
+O rumo dos alvos historicos (manter recusa e reversao manual com aviso, revisar alvo a alvo, ou ferramenta assistida por journal) e decisao aberta registrada na issue #2. Estado vigente ate a decisao: reversao manual com aviso.
