@@ -270,7 +270,7 @@ function Recuperar-CacheIcones {
 
 function Configurar-Atualizacoes {
     param([bool]$BloquearDrivers,[bool]$AdiarRecursos)
-    Confirmar-PermissaoAlteracao 'nao-catalogado'
+    Confirmar-PermissaoAlteracao 'politica-atualizacao'
     throw 'Edicao de politicas indisponivel nesta versao. Use configuracoes oficiais do Windows.'
 }
 

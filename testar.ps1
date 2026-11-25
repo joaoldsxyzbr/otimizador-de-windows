@@ -872,15 +872,25 @@ try {
     if ((Obter-GuiaUwp $entrada @($p)).permitido) { throw 'Pacote desconhecido permitido.' }
     Passou 'guias completos, presets conservadores e AppX protegido'
     & {
-        $script:consultaAppx=0; $script:removeuAppx=0; $script:errosAppx=0
-        function Log { param($Mensagem,[switch]$Erro) if ($Erro) {$script:errosAppx++} }
+        $script:consultaAppx=0; $script:removeuAppx=0; $script:errosAppx=0; $script:journalAppx=0; $script:motivoAppx=''
+        function Log { param($Mensagem,[switch]$Erro) if ($Erro) {$script:errosAppx++;$script:motivoAppx=$Mensagem} }
         function Testar-AppxCatalogado { param($Nome) return ($Nome -eq 'Microsoft.WindowsStore') }
+        # Exercise package classification independently of the host's AppX policy.
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $false}
+        function Registrar-Jornal {$script:journalAppx++;throw 'Pacote protegido nao deve gravar journal.'}
         function Get-AppxPackage { [CmdletBinding()] param() $script:consultaAppx++; [pscustomobject]@{Name='Microsoft.WindowsStore';PackageFullName='Store_teste'} }
         function Remove-AppxPackage { $script:removeuAppx++ }
         Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Desconhecido'}) 'teste bloqueio'
-        if ($script:consultaAppx -ne 0 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 1) {throw 'Pacote fora do catalogo nao bloqueado.'}
+        if ($script:consultaAppx -ne 0 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 1 -or $script:journalAppx -ne 0 -or $script:motivoAppx -notmatch 'fora do catalogo') {throw 'Pacote fora do catalogo nao bloqueado.'}
         Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Microsoft.WindowsStore'}) 'teste bloqueio'
-        if ($script:consultaAppx -ne 1 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 2) {throw 'Pacote protegido nao bloqueado.'}
+        if ($script:consultaAppx -ne 1 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 2 -or $script:journalAppx -ne 0 -or $script:motivoAppx -notmatch 'Pacote protegido') {throw 'Pacote protegido nao bloqueado.'}
+        # Now exercise the real policy guard with an explicit policy indicator.
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $true}
+        Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Microsoft.WindowsStore'}) 'teste politica AppX'
+        if ($script:consultaAppx -ne 1 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 3 -or $script:journalAppx -ne 0 -or $script:motivoAppx -notmatch 'Indicador de politica AppX') {throw 'Politica AppX nao interrompeu antes de consultar pacote.'}
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) throw 'Consulta indisponivel'}
+        Executar-Acao ([pscustomobject]@{tipo='appx';pacote='Microsoft.WindowsStore'}) 'teste politica AppX inconclusiva'
+        if ($script:consultaAppx -ne 1 -or $script:removeuAppx -ne 0 -or $script:errosAppx -ne 4 -or $script:journalAppx -ne 0 -or $script:motivoAppx -notmatch 'Consulta de politica AppX inconclusiva') {throw 'Politica AppX inconclusiva nao interrompeu antes de consultar pacote.'}
     }
     Passou 'motor recusa AppX desconhecido e protegido antes de remover'
 } catch { Falhou 'otimizacao orientada' $_.Exception.Message }
@@ -985,8 +995,17 @@ Secao 'politicas de atualizacao'
 try {
     if ((Formatar-PoliticaAtualizacao 0) -notmatch 'Desativada' -or (Formatar-PoliticaAtualizacao 1) -notmatch 'Configurada' -or (Formatar-PoliticaAtualizacao $null) -notmatch 'Nao configurada') { throw 'Valores de politica confundidos.' }
     $bloqueou=$false
-    try { Configurar-Atualizacoes $false $false } catch { $bloqueou=$_.Exception.Message -match 'Edicao de politicas indisponivel' }
+    try { Configurar-Atualizacoes $false $false } catch { $bloqueou=$_.Exception.Message -match 'Operacao recusada \[bloqueado\].*Edicao de politicas indisponivel' }
     if (-not $bloqueou) { throw 'Edicao de politica permitida.' }
+    & {
+        function Set-ItemProperty {throw 'Nao deve escrever politicas.'}
+        function New-ItemProperty {throw 'Nao deve criar politicas.'}
+        foreach ($drivers in @($false,$true)) {foreach ($recursos in @($false,$true)) {
+            $recusou=$false
+            try {Configurar-Atualizacoes $drivers $recursos} catch {$recusou=$_.Exception.Message -match 'Operacao recusada \[bloqueado\]'}
+            if (-not $recusou) {throw 'Combinacao de politica nao recusada.'}
+        }}
+    }
     Passou 'politicas somente leitura e diferenciam ausente/zero/um'
 } catch { Falhou 'politicas de atualizacao' $_.Exception.Message }
 
@@ -1714,14 +1733,14 @@ try {
 # ---- F2: one authorization contract, deny unknown, per-operation policy ----
 Secao 'contrato central de seguranca F2'
 try {
-    $ids=@('estado-local','exportar','download','registro-usuario','registro-local','registro-maquina','servico','tarefa','tarefa-reversao','energia','recurso','appx','winget','desinstalar','rastros','path','restore','temp','dns','hora','reparo','diagnostico-admin','consulta-winget','nativo')
+    $ids=@('estado-local','exportar','download','registro-usuario','registro-local','registro-maquina','servico','tarefa','tarefa-reversao','politica-atualizacao','energia','recurso','appx','winget','desinstalar','rastros','path','restore','temp','dns','hora','reparo','diagnostico-admin','consulta-winget','nativo')
     foreach ($id in $ids) {
         $d=Obter-DescritorOperacao $id
         if (-not $d -or $d.id -ne $id -or -not $d.escopo -or -not $d.risco -or -not $d.politica -or -not $d.backup -or -not $d.reversao -or -not $d.verificacao) {throw ('Descritor incompleto: '+$id)}
     }
     $ctx=Obter-ContextoAutorizacaoAtual 'registro-usuario'
     foreach ($id in $ids) {
-        $esperado=if ($id -eq 'tarefa') {'bloqueado'} else {'permitido'}
+        $esperado=if ($id -in @('tarefa','politica-atualizacao')) {'bloqueado'} else {'permitido'}
         if ((Resolver-AutorizacaoOperacao $id $ctx).estado -ne $esperado) {throw ('Contexto autorizado incorreto: '+$id)}
     }
     if ((Resolver-AutorizacaoOperacao 'arbitrario' $ctx).estado -ne 'bloqueado') {throw 'Operacao desconhecida aceita.'}

@@ -53,3 +53,7 @@ Sinais de ingresso, dominio, inscricao MDM, seguranca organizacional e certifica
 ### Aceite F2
 
 Testes no CI incluem matriz dos descritores, IDs desconhecidos, Home/Pro/Enterprise, build/arquitetura/SID, falta de elevacao/consentimento, GPO/MDM positivos e inconclusivos por operacao, releitura de identidade/edicao/sinais, executor e reversao sem tocar no alvo recusado, compatibilidade de recursos e AppX, interfaces e CLI/portatil, integracao real descartavel com contexto cliente sintetico, recusa de desativar tarefa nao revisada e recuperacao de snapshot. Os testes de integracao nao simulam o Windows cliente completo nem a politica real de uma empresa. Nao marcar aceite F2 concluido antes do CI do commit e teste manual em Windows 10/11, usuario padrao e admin autorizado, credenciais alternativas, dominio/MDM de laboratorio e politicas locais. O lote foi preparado sem disparos intermediarios de CI.
+
+### Correcao do primeiro CI da F2
+
+O commit 5b0f0fd passou na integracao real, mas a suite offline teve 112 aprovados e duas falhas (run 45521440043). O teste AppX de pacote protegido dependia da politica real do runner: agora exercita o guard real com consultas de registro controladas, cobrindo ausencia, presenca e falha de consulta, sem reduzir a protecao em producao. A recusa de editar politicas de atualizacao passou a ter descritor proprio, permanentemente bloqueado, motivo explicito e teste de todas as combinacoes; IDs desconhecidos continuam recusados. Novo CI integrado necessario. Aceite cliente continua pendente.

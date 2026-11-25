@@ -26,6 +26,7 @@ function Obter-DescritorOperacao {
         'registro-local'=@('usuario','cautela','journal de valor','por snapshot','gerenciamento e escopo restrito')
         'registro-maquina'=@('computador','alto','journal de valor','por snapshot','politica efetiva nao confirmada')
         'servico'=@('computador','alto','journal de servico','por snapshot','dependentes e gerenciamento')
+        'politica-atualizacao'=@('computador','alto','nenhuma escrita nova','manual','politica administrativa somente consulta')
         'tarefa'=@('computador','alto','nenhuma escrita nova','manual','dependencias e identidade funcional nao confirmadas')
         'tarefa-reversao'=@('computador','alto','journal e assinatura','por snapshot','definicao e gerenciamento')
         'energia'=@('computador','cautela','journal de plano','por snapshot','politica e plano disponivel')
@@ -55,6 +56,7 @@ function Resolver-AutorizacaoOperacao {
     $estado='permitido';$motivo='Precondicoes gerais confirmadas; verificacoes do alvo continuam obrigatorias.'
     $proximo='Revisar previa e confirmar a operacao.'
     if (-not $d) {$estado='bloqueado';$motivo='Operacao nao catalogada.'}
+    elseif ($Id -eq 'politica-atualizacao') {$estado='bloqueado';$motivo='Edicao de politicas indisponivel nesta versao. Use configuracoes oficiais do Windows.'}
     elseif ($Id -eq 'tarefa') {$estado='bloqueado';$motivo='Tarefa sem identidade funcional revisada; alteracao nova somente pela ferramenta nativa.'}
     elseif ($Id -eq 'nativo') {$motivo='Somente abertura da ferramenta nativa; Windows controla qualquer acao.'}
     elseif (-not $Contexto -or $Contexto.admin -isnot [bool] -or $Contexto.diagnostico -isnot [bool] -or $Contexto.consentiu -isnot [bool]) {$estado='desconhecido';$motivo='Contexto de autorizacao indisponivel.'}
@@ -128,7 +130,7 @@ function Obter-ContextoAutorizacaoAtual {
 
 function Avaliar-PermissaoOperacao {
     param([string]$Id,[switch]$Previa)
-    if ($Id -in @('nativo','tarefa') -or -not (Obter-DescritorOperacao $Id)) {return (Resolver-AutorizacaoOperacao $Id $null)}
+    if ($Id -in @('nativo','tarefa','politica-atualizacao') -or -not (Obter-DescritorOperacao $Id)) {return (Resolver-AutorizacaoOperacao $Id $null)}
     Resolver-AutorizacaoOperacao $Id (Obter-ContextoAutorizacaoAtual $Id -Previa:$Previa)
 }
 
