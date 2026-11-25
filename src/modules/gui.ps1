@@ -498,9 +498,7 @@ function Clique-AplicarAjustes {
     if ($arq) { Log ('salvei o journal desta sessao para desfazer depois: ' + (Split-Path -Leaf $arq)) }
     if ($global:ErrosSessao -gt 0) { Status 'ajustes com falhas; consulte o log.' }
     else { Status 'ajustes aplicados. alguns exigem relogar no windows.' }
-    if (Perguntar 'Explorador de Arquivos' 'Reiniciar o Explorador agora para aplicar as mudancas visuais? (aquivos abertos em janelas do explorer fecham)') {
-        Reiniciar-Explorer
-    }
+    Log 'Se necessario, salve o trabalho e encerre a sessao pelo Windows. O aplicativo nao encerra processos Explorer.'
 }
 
 function Clique-RemoverUwp {
@@ -572,6 +570,18 @@ function Clique-InstalarRecursos {
     if ($progresso.cancelado) { Log 'recursos interrompidos; journal preservado.'; Status 'lote interrompido.'; return }
     Log ('recursos processados; confira erros e reinicio pendente.' + $(if ($arq) { ' - journal: ' + (Split-Path -Leaf $arq) } else { '' }))
     if ($global:ErrosSessao -gt 0) { Status 'recursos com falhas; consulte o log.' } else { Status 'recursos processados; confira reinicio pendente.' }
+}
+
+# Preview never creates a session or executes an action.
+function Obter-PreviaEssencial {
+    param($Catalogo,[bool]$Win11)
+    $linhas=@('Previa hipotetica: nao confirma compatibilidade, politica ou autorizacao.')
+    foreach ($ajuste in @(Selecionar-TweaksPreset -Nivel essencial -Catalogo $Catalogo -Win11 $Win11)) {
+        $linhas+=('Ajuste: '+$ajuste.nome)
+        foreach ($acao in $ajuste.acoes) {$linhas+=('  '+(Descrever-Acao $acao))}
+    }
+    $linhas+='Nenhuma configuracao foi modificada.'
+    return ($linhas -join [Environment]::NewLine)
 }
 
 function Clique-Preset {
@@ -1687,6 +1697,7 @@ function Ligar-Tudo {
     $global:UI.BotaoCancelarUwp.Add_Click({ Cancelar-ConsultaUwp })
     $global:Janela.Add_Closing({ param($sender,$eventArgs) if ($global:OperacaoUIAtiva) { $eventArgs.Cancel = $true } })
     # navegacao da barra lateral
+    $global:UI.BotaoPreviaEssencial.Add_Click({ Avisar 'Previa essencial (somente leitura)' (Obter-PreviaEssencial $global:CatalogoTweaks (Eh-Win11)) })
     $global:UI.BotaoInicioStartup.Add_Click({ Start-Process 'ms-settings:startupapps' | Out-Null })
     $global:UI.BotaoInicioStorage.Add_Click({ Start-Process 'ms-settings:storagesense' | Out-Null })
     $global:UI.BotaoInicioUpdate.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
@@ -1703,7 +1714,7 @@ function Ligar-Tudo {
     if ($global:ModoProtegido) {
         # Registra somente eventos de consulta. A lista de permissoes falha fechada
         # para novos botoes; nenhuma acao administrativa e ligada neste modo.
-        $permitidos=@('BotaoInicioStartup','BotaoInicioStorage','BotaoInicioUpdate','BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
+        $permitidos=@('BotaoPreviaEssencial','BotaoAnalisarArmazenamento','BotaoBuscarAtualizacoes','BotaoInicioStartup','BotaoInicioStorage','BotaoInicioUpdate','BotaoNavInicio','BotaoNavAjustes','BotaoNavDebloat','BotaoNavDesinstalar','BotaoNavInstalar','BotaoNavConfig','BotaoNavAtualizacoes','BotaoNavManutencao','BotaoNavDesfazer','BotaoInventario','BotaoMonitor','BotaoDiagnosticoAvancado','BotaoResumoBateria','BotaoGargalosLocais','BotaoResumoDriversPnP','BotaoAtualizarProgramas','BotaoDetalhesPrograma','BotaoAtualizarUwp','BotaoCancelarUwp','BotaoAtualizarInicio','BotaoCancelarInicio','BotaoCancelarProgramas','BotaoAtualizarAjustes','BotaoCancelarAjustes','BotaoAtualizarRecursos','BotaoCancelarRecursos','BotaoAtualizarAtualizacoes','BotaoCancelarAtualizacoes','BotaoAtualizarHistorico','BotaoCancelarHistorico')
         foreach ($nome in $global:UI.Keys) {
             $controle=$global:UI[$nome]
             if (($controle -is [System.Windows.Controls.Button] -and $nome -notin $permitidos) -or $controle -is [System.Windows.Controls.CheckBox]) {
@@ -1712,6 +1723,8 @@ function Ligar-Tudo {
                 [System.Windows.Controls.ToolTipService]::SetShowOnDisabled($controle,$true)
             }
         }
+        $global:UI.BotaoAnalisarArmazenamento.Add_Click({ Clique-AnalisarArmazenamento })
+        $global:UI.BotaoBuscarAtualizacoes.Add_Click({ Start-Process 'ms-settings:windowsupdate' | Out-Null })
         $global:UI.BotaoInventario.Add_Click({ Clique-InventarioLocal })
         $global:UI.BotaoMonitor.Add_Click({ Clique-MonitorSistema })
         $global:UI.BotaoDiagnosticoAvancado.Add_Click({ Clique-DiagnosticoAvancado })

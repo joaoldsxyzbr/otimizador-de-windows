@@ -1205,6 +1205,7 @@ try {
                     if ($global:Janela.FindName('Pagina'+$p).Visibility.ToString() -ne $esperada) {throw ('Visibilidade incorreta: '+$p)}
                 }
             }
+            foreach ($nome in @('BotaoPreviaEssencial','BotaoAnalisarArmazenamento','BotaoBuscarAtualizacoes')) {if (-not $global:UI[$nome].IsEnabled) {throw ('Consulta segura desabilitada: '+$nome)}}
             foreach ($nome in @('BotaoAplicarAjustes','BotaoRemoverUwp','BotaoDesinstalarProg','BotaoVarrerRastros','BotaoInstalarApps','BotaoInstalarRecursos','BotaoFixRede','BotaoLimparTemp','BotaoDesfazer','BotaoCriarRestore','BotaoVerificarRelease','BotaoExportarPlano')) {
                 if ($global:UI[$nome].IsEnabled) {throw ('Acao habilitada no modo protegido: '+$nome)}
             }
@@ -1464,6 +1465,39 @@ try {
     }
     Passou 'presets, origem de apps, politicas, firewall e caminho de recuperacao'
 } catch {Falhou 'limites por operacao' $_.Exception.Message}
+
+# ---- registered account, preference policy and preview ----
+Secao 'permissoes e preferencias'
+try {
+    $registro=@('AzureAdJoined : NO','DomainJoined : NO','WorkplaceJoined : YES') -join [Environment]::NewLine
+    if (Testar-IngressoDispositivo $registro) {throw 'Registro de conta isolado tratado como ingresso.'}
+    if (-not (Testar-IngressoDispositivo (@('AzureAdJoined : YES','DomainJoined : NO') -join [Environment]::NewLine))) {throw 'Ingresso Entra ignorado.'}
+    $recusou=$false
+    try {Testar-IngressoDispositivo 'WorkplaceJoined : YES'} catch {$recusou=$true}
+    if (-not $recusou) {throw 'Dados incompletos aceitos.'}
+    & {
+        $ck='HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return ($LiteralPath -like '*\Policies\Explorer')}
+        function Get-ItemProperty {[CmdletBinding()]param([string]$LiteralPath) [pscustomobject]@{NoFolderOptions=1}}
+        $recusou=$false
+        try {Confirmar-PoliticaPreferenciaLocal $ck 'HideFileExt'} catch {$recusou=$_.Exception.Message -match 'politica de preferencia presente'}
+        if (-not $recusou) {throw 'Indicador de politica ignorado.'}
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) throw 'Acesso negado'}
+        $recusou=$false
+        try {Confirmar-PoliticaPreferenciaLocal $ck 'HideFileExt'} catch {$recusou=$_.Exception.Message -match 'inconclusiva'}
+        if (-not $recusou) {throw 'Consulta inconclusiva aceita.'}
+        function Test-Path {[CmdletBinding()]param([string]$LiteralPath) return $false}
+        Confirmar-PoliticaPreferenciaLocal $ck 'HideFileExt'
+    }
+    & {
+        function Executar-Acao {throw 'Previa nao deve executar acoes.'}
+        function Iniciar-Sessao {throw 'Previa nao deve iniciar journal.'}
+        $cat=Get-Content -LiteralPath (Join-Path $raiz 'data\tweaks.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+        $previa=Obter-PreviaEssencial $cat $true
+        if ($previa -notmatch 'HideFileExt' -or $previa -notmatch 'Nenhuma configuracao') {throw 'Previa essencial incorreta.'}
+    }
+    Passou 'conta registrada isoladamente, politica de preferencias e previa sem mutacao'
+} catch {Falhou 'permissoes e preferencias' $_.Exception.Message}
 
 # ---- politicas e diagnostico preservados no catalogo ----
 Secao 'catalogo conservador'

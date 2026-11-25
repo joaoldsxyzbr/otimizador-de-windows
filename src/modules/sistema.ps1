@@ -8,6 +8,12 @@ function Testar-AgenteGerenciamento {
     return ($texto -match '(?i)crowdstrike|falcon sensor|sentinelone|sentinel agent|carbon black|intunemanagementextension|ccmexec|tanium|(?:^|\s)sense(?:\s|$)|defender for endpoint|configuration manager client|trellix agent|sophos management')
 }
 
+function Testar-IngressoDispositivo {
+    param([string]$Saida)
+    if ($Saida -notmatch '(?m)^\s*AzureAdJoined\s*:\s*(YES|NO)\s*$' -or $Saida -notmatch '(?m)^\s*DomainJoined\s*:\s*(YES|NO)\s*$') {throw 'Estado de ingresso do dispositivo indisponivel.'}
+    return ($Saida -match '(?m)^\s*(AzureAdJoined|DomainJoined|EnterpriseJoined)\s*:\s*YES\s*$')
+}
+
 function Detectar-AmbienteTrabalho {
     $achados=@()
     try {
@@ -18,8 +24,8 @@ function Detectar-AmbienteTrabalho {
     try {
         $exe=Join-Path $env:SystemRoot 'System32\dsregcmd.exe'
         $saida=(& $exe /status 2>&1 | Out-String)
-        if ($LASTEXITCODE -ne 0 -or $saida -notmatch 'AzureAdJoined\s*:\s*(YES|NO)' -or $saida -notmatch 'DomainJoined\s*:\s*(YES|NO)') { throw 'Estado de registro indisponivel.' }
-        if ($saida -match '(AzureAdJoined|DomainJoined|EnterpriseJoined|WorkplaceJoined)\s*:\s*YES') { $achados+='Registro ou ingresso organizacional detectado.' }
+        if ($LASTEXITCODE -ne 0) {throw 'Estado de registro indisponivel.'}
+        if (Testar-IngressoDispositivo $saida) { $achados+='Ingresso organizacional do dispositivo detectado.' }
     } catch { $achados+='Inconclusivo: registro Entra/organizacional nao confirmado.' }
     try {
         $raiz='HKLM:\SOFTWARE\Microsoft\Enrollments'

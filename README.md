@@ -12,7 +12,7 @@ irm https://raw.githubusercontent.com/joaoldsxyzbr/otimizador-de-windows/main/ab
 
 [Releases e SHA256](https://github.com/joaoldsxyzbr/otimizador-de-windows/releases) | [Codigo V2 em desenvolvimento](https://github.com/joaoldsxyzbr/otimizador-de-windows/tree/desenvolvimento-v2)
 
-O comando executa o launcher remoto da main sem assinatura digital; o SHA256 valida o arquivo do aplicativo, nao autentica o launcher. Revise a origem e o codigo. Em computador empresarial, solicite autorizacao do TI antes de executar. Para uso pessoal autorizado, baixe o script e o SHA256 da release indicada, confira o hash e execute com `-Pessoal` em Windows PowerShell elevado. Sinais fortes de gerenciamento ou consultas obrigatorias inconclusivas ainda impedem alteracoes. Antivirus comum e perfil VPN, isoladamente, nao classificam a maquina; seus componentes continuam protegidos na desinstalacao.
+O comando executa o launcher remoto da main sem assinatura digital; o SHA256 valida o arquivo do aplicativo, nao autentica o launcher. Revise a origem e o codigo. Em computador empresarial, solicite autorizacao do TI antes de executar. Para uso pessoal autorizado, baixe o script e o SHA256 da release indicada, confira o hash e execute com `-Pessoal` em Windows PowerShell elevado. Sinais fortes de gerenciamento ou consultas obrigatorias inconclusivas ainda impedem alteracoes. Antivirus comum, perfil VPN e registro isolado de conta profissional (WorkplaceJoined, sem ingresso de dispositivo ou outros sinais), nao classificam a maquina; seus componentes continuam protegidos na desinstalacao.
 
 [![ci](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml/badge.svg)](https://github.com/joaoldsxyzbr/otimizador-de-windows/actions/workflows/ci.yml)
 
@@ -140,3 +140,5 @@ RC.8: inventario PnP dos dispositivos presentes correlaciona InstanceId com driv
 ## Estado da integracao V2
 
 A branch de integracao da issue #2 possui inventarios de abas em segundo plano, protecao de alvos, journals com identidade e estados de aplicacao, e verificacao SHA256 de backups de arquivos e registro em quarentena. Backups legados sem hash exigem revisao manual; pastas nao possuem hash integral. Firewall e reparos genericos de rede ficam para ferramentas autorizadas. O modo protegido global continua ate a paridade de protecao por operacao ser demonstrada. Veja [validacao e limites](docs/validacao-v2.md). O CI Windows Server nao substitui aceite em Windows 10/11 cliente.
+
+A previa essencial e a analise de arquivos grandes tambem ficam disponiveis no modo somente leitura. Preferencias revisadas do Explorer consultam indicadores locais de politica antes da aplicacao e reversao; a ausencia desses indicadores nao comprova ausencia de politica efetiva. O aplicativo nao encerra processos Explorer ao aplicar ajustes.

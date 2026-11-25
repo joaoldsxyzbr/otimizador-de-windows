@@ -561,6 +561,25 @@ function Confirmar-DependenciasServico {
     }
 }
 
+# Conservative indicators; absence does not establish absence of effective policy.
+function Confirmar-PoliticaPreferenciaLocal {
+    param([string]$Caminho,[string]$Nome)
+    $nativa=Converter-Hive $Caminho
+    if ($nativa -notmatch '(?i)^HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced(?:\\|$)') {return}
+    foreach ($hive in @('HKCU','HKLM')) {
+        foreach ($grupo in @('SOFTWARE\Policies\Microsoft\Windows\Explorer','SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer')) {
+            $p=$hive+':\'+$grupo
+            try {
+                if (-not (Test-Path -LiteralPath $p -ErrorAction Stop)) {continue}
+                $v=Get-ItemProperty -LiteralPath $p -ErrorAction Stop
+            } catch {throw 'Consulta de politica de preferencia inconclusiva; alteracao recusada.'}
+            foreach ($nomePolitica in @($Nome,'NoFolderOptions','NoSetTaskbar','LockedStartLayout')) {
+                if ($nomePolitica -and $v.PSObject.Properties[$nomePolitica]) {throw ('Indicador de politica de preferencia presente: '+$nomePolitica+'. Utilize o procedimento autorizado.')}
+            }
+        }
+    }
+}
+
 function Confirmar-PoliticaEnergiaLocal {
     # Indicadores conservadores: uma chave de politica presente, mesmo vazia,
     # exige revisao. Nao prova ausencia de GPO/MDM quando nao encontrada.
@@ -589,6 +608,7 @@ function Executar-Acao {
         switch ($Acao.tipo) {
 
             'registro' {
+                Confirmar-PoliticaPreferenciaLocal $Acao.caminho $Acao.nome
                 $leitura = Ler-ValorRegistro -CaminhoPS $Acao.caminho -Nome $Acao.nome
                 # cinto e suspensorios: exporta a chave inteira em .reg antes de mexer
                 $arqBackup = $null
@@ -622,6 +642,8 @@ function Executar-Acao {
                     backupReg    = $arqBackup
                 }
                 Registrar-Jornal $entrada
+                Confirmar-PoliticaPreferenciaLocal $Acao.caminho $Acao.nome
+                if (-not (Registro-Corresponde (Ler-ValorRegistro $Acao.caminho $Acao.nome) ([bool]$leitura.existia) $leitura.tipo $leitura.valor)) {throw 'Valor mudou durante a preparacao; preservado.'}
                 if ($Acao.remover) {
                     if ($leitura.existia) {
                         $partes = $leitura.rede -split '\\',2
@@ -763,6 +785,7 @@ function Desfazer-Item {
                     }
                 }
                 Confirmar-ProtecaoAlvo ([pscustomobject]@{tipo='registro';caminho=$Item.caminho;nome=$Item.nome})
+                Confirmar-PoliticaPreferenciaLocal $Item.caminho $Item.nome
                 if ($Item.existia) {
                     $kind = Converter-Kind $Item.tipoAnterior
                     if ($null -ne $Item.valorAnteriorEstruturado) { $valor = $Item.valorAnteriorEstruturado.valor }

@@ -26,3 +26,7 @@ Base testada: d089b6d7a36875674030974cacb7e20be8f3f61b, CI 45514516072 aprovado.
 - Confirmar artefato portatil exato, SHA256 e origem; nao publicar estavel sem aprovacao explicita e resultados acima.
 
 Limites: estado de intencao sem confirmacao nao equivale a sucesso; journals antigos sem hash para restauracao de arquivo/registro exigem revisao manual; pastas tem somente verificacao de localizacao, tipo e movimentacao, nao verificacao recursiva de conteudo. Hash detecta mudanca de conteudo, nao autentica um journal contra administrador. As verificacoes de politica sao conservadoras e incompletas; nao removem o bloqueio global. A integracao CI usa runner Windows Server e stub de ponto de restauracao. Nenhuma fase foi certificada integralmente.
+
+## Complemento de autorizacao e diagnostico
+
+CI do lote b4123c6 aprovado (45515404147). A nova rodada distingue registro de conta profissional de ingresso organizacional do dispositivo; dominio, Entra join, MDM, agentes, politicas e consultas inconclusivas continuam protegidos. A previa essencial e a analise de armazenamento somente leitura funcionam no modo protegido. Preferencias do Explorer Advanced verificam indicadores GPO locais antes de aplicar e reverter; uma segunda leitura do valor antes da escrita recusa mudanca concorrente detectada. Nao cobre todas as politicas efetivas ou elimina a janela de corrida. A GUI nao encerra Explorer depois dos ajustes. O gate de paridade F2 continua aberto.

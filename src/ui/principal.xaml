@@ -357,6 +357,7 @@
                         </WrapPanel>
                         <WrapPanel Margin="0,4,0,4">
                             <TextBlock Text="Perfis:" VerticalAlignment="Center" Foreground="#9ca3af" Margin="0,0,8,0"/>
+                            <Button x:Name="BotaoPreviaEssencial" Content="Previa essencial (sem alterar)" Margin="0,2,6,2"/>
                             <Button x:Name="BotaoPerfilRecomendado" Content="Recomendado" Margin="0,2,6,2" ToolTip="Seleciona preferencias essenciais sem inferir ganho de desempenho ou tipo de computador."/>
                             <Button x:Name="BotaoPerfilEssencial" Content="Essencial" Margin="0,2,6,2"/>
                             <Button x:Name="BotaoPerfilGamer" Content="Gamer" Margin="0,2,6,2" ToolTip="Selecao conservadora; nao promete FPS."/>
