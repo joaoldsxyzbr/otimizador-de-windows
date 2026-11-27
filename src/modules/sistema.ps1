@@ -213,10 +213,12 @@ function Obter-ResumoDriversPnP {
 
 function Resolver-ModoOtimizador {
     param([bool]$Admin,[bool]$Diagnostico,$Sinais,[bool]$Pessoal=$false)
+    # decisao do joao (v2): administrador explicito libera o uso completo.
+    # sinais de gerenciamento continuam detectados e informados no inicio/log,
+    # mas nao bloqueiam quem abriu como admin; -Diagnostico continua forcando consulta.
     if ($Diagnostico -or -not $Admin) { return 'Diagnostico' }
-    if (@($Sinais | Where-Object {$_}).Count -gt 0) { return 'Corporativo/Protetivo' }
-    if (-not $Pessoal) { return 'Diagnostico' }
-    return 'Pessoal (sem sinais detectados)'
+    if (@($Sinais | Where-Object {$_}).Count -gt 0) { return 'Administrador (sinais de gerenciamento detectados; revise-os abaixo)' }
+    return 'Administrador'
 }
 
 function Inicializar-ModoOtimizador {
@@ -231,7 +233,7 @@ function Inicializar-ModoOtimizador {
         $admin=$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     } finally { $id.Dispose() }
     $global:ModoOtimizador=Resolver-ModoOtimizador -Admin $admin -Diagnostico ([bool]$Diagnostico) -Sinais $global:AmbienteTrabalho -Pessoal ([bool]$Pessoal)
-    $global:ModoProtegido=($global:ModoOtimizador -ne 'Pessoal (sem sinais detectados)')
+    $global:ModoProtegido=($global:ModoOtimizador -eq 'Diagnostico')
 }
 
 # Recomendacoes conservadoras, sem modificar configuracoes.

@@ -882,7 +882,7 @@ try {
 # ---- decisao conservadora e motor protegido ----
 Secao 'modo corporativo'
 try {
-    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -ne 'Corporativo/Protetivo' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @() $true) -ne 'Pessoal (sem sinais detectados)' -or (Resolver-ModoOtimizador $true $false @('MDM') $true) -ne 'Corporativo/Protetivo') { throw 'Decisao de modo incorreta.' }
+    if ((Resolver-ModoOtimizador $false $false @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $true @()) -ne 'Diagnostico' -or (Resolver-ModoOtimizador $true $false @('Inconclusivo')) -notmatch '^Administrador' -or (Resolver-ModoOtimizador $true $false @()) -ne 'Administrador' -or (Resolver-ModoOtimizador $true $false @('MDM')) -notmatch '^Administrador') { throw 'Decisao de modo incorreta: admin deve liberar, sinais apenas informar, -Diagnostico e sem admin devem proteger.' }
     $modoAntes=$global:ModoProtegido
     try {
         $global:ModoProtegido=$true
