@@ -1021,6 +1021,40 @@ try {
             if (@(Get-Checkboxes $global:UI.ListaApps | Where-Object {$_.IsChecked}).Count) {throw 'Apps preselecionados.'}
             if (@(Get-Checkboxes $global:UI.ListaApps).Count -ne @($global:CatalogoApps.aplicativos).Count) {throw 'Catalogo incompleto.'}
             Passou 'interface pessoal ligada, sem apps preselecionados'
+            # Real runspace with synthetic data. No system AppX query or mutation.
+            $global:CatalogoUwp=[pscustomobject]@{pacotes=@([pscustomobject]@{nome='Teste';pacote='Example.Test';desc='Teste';remover=$true;so='ambos'})}
+            function Esperar-ConsultaUwp {
+                $sw=[Diagnostics.Stopwatch]::StartNew()
+                while ($global:ConsultaUwp.trabalho -and $sw.Elapsed.TotalSeconds -lt 15) {
+                    Start-Sleep -Milliseconds 50
+                    [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([action]{},[System.Windows.Threading.DispatcherPriority]::Background)
+                }
+                if ($global:ConsultaUwp.trabalho) {throw 'Consulta nao encerrou.'}
+            }
+            Verificar-EstadoUwp -Codigo {Start-Sleep -Seconds 3; [pscustomobject]@{Name='Example.Test';PackageFullName='Example.Test_1'}}
+            $trabalho=$global:ConsultaUwp.trabalho
+            if (-not $trabalho -or $global:UI.BotaoRemoverUwp.IsEnabled) {throw 'Consulta nao iniciou ou permitiu remover durante carga.'}
+            $sw=[Diagnostics.Stopwatch]::StartNew()
+            foreach ($sufixo in @('Debloat','Instalar','Debloat')) {
+                $global:UI['BotaoNav'+$sufixo].RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Primitives.ButtonBase]::ClickEvent)))
+                if ($global:PaginaAtual -ne ('Pagina'+$sufixo)) {throw 'Navegacao travada durante consulta.'}
+            }
+            if ($sw.Elapsed.TotalSeconds -ge 2 -or -not [object]::ReferenceEquals($trabalho,$global:ConsultaUwp.trabalho)) {throw 'Navegacao aguardou ou duplicou consulta.'}
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'atualizado' -or @(Get-Checkboxes $global:UI.ListaUwp).Count -ne 1 -or -not $global:UI.BotaoRemoverUwp.IsEnabled) {throw 'Inventario sintetico nao exibido.'}
+            Verificar-EstadoUwp -Codigo {throw 'Cache nao reutilizado.'}
+            if ($global:ConsultaUwp.trabalho) {throw 'Cache ignorado.'}
+            Verificar-EstadoUwp -Forcar -Codigo {throw 'Falha simulada'}
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.BotaoRemoverUwp.IsEnabled -or @(Get-Checkboxes $global:UI.ListaUwp).Count) {throw 'Falha tratada como inventario valido.'}
+            Verificar-EstadoUwp -Forcar -Codigo {Start-Sleep -Seconds 10}
+            Cancelar-ConsultaUwp
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.BotaoRemoverUwp.IsEnabled) {throw 'Cancelamento nao bloqueou remocao.'}
+            Verificar-EstadoUwp -Forcar -Codigo {Start-Sleep -Seconds 10} -LimiteSegundos 1
+            Esperar-ConsultaUwp
+            if ($global:ConsultaUwp.fase -ne 'indisponivel' -or $global:UI.InfoConsultaUwp.Text -notmatch 'Tempo limite') {throw 'Timeout nao sinalizado.'}
+            Passou 'Debloat assincrono: navegacao, deduplicacao, cache, erro, cancelamento e timeout'
             # Nova janela, mesmos controles, modo protegido e consultas locais substituidas.
             $global:Janela.Close()
             $global:ModoProtegido=$true
